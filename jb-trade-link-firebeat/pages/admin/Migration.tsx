@@ -301,8 +301,15 @@ export const Migration: React.FC = () => {
             productsMap.set(col.name, {
                 id: generateUUID(),
                 name: col.name,
-                description: col.name,
-                price: 0 
+                companyId: 'default-company',
+                companyName: 'Imported',
+                baseRate: 0,
+                discountedRate: 0,
+                orderMultiple: 1,
+                stockOut: false,
+                discountEditable: true,
+                isActive: true,
+                category: 'Imported'
             });
         });
 
