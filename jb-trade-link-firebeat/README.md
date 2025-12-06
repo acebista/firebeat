@@ -1,0 +1,27 @@
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+</div>
+
+# Run and deploy your AI Studio app
+
+This contains everything you need to run your app locally.
+
+View your app in AI Studio: https://ai.studio/apps/drive/1pNmQ4vPmKA5V3D4Kb8ipUs9UNHAA2pq6
+
+## Run Locally
+
+**Prerequisites:**  Node.js
+
+
+1. Install dependencies:
+   `npm install`
+2. Create a `.env.local` (or set environment variables in your host) with:
+   - `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`
+   - Optional: `VITE_ENABLE_DEV_REGISTRATION=true` (dev-only self-serve signup)
+   - Optional: `VITE_ENABLE_AI=true` and `VITE_OPENROUTER_API_KEY` to allow AI calls
+3. Run the app: `npm run dev`
+
+## Feature flags
+
+- `VITE_ENABLE_DEV_REGISTRATION` (default: unset/false): self-service registration is disabled for production. Set to `true` locally only if you explicitly want the dev registration form on the login screen.
+- `VITE_ENABLE_AI` (default: unset/false): enable AI features backed by OpenRouter. Requires `VITE_OPENROUTER_API_KEY`.

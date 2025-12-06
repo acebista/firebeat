@@ -1,0 +1,302 @@
+
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { User, UserRole } from '../types';
+import { supabase } from '../lib/supabase';
+import { UserService } from './db';
+
+interface AuthContextType {
+  user: User | null;
+  login: (email: string, password?: string) => Promise<void>;
+  logout: () => Promise<void>;
+  loading: boolean;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// Helper for Email Lookup & ID Sync
+const handleEmailLookup = async (uid: string, email: string | undefined, setUser: (u: User) => void, setLoading: (l: boolean) => void) => {
+  if (!email) {
+    setLoading(false);
+    return;
+  }
+
+  try {
+    const { data: emailData, error: emailError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .single();
+
+    if (emailData) {
+      console.log('Found user by email. Syncing ID...');
+      // Try to update ID - ignore error if it fails (e.g. FK constraints)
+      try {
+        await supabase.from('users').update({ id: uid }).eq('email', email);
+      } catch (e) {
+        console.warn("Could not sync ID (likely FK constraint), but proceeding with found profile.");
+      }
+
+      // Use the found data (with the old ID, but that's fine for now)
+      // We map it to User type
+      const syncedUser = { ...emailData } as User;
+      setUser(syncedUser);
+    } else {
+      // Not found by email either
+      console.warn('User not found by Email.');
+      // Create temp user
+      const tempUser: User = {
+        id: uid,
+        email: email || '',
+        name: email?.split('@')[0] || 'New User',
+        role: 'salesperson',
+        isActive: true,
+        createdAt: new Date().toISOString()
+      };
+      setUser(tempUser);
+    }
+  } catch (e) {
+    console.error("Email lookup failed", e);
+  } finally {
+    setLoading(false);
+  }
+};
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Set a timeout to prevent infinite loading (increased to 10 seconds for slower connections)
+    const timeout = setTimeout(() => {
+      console.warn('Auth initialization timeout - proceeding without session');
+      setLoading(false);
+    }, 10000);
+
+    // Check active session
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        clearTimeout(timeout);
+        if (session?.user) {
+          loadUserProfile(session.user.id, session.user.email);
+        } else {
+          setLoading(false);
+        }
+      })
+      .catch((error) => {
+        console.error('Error getting session:', error);
+        clearTimeout(timeout);
+        setLoading(false);
+      });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        await loadUserProfile(session.user.id, session.user.email);
+      } else {
+        setUser(null);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      clearTimeout(timeout);
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const loadUserProfile = async (uid: string, email?: string) => {
+    try {
+      console.log('Loading user profile for:', uid);
+
+      // Query the database for user profile
+      const { data, error } = await supabase.from('users').select('*').eq('id', uid).single();
+
+      console.log('User profile query result:', { data, error });
+
+      if (error) {
+        console.error('Error fetching user profile:', error);
+
+        // PGRST116 means "0 rows" when using .single(). This is NOT an RLS error, it just means ID mismatch.
+        // We should try Email lookup in this case.
+        if (error.code === 'PGRST116') {
+          console.warn('User ID mismatch (PGRST116). Attempting Email lookup...');
+          // Fall through to Email lookup logic below...
+          // We can't easily "fall through" from here since we are in the error block.
+          // So we will call a helper or duplicate the logic.
+          // Let's call the email lookup logic directly here.
+          await handleEmailLookup(uid, email, setUser, setLoading);
+          return;
+        }
+
+        // Check if it's an actual RLS policy error (not just not found)
+        if (error.message?.includes('row-level security')) {
+          console.warn('RLS policy blocking access. Please check Supabase policies.');
+          alert('Database access denied. Please check Row Level Security policies in Supabase.\n\nGo to Supabase Dashboard → Table Editor → users → RLS Policies\n\nRun the fix_rls_policies.sql file to fix this.');
+        }
+
+        // Fallback: Create temp user for this session
+        const tempUser: User = {
+          id: uid,
+          email: email || '',
+          name: email?.split('@')[0] || 'Fallback User',
+          role: 'salesperson', // Default to salesperson for safety
+          isActive: true,
+          createdAt: new Date().toISOString()
+        };
+
+        console.warn('Using temporary user profile:', tempUser);
+        setUser(tempUser);
+        setLoading(false);
+        return;
+      }
+
+      if (data) {
+        console.log('User profile loaded successfully:', data);
+        setUser(data as User);
+      } else {
+        // ID lookup failed. Try lookup by EMAIL.
+        console.warn(`User ID ${uid} not found in public.users. Trying email lookup for ${email}...`);
+
+        if (email) {
+          const { data: emailData, error: emailError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', email)
+            .single();
+
+          if (emailData) {
+            console.log('Found user by email. Syncing ID...');
+            // Update the public.users table to match the Auth ID
+            await supabase.from('users').update({ id: uid }).eq('email', email);
+
+            // Use the found data (with the old ID, but that's fine for now, or we can update local state)
+            const syncedUser = { ...emailData, id: uid } as User;
+            setUser(syncedUser);
+            return;
+          }
+        }
+
+        // No data found by ID or Email
+        console.warn('User authenticated but no profile found in users table.');
+
+        const tempUser: User = {
+          id: uid,
+          email: email || '',
+          name: email?.split('@')[0] || 'New User',
+          role: 'salesperson', // CHANGED DEFAULT TO SALESPERSON FOR SAFETY
+          isActive: true,
+          createdAt: new Date().toISOString()
+        };
+
+        // Try to create the profile
+        try {
+          console.log('Attempting to create user profile...');
+          await UserService.add(tempUser);
+          console.log('User profile created successfully');
+        } catch (createError) {
+          console.error('Failed to create user profile:', createError);
+        }
+
+        setUser(tempUser);
+      }
+    } catch (error: any) {
+      console.error("Error in loadUserProfile:", error);
+
+      // If timeout or any error, use fallback
+      const fallbackUser: User = {
+        id: uid,
+        email: email || '',
+        name: email?.split('@')[0] || 'Fallback User',
+        role: 'salesperson',
+        isActive: true,
+        createdAt: new Date().toISOString()
+      };
+
+      console.warn('Using fallback user due to error:', fallbackUser);
+      setUser(fallbackUser);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const login = async (email: string, password?: string) => {
+    setLoading(true);
+    try {
+      if (!password) throw new Error("Password required");
+
+      // Clear any stale session data before attempting login
+      // This prevents corrupted auth state from previous failed logins
+      try {
+        await supabase.auth.signOut();
+      } catch (e) {
+        console.warn('Error clearing previous session:', e);
+      }
+
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+
+      if (data.user) {
+        await loadUserProfile(data.user.id, data.user.email);
+      }
+    } catch (error) {
+      setLoading(false);
+      // Clear any partial session data on login failure
+      setUser(null);
+      throw error;
+    }
+  };
+
+  const logout = async () => {
+    try {
+      // Sign out from Supabase (clears auth session)
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error('Error during Supabase signOut:', error);
+    } finally {
+      // Always clear local state and storage, even if signOut fails
+      setUser(null);
+
+      // Clear Supabase-related storage keys to prevent stale auth state
+      // This is more selective than clearing ALL localStorage
+      try {
+        // Supabase stores auth data with keys starting with 'sb-'
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.startsWith('sb-') || key.includes('supabase'))) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+
+        // Also clear sessionStorage
+        for (let i = 0; i < sessionStorage.length; i++) {
+          const key = sessionStorage.key(i);
+          if (key && (key.startsWith('sb-') || key.includes('supabase'))) {
+            sessionStorage.removeItem(key);
+          }
+        }
+      } catch (e) {
+        console.warn('Error clearing Supabase storage:', e);
+      }
+    }
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, login, logout, loading }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+
+export const useUser = () => {
+  const { user } = useAuth();
+  return user;
+};

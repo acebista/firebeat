@@ -1,0 +1,29 @@
+[
+    {
+        "id": "ORD-20250220-0",
+        "date": "2025-02-20",
+        "invoiceNo": "INV-250220-1000",
+        "salespersonId": "sp1",
+        "salespersonName": "Rahul Sharma",
+        "customerName": "Shop A 20",
+        "subTotal": 1000,
+        "discountAmount": 100,
+        "grandTotal": 900,
+        "paymentMode": "Cash",
+        "items": [
+            {
+                "productId": "prod_1",
+                "productName": "Parle-G",
+                "companyId": "comp_1",
+                "companyName": "Parle",
+                "qty": 100,
+                "rate": 10,
+                "gross": 1000,
+                "primaryDiscountPct": 10,
+                "schemeDiscountPct": 0,
+                "discountAmount": 100,
+                "net": 900
+            }
+        ]
+    }
+]
