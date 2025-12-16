@@ -54,7 +54,22 @@ export async function adminSetPassword(
 
     if (error) {
       console.error('[AdminPasswordService] Error:', error);
-      throw error;
+      
+      // Extract error message from the error object
+      let errorMessage = error.message || 'Unknown error';
+      
+      // Try to parse JSON error response if available
+      if (typeof error.context?.response === 'string') {
+        try {
+          const parsed = JSON.parse(error.context.response);
+          errorMessage = parsed.error || errorMessage;
+        } catch (e) {
+          // If not JSON, use the raw response
+          errorMessage = error.context.response;
+        }
+      }
+      
+      throw new Error(errorMessage);
     }
 
     return {
@@ -65,7 +80,18 @@ export async function adminSetPassword(
   } catch (error: any) {
     console.error('[AdminPasswordService] Failed to set password:', error);
     
-    throw new Error(`Failed to set password: ${error.message || error}`);
+    // Provide user-friendly error messages
+    if (error.message?.includes('Only admins')) {
+      throw new Error('You do not have admin privileges. Only admins can set passwords.');
+    }
+    if (error.message?.includes('Invalid or expired authentication')) {
+      throw new Error('Your session has expired. Please login again.');
+    }
+    if (error.message?.includes('Not authenticated')) {
+      throw new Error(error.message);
+    }
+    
+    throw new Error(error.message || 'Failed to set password. Please try again.');
   }
 }
 
