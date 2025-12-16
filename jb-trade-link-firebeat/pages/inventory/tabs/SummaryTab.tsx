@@ -8,15 +8,16 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Calendar, AlertCircle, Loader } from 'lucide-react';
 import { getInventorySummary, InventorySummaryItem } from '../../../services/inventory/inventoryService';
-import { format, subDays } from 'date-fns';
+import { getTodayISO, normalizeDateToISO } from '../../../services/inventory/inventoryUtils';
+import { subDays } from 'date-fns';
 
 export function SummaryTab({ isAdmin }: { isAdmin: boolean }) {
   const [data, setData] = useState<InventorySummaryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  const [startDate, setStartDate] = useState(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
-  const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [startDate, setStartDate] = useState(normalizeDateToISO(subDays(new Date(), 30)));
+  const [endDate, setEndDate] = useState(getTodayISO());
   const [search, setSearch] = useState('');
 
   useEffect(() => {
@@ -58,7 +59,7 @@ export function SummaryTab({ isAdmin }: { isAdmin: boolean }) {
               <input
                 type="date"
                 value={startDate}
-                onChange={e => setStartDate(e.target.value)}
+                onChange={e => setStartDate(normalizeDateToISO(e.target.value))}
                 className="flex-1 outline-none text-sm"
               />
             </div>
@@ -70,7 +71,7 @@ export function SummaryTab({ isAdmin }: { isAdmin: boolean }) {
               <input
                 type="date"
                 value={endDate}
-                onChange={e => setEndDate(e.target.value)}
+                onChange={e => setEndDate(normalizeDateToISO(e.target.value))}
                 className="flex-1 outline-none text-sm"
               />
             </div>

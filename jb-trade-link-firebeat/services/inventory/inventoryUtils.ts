@@ -153,3 +153,23 @@ export function downloadAsCSV(content: string, filename: string): void {
 
   URL.revokeObjectURL(url);
 }
+
+/**
+ * Filter products locally by search term
+ * Searches in product name and company name
+ */
+export function filterProductsBySearch(
+  products: InventoryProduct[],
+  searchTerm: string
+): InventoryProduct[] {
+  if (!searchTerm.trim()) return products;
+
+  const term = searchTerm.toLowerCase();
+  return products.filter(p => {
+    const name = (p.name || '').toLowerCase();
+    const company = (p.companyName || '').toLowerCase();
+    const sku = deriveProductSku(p).toLowerCase();
+    
+    return name.includes(term) || company.includes(term) || sku.includes(term);
+  });
+}

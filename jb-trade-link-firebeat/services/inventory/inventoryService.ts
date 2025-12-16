@@ -123,6 +123,7 @@ export async function getInventoryMovements(
 ): Promise<InventoryMovement[]> {
   try {
     const movements: InventoryMovement[] = [];
+    const productIds = new Set<string>();
 
     // 1. Get sales (orders with items) - only data source available with dates
     let orderQuery = supabase
@@ -152,10 +153,11 @@ export async function getInventoryMovements(
               reference_id: order.id,
               reference_type: 'order',
               product_id: item.product_id,
-              company: order.customerName,
+              company: order.customerName, // customer company, not product company
               user_name: order.salespersonName,
               note: `Order: ${order.id}`,
             });
+            productIds.add(item.product_id);
           }
         });
       } catch (e) {
@@ -186,7 +188,41 @@ export async function getInventoryMovements(
         product_id: adj.product_id,
         note: `${adj.reason}: ${adj.note || 'No note'}`,
       });
+      productIds.add(adj.product_id);
     });
+
+    // 3. Fetch all product names/companies in a single query (avoid N+1)
+    if (productIds.size > 0) {
+      const { data: products, error: productError } = await supabase
+        .from('products')
+        .select('id, name, companyName, metadata')
+        .in('id', Array.from(productIds));
+      
+      if (productError) {
+        console.warn('[InventoryService] Failed to fetch product details:', productError);
+      } else {
+        const productMap = new Map(products?.map(p => [p.id, p]) || []);
+        
+        // Enrich movements with product names and company
+        movements.forEach(m => {
+          const product = productMap.get(m.product_id);
+          if (product) {
+            m.product_name = product.name || 'Unknown product';
+            // For adjustments, use product company. For sales, keep customer company.
+            if (m.type === 'adjustment') {
+              m.company = product.companyName || m.company;
+            }
+            // Optionally include sku from metadata
+            const metaSku = product.metadata?.sku;
+            if (metaSku) {
+              // store as derived sku if needed
+            }
+          } else {
+            m.product_name = 'Unknown product';
+          }
+        });
+      }
+    }
 
     // Sort by date descending
     return movements.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());

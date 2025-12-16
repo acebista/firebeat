@@ -8,6 +8,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Calendar, AlertCircle, Loader, TrendingUp, TrendingDown, Package, RefreshCcw, AlertTriangle } from 'lucide-react';
 import { getInventoryMovements, InventoryMovement } from '../../../services/inventory/inventoryService';
+import { getTodayISO, normalizeDateToISO } from '../../../services/inventory/inventoryUtils';
 import { format, subDays, parseISO } from 'date-fns';
 
 export function MovementsTab({ isAdmin }: { isAdmin: boolean }) {
@@ -15,8 +16,8 @@ export function MovementsTab({ isAdmin }: { isAdmin: boolean }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  const [startDate, setStartDate] = useState(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
-  const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [startDate, setStartDate] = useState(normalizeDateToISO(subDays(new Date(), 7)));
+  const [endDate, setEndDate] = useState(getTodayISO());
   const [search, setSearch] = useState('');
 
   useEffect(() => {
@@ -84,7 +85,7 @@ export function MovementsTab({ isAdmin }: { isAdmin: boolean }) {
               <input
                 type="date"
                 value={startDate}
-                onChange={e => setStartDate(e.target.value)}
+                onChange={e => setStartDate(normalizeDateToISO(e.target.value))}
                 className="flex-1 outline-none text-sm"
               />
             </div>
@@ -96,7 +97,7 @@ export function MovementsTab({ isAdmin }: { isAdmin: boolean }) {
               <input
                 type="date"
                 value={endDate}
-                onChange={e => setEndDate(e.target.value)}
+                onChange={e => setEndDate(normalizeDateToISO(e.target.value))}
                 className="flex-1 outline-none text-sm"
               />
             </div>

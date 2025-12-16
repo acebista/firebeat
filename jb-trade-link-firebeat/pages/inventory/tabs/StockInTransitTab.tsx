@@ -13,7 +13,8 @@ import {
   StockInTransitByProduct,
   StockInTransitByTrip,
 } from '../../../services/inventory/inventoryService';
-import { format, subDays } from 'date-fns';
+import { getTodayISO, normalizeDateToISO } from '../../../services/inventory/inventoryUtils';
+import { subDays } from 'date-fns';
 
 type ViewType = 'byProduct' | 'byTrip';
 
@@ -24,8 +25,8 @@ export function StockInTransitTab({ isAdmin }: { isAdmin: boolean }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [startDate, setStartDate] = useState(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
-  const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [startDate, setStartDate] = useState(normalizeDateToISO(subDays(new Date(), 30)));
+  const [endDate, setEndDate] = useState(getTodayISO());
   const [search, setSearch] = useState('');
 
   useEffect(() => {
@@ -95,7 +96,7 @@ export function StockInTransitTab({ isAdmin }: { isAdmin: boolean }) {
               <input
                 type="date"
                 value={startDate}
-                onChange={e => setStartDate(e.target.value)}
+                onChange={e => setStartDate(normalizeDateToISO(e.target.value))}
                 className="flex-1 outline-none text-sm"
               />
             </div>
@@ -107,7 +108,7 @@ export function StockInTransitTab({ isAdmin }: { isAdmin: boolean }) {
               <input
                 type="date"
                 value={endDate}
-                onChange={e => setEndDate(e.target.value)}
+                onChange={e => setEndDate(normalizeDateToISO(e.target.value))}
                 className="flex-1 outline-none text-sm"
               />
             </div>
