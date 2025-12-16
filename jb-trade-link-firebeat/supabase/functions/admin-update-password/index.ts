@@ -22,7 +22,7 @@ Deno.serve(async (req) => {
             console.error('[admin-update-password] Missing required environment variables')
             return new Response(
                 JSON.stringify({ error: 'Server configuration error: Missing environment variables' }),
-                { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             )
         }
 
@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
             console.log('[admin-update-password] No authorization header provided')
             return new Response(
                 JSON.stringify({ error: 'No authorization header' }),
-                { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             )
         }
 
@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
             console.error('[admin-update-password] Auth error:', userError?.message)
             return new Response(
                 JSON.stringify({ error: 'Invalid authentication' }),
-                { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             )
         }
 
@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
             console.error('[admin-update-password] Profile lookup error:', profileError.message)
             return new Response(
                 JSON.stringify({ error: `Failed to verify admin status: ${profileError.message}` }),
-                { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             )
         }
 
@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
             console.log('[admin-update-password] Unauthorized access attempt by:', callerUser.id)
             return new Response(
                 JSON.stringify({ error: 'Only admins can update user passwords' }),
-                { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             )
         }
 
@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
         } catch (e) {
             return new Response(
                 JSON.stringify({ error: 'Invalid request body' }),
-                { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             )
         }
 
@@ -101,14 +101,14 @@ Deno.serve(async (req) => {
         if (!userId || !newPassword) {
             return new Response(
                 JSON.stringify({ error: 'userId and newPassword are required' }),
-                { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             )
         }
 
         if (newPassword.length < 6) {
             return new Response(
                 JSON.stringify({ error: 'Password must be at least 6 characters' }),
-                { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             )
         }
 
@@ -124,7 +124,7 @@ Deno.serve(async (req) => {
             console.error('[admin-update-password] Password update failed:', updateError.message)
             return new Response(
                 JSON.stringify({ error: `Password update failed: ${updateError.message}` }),
-                { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             )
         }
 
@@ -138,8 +138,7 @@ Deno.serve(async (req) => {
         console.error('[admin-update-password] Unexpected error:', error?.message || error)
         return new Response(
             JSON.stringify({ error: `Internal server error: ${error?.message || 'Unknown error'}` }),
-            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
     }
 })
-

@@ -54,10 +54,21 @@ export async function adminSetPassword(
       console.error('[AdminPasswordService] Edge function error:', error);
 
       // Extract error message from the error object
-      let errorMessage = 'Failed to update password';
+      let errorMessage = error.message || 'Failed to update password';
 
       // The error response may contain the actual error message
-      if (error.context?.body) {
+      if (error.context && typeof error.context.json === 'function') {
+        try {
+          const body = await error.context.json();
+          if (body?.error) {
+            errorMessage = body.error;
+          }
+        } catch (e) {
+          // If json() fails, try text text
+        }
+      }
+      // Fallback for older supabase-js versions or different error structure
+      else if (error.context?.body) {
         try {
           // Parse the JSON body if it exists
           const body = typeof error.context.body === 'string'
@@ -67,13 +78,8 @@ export async function adminSetPassword(
             errorMessage = body.error;
           }
         } catch (e) {
-          // If not parseable, check message
+          // If not parseable, ignore
         }
-      }
-
-      // Check the error message directly
-      if (error.message) {
-        errorMessage = error.message;
       }
 
       throw new Error(errorMessage);
