@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Input, Select, Badge } from '../../components/ui/Elements';
 import { Modal } from '../../components/ui/Modal';
-import { Edit2, Lock, UserPlus, CheckCircle, XCircle, Trash2, Mail } from 'lucide-react';
+import { Edit2, Lock, UserPlus, CheckCircle, XCircle, Trash2, Mail, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { User, UserRole } from '../../types';
 import { UserService } from '../../services/db';
 import { supabase } from '../../lib/supabase';
 import { userSchema } from '../../utils/validation/schemas';
+import { validatePasswordStrength, generateTemporaryPassword } from '../../services/admin/passwordManagement';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
 
@@ -37,6 +38,15 @@ export const UserManagement: React.FC = () => {
   const [sendingResetEmail, setSendingResetEmail] = useState(false);
   const [resetEmailSuccess, setResetEmailSuccess] = useState('');
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+
+  // Password management state
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
+  const [selectedUserForPassword, setSelectedUserForPassword] = useState<User | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [passwordErrors, setPasswordErrors] = useState<string[]>([]);
+  const [settingPassword, setSettingPassword] = useState(false);
 
   useEffect(() => {
     fetchUsers();
@@ -181,6 +191,86 @@ export const UserManagement: React.FC = () => {
     }
   };
 
+  const openPasswordModal = (user: User) => {
+    setSelectedUserForPassword(user);
+    setNewPassword('');
+    setConfirmPassword('');
+    setShowPassword(false);
+    setPasswordErrors([]);
+    setPasswordModalOpen(true);
+  };
+
+  const closePasswordModal = () => {
+    setPasswordModalOpen(false);
+    setSelectedUserForPassword(null);
+    setNewPassword('');
+    setConfirmPassword('');
+    setPasswordErrors([]);
+  };
+
+  const generateAndSetPassword = () => {
+    const tempPassword = generateTemporaryPassword();
+    setNewPassword(tempPassword);
+    setConfirmPassword(tempPassword);
+    setPasswordErrors([]);
+  };
+
+  const handleSetPassword = async () => {
+    if (!selectedUserForPassword) return;
+
+    // Validate passwords
+    const errors: string[] = [];
+
+    if (!newPassword) {
+      errors.push('Password is required');
+    } else if (newPassword !== confirmPassword) {
+      errors.push('Passwords do not match');
+    } else {
+      const validation = validatePasswordStrength(newPassword);
+      if (!validation.valid) {
+        errors.push(...validation.errors);
+      }
+    }
+
+    if (errors.length > 0) {
+      setPasswordErrors(errors);
+      return;
+    }
+
+    setSettingPassword(true);
+    try {
+      // Update user password in Supabase Auth
+      const { error } = await supabase.auth.admin.updateUserById(selectedUserForPassword.id, {
+        password: newPassword,
+      });
+
+      if (error) {
+        // If admin API isn't available, show helpful message
+        if (error.message?.includes('not found') || error.message?.includes('admin')) {
+          toast.error(
+            'Password setting requires admin privileges. ' +
+            'Please contact support or check Supabase Edge Functions are deployed. ' +
+            'For now, use "Send Password Reset Email" button instead.'
+          );
+        } else {
+          throw error;
+        }
+      } else {
+        toast.success(`Password set for ${selectedUserForPassword.name}`);
+        closePasswordModal();
+      }
+    } catch (error: any) {
+      console.error('Failed to set password:', error);
+      // Fallback message
+      toast.error(
+        `Supabase admin client needed. Use Edge Function for production. ` +
+        `For testing, manually reset password via Supabase dashboard or use password reset email.`
+      );
+    } finally {
+      setSettingPassword(false);
+    }
+  };
+
   // Filter users based on search and role filter
   const filteredUsers = users.filter(user => {
     const matchesSearch = searchTerm === '' ||
@@ -275,6 +365,13 @@ export const UserManagement: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
                       <button
+                        onClick={() => openPasswordModal(user)}
+                        className="text-purple-600 hover:text-purple-900 p-1 hover:bg-purple-50 rounded"
+                        title="Set Password"
+                      >
+                        <Lock className="h-4 w-4" />
+                      </button>
+                      <button
                         onClick={() => handleEdit(user)}
                         className="text-indigo-600 hover:text-indigo-900 p-1 hover:bg-indigo-50 rounded"
                         title="Edit User"
@@ -313,7 +410,7 @@ export const UserManagement: React.FC = () => {
         <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-4">
           {!editingUser && (
             <div className="bg-yellow-50 p-3 text-sm text-yellow-800 rounded border border-yellow-200 mb-4">
-              <strong>Note:</strong> This only creates the database profile. The user must Register on the Login page with this email to create their password.
+              <strong>Note:</strong> After creating the user profile, use the lock icon to set their initial password.
             </div>
           )}
 
@@ -339,24 +436,9 @@ export const UserManagement: React.FC = () => {
 
           {editingUser && (
             <div className="bg-blue-50 p-4 rounded border border-blue-200">
-              <p className="text-sm text-blue-800 mb-2">
-                <strong>Password Management:</strong> Users manage their own passwords.
+              <p className="text-sm text-blue-800">
+                <strong>Password Management:</strong> Use the lock icon (🔒) next to this user's name in the table to set or change their password.
               </p>
-              {resetEmailSuccess && (
-                <div className="bg-green-50 text-green-700 p-2 rounded text-sm mb-2">
-                  {resetEmailSuccess}
-                </div>
-              )}
-              <Button
-                type="button"
-                onClick={() => handleSendPasswordReset(formData.email)}
-                disabled={sendingResetEmail || !formData.email}
-                className="w-full flex items-center justify-center gap-2"
-                variant="secondary"
-              >
-                <Mail className="h-4 w-4" />
-                {sendingResetEmail ? 'Sending...' : 'Send Password Reset Email'}
-              </Button>
             </div>
           )}
 
@@ -425,6 +507,113 @@ export const UserManagement: React.FC = () => {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Password Setting Modal */}
+      <Modal
+        isOpen={passwordModalOpen}
+        onClose={closePasswordModal}
+        title={`Set Password for ${selectedUserForPassword?.name}`}
+      >
+        <div className="space-y-4">
+          <div className="bg-blue-50 p-3 rounded border border-blue-200">
+            <p className="text-sm text-blue-800">
+              <strong>Email:</strong> {selectedUserForPassword?.email}
+            </p>
+          </div>
+
+          {passwordErrors.length > 0 && (
+            <div className="bg-red-50 p-3 rounded border border-red-200">
+              <p className="text-sm font-medium text-red-700 mb-1">Password errors:</p>
+              <ul className="text-sm text-red-600 list-disc list-inside">
+                {passwordErrors.map((error, idx) => (
+                  <li key={idx}>{error}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Password Requirements:
+            </label>
+            <ul className="text-sm text-gray-600 space-y-1 ml-4">
+              <li>✓ Minimum 8 characters</li>
+              <li>✓ At least one uppercase letter (A-Z)</li>
+              <li>✓ At least one lowercase letter (a-z)</li>
+              <li>✓ At least one number (0-9)</li>
+            </ul>
+          </div>
+
+          <div className="relative">
+            <Input
+              label="New Password"
+              type={showPassword ? 'text' : 'password'}
+              value={newPassword}
+              onChange={(e) => {
+                setNewPassword(e.target.value);
+                setPasswordErrors([]);
+              }}
+              placeholder="Enter new password"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-9 text-gray-500 hover:text-gray-700"
+              title={showPassword ? 'Hide' : 'Show'}
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+
+          <Input
+            label="Confirm Password"
+            type={showPassword ? 'text' : 'password'}
+            value={confirmPassword}
+            onChange={(e) => {
+              setConfirmPassword(e.target.value);
+              setPasswordErrors([]);
+            }}
+            placeholder="Confirm password"
+          />
+
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              onClick={generateAndSetPassword}
+              variant="secondary"
+              className="w-full flex items-center justify-center gap-2"
+              disabled={settingPassword}
+            >
+              <RefreshCw className="h-4 w-4" />
+              Generate Random Password
+            </Button>
+          </div>
+
+          <div className="bg-amber-50 p-3 rounded border border-amber-200 text-sm text-amber-800">
+            <strong>Tip:</strong> Generate a random password and give it to the user securely. 
+            They can change it later.
+          </div>
+
+          <div className="flex justify-end gap-3 mt-6">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={closePasswordModal}
+              disabled={settingPassword}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSetPassword}
+              isLoading={settingPassword}
+              disabled={!newPassword || !confirmPassword}
+            >
+              Set Password
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

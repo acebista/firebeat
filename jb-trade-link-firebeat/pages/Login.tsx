@@ -12,10 +12,9 @@ import toast from 'react-hot-toast';
 export const Login: React.FC = () => {
   const isDevRegistrationEnabled = import.meta.env.VITE_ENABLE_DEV_REGISTRATION === 'true';
   const [identifier, setIdentifier] = useState(''); // Can be email or phone for login
-  const [email, setEmail] = useState(''); // Used for forgot password and registration
+  const [email, setEmail] = useState(''); // Used for registration
   const [password, setPassword] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
-  const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [role, setRole] = useState<UserRole>('admin'); // Only used for registration
   const [localError, setLocalError] = useState('');
   const [success, setSuccess] = useState('');
@@ -131,41 +130,6 @@ export const Login: React.FC = () => {
     }
   };
 
-  const handleForgotPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLocalError('');
-    setSuccess('');
-    setIsSubmitting(true);
-
-    if (!email) {
-      setLocalError('Please enter your email address');
-      setIsSubmitting(false);
-      return;
-    }
-
-    try {
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/#/reset-password`,
-      });
-
-      if (resetError) throw resetError;
-
-      setSuccess('Password reset email sent! Check your inbox.');
-      setEmail('');
-
-      // Switch back to login after 3 seconds
-      setTimeout(() => {
-        setIsForgotPassword(false);
-        setSuccess('');
-      }, 3000);
-    } catch (err: any) {
-      console.error(err);
-      setLocalError(err.message || 'Failed to send reset email');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   // Show main login form
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-100 p-4">
@@ -214,36 +178,7 @@ export const Login: React.FC = () => {
           </div>
         )}
 
-        {isForgotPassword ? (
-          <form onSubmit={handleForgotPassword} className="space-y-6">
-            <div className="text-sm text-center font-bold text-gray-700">Reset Password</div>
-            <p className="text-sm text-gray-600 text-center">
-              Enter your email address and we'll send you a link to reset your password.
-            </p>
-            <Input
-              label="Email Address"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoComplete="email"
-            />
-            <Button type="submit" className="w-full" isLoading={isSubmitting}>
-              Send Reset Link
-            </Button>
-            <button
-              type="button"
-              onClick={() => {
-                setIsForgotPassword(false);
-                setLocalError('');
-                setSuccess('');
-              }}
-              className="w-full text-center text-sm text-gray-600 hover:underline"
-            >
-              Back to Login
-            </button>
-          </form>
-        ) : isRegistering && isDevRegistrationEnabled ? (
+        {isRegistering && isDevRegistrationEnabled ? (
           <form onSubmit={handleDevRegister} className="space-y-6">
             <div className="text-sm text-center font-bold text-gray-700">Dev Registration</div>
             <Input
@@ -313,19 +248,9 @@ export const Login: React.FC = () => {
               Sign In (v3)
             </Button>
 
-            <div className="flex items-center justify-between text-sm">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsForgotPassword(true);
-                  setLocalError('');
-                }}
-                className="text-indigo-600 hover:underline"
-              >
-                Forgot password?
-              </button>
-              {/* Only show registration in development with explicit flag */}
-              {import.meta.env.DEV && isDevRegistrationEnabled && (
+            {/* Only show registration in development with explicit flag */}
+            {import.meta.env.DEV && isDevRegistrationEnabled && (
+              <div className="text-center">
                 <button
                   type="button"
                   onClick={() => {
@@ -336,8 +261,8 @@ export const Login: React.FC = () => {
                 >
                   Dev Register
                 </button>
-              )}
-            </div>
+              </div>
+            )}
           </form>
         )}
       </Card>
