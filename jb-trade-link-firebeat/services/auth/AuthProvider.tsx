@@ -79,24 +79,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     useEffect(() => {
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
             console.log('[AuthProvider] Auth state changed:', event);
+
             if (event === 'SIGNED_OUT') {
                 useUserStore.getState().resetStore();
                 dispatch({ type: 'SET_UNAUTHENTICATED' });
-            } else if (event === 'SIGNED_IN') {
-                // Only rehydrate on actual sign-in (not tab switch token refresh)
-                useUserStore.getState().rehydrateFromSession();
-            } else if (event === 'TOKEN_REFRESHED') {
-                // For token refresh (tab switch), just update the session silently
-                // Don't trigger full rehydration which causes loading screen
+            } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+                // If user is already authenticated, do a background update (no loading screen)
+                // If user is NOT authenticated (initial login), do full update
                 const currentUser = useUserStore.getState().user;
-                if (!currentUser && session) {
-                    // User became authenticated from another context, rehydrate
-                    useUserStore.getState().rehydrateFromSession();
-                } else if (session) {
-                    // User already authenticated, just update session quietly
-                    useUserStore.setState({ session });
-                    console.log('[AuthProvider] Session refreshed quietly (no reload)');
-                }
+                const isBackground = !!currentUser;
+
+                console.log(`[AuthProvider] Handling ${event} with background=${isBackground}`);
+                useUserStore.getState().rehydrateFromSession({ background: isBackground });
             }
         });
 

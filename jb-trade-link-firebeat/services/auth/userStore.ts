@@ -12,7 +12,7 @@ interface UserState {
   session: any | null;
   error: string | null;
   bootError: string | null;
-  rehydrateFromSession: () => Promise<void>;
+  rehydrateFromSession: (options?: { background?: boolean }) => Promise<void>;
   setAuthenticated: (user: User, session: any) => void;
   setUnauthenticated: () => void;
   setError: (error: string | null) => void;
@@ -44,7 +44,7 @@ export const useUserStore = create<UserState>()(
           console.log('[Boot] Performing hard reset of auth store...');
           clearStaleTokens();
           clearPersistedAuthKey();
-          set({ 
+          set({
             bootStatus: 'idle',
             user: null,
             session: null,
@@ -53,9 +53,13 @@ export const useUserStore = create<UserState>()(
           });
         },
 
-        rehydrateFromSession: async () => {
-          set({ bootStatus: 'checking' });
-          
+        rehydrateFromSession: async (options = {}) => {
+          const { background = false } = options;
+
+          if (!background) {
+            set({ bootStatus: 'checking' });
+          }
+
           // Boot timeout guard: if checking takes >10 seconds, force ready state
           const timeoutId = setTimeout(() => {
             const current = get();
@@ -71,7 +75,7 @@ export const useUserStore = create<UserState>()(
 
           try {
             console.log('[Boot] Starting session rehydration...');
-            
+
             // CRITICAL: Check Supabase session FIRST before clearing anything
             const { data, error } = await supabase.auth.getSession();
 
@@ -79,7 +83,7 @@ export const useUserStore = create<UserState>()(
               console.error('[Boot] getSession error:', error);
               // Session lookup failed - clear tokens and stay logged out
               clearStaleTokens();
-              set({ 
+              set({
                 bootStatus: 'ready',
                 bootError: `Session fetch failed: ${error.message}`,
                 user: null,
@@ -100,12 +104,12 @@ export const useUserStore = create<UserState>()(
 
             // Session exists - now load profile
             console.log('[Boot] Valid session found, loading profile for user:', session.user.id);
-            
+
             try {
               const profile = await loadUserProfile(session.user.id);
               console.log('[Boot] Profile loaded successfully');
               // Success - set authenticated state WITHOUT clearing tokens
-              set({ 
+              set({
                 bootStatus: 'ready',
                 user: profile,
                 session,
@@ -116,7 +120,7 @@ export const useUserStore = create<UserState>()(
               console.error('[Boot] Profile fetch failed:', profileErr);
               // Profile fetch failed - clear tokens since session is unrecoverable
               clearStaleTokens();
-              set({ 
+              set({
                 bootStatus: 'ready',
                 user: null,
                 session: null,
@@ -127,7 +131,7 @@ export const useUserStore = create<UserState>()(
             console.error('[Boot] Unexpected boot error:', err);
             // Unexpected error - stay logged out
             clearStaleTokens();
-            set({ 
+            set({
               bootStatus: 'ready',
               user: null,
               session: null,
@@ -140,7 +144,7 @@ export const useUserStore = create<UserState>()(
 
         setAuthenticated: (user, session) => {
           console.log('[Auth] User authenticated:', user.email);
-          set({ 
+          set({
             user,
             session,
             bootStatus: 'ready',
@@ -151,7 +155,7 @@ export const useUserStore = create<UserState>()(
 
         setUnauthenticated: () => {
           console.log('[Auth] User unauthenticated');
-          set({ 
+          set({
             user: null,
             session: null,
             bootStatus: 'ready',
@@ -172,9 +176,9 @@ export const useUserStore = create<UserState>()(
         logout: async () => {
           try {
             console.log('[Auth] Logging out...');
-            await supabase.auth.signOut().catch(() => {});
+            await supabase.auth.signOut().catch(() => { });
           } finally {
-            set({ 
+            set({
               user: null,
               session: null,
               bootStatus: 'ready',
@@ -248,14 +252,14 @@ function clearStaleTokens() {
   try {
     console.log('[Tokens] Clearing stale Supabase auth tokens...');
     const keysToRemove: string[] = [];
-    
+
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (key && key.includes('sb-') && (key.includes('auth') || key.includes('session'))) {
         keysToRemove.push(key);
       }
     }
-    
+
     keysToRemove.forEach(key => {
       localStorage.removeItem(key);
       console.log(`[Tokens] Removed ${key}`);
