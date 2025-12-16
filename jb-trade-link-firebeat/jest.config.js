@@ -5,14 +5,14 @@ const config = {
   roots: ['<rootDir>'],
   testMatch: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
-  extensionsToTreatAsEsm: ['.ts', '.tsx'],
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
-      useESM: true,
       tsconfig: {
-        jsx: 'react',
+        jsx: 'react-jsx',
         esModuleInterop: true,
         allowSyntheticDefaultImports: true,
+        module: 'commonjs',
       },
     }],
   },
@@ -34,6 +34,8 @@ const config = {
   },
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
+    '^../../lib/supabase$': '<rootDir>/__mocks__/lib/supabase.ts',
+    '^../lib/supabase$': '<rootDir>/__mocks__/lib/supabase.ts',
   },
 };
 

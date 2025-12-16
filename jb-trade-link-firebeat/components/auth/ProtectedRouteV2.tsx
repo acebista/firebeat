@@ -14,8 +14,8 @@
 
 import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
-import { useUserStore } from '../auth/userStore';
-import { LoadingOverlay } from '../auth/LoadingOverlay';
+import { useUserStore } from '../../services/auth/userStore';
+import { LoadingOverlay } from './LoadingOverlay';
 import { UserRole } from '../../types';
 
 interface ProtectedRouteV2Props {
