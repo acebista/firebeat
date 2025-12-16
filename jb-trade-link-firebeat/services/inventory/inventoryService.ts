@@ -110,7 +110,8 @@ export async function getOpeningStock(
 
 /**
  * Get all inventory movements within a date range for a product or all products
- * Combines purchases, sales (orders), returns, damage logs, and adjustments
+ * Combines orders (sales) and inventory adjustments from actual data sources
+ * Note: purchases, returns, damage_logs are not available in current schema
  */
 export async function getInventoryMovements(
   startDate: string,
@@ -121,62 +122,36 @@ export async function getInventoryMovements(
   try {
     const movements: InventoryMovement[] = [];
 
-    // 1. Get purchases
-    let purchaseQuery = supabase
-      .from('purchases')
-      .select('id, created_at, product_id, quantity, reference_id, supplier_name, created_by')
-      .gte('created_at', `${startDate}T00:00:00Z`)
-      .lte('created_at', `${endDate}T23:59:59Z`);
-
-    if (productId) purchaseQuery = purchaseQuery.eq('product_id', productId);
-    if (search) purchaseQuery = purchaseQuery.or(`supplier_name.ilike.%${search}%,product_id.ilike.%${search}%`);
-
-    const { data: purchases, error: purchaseError } = await purchaseQuery;
-    if (purchaseError) throw purchaseError;
-
-    purchases?.forEach(p => {
-      movements.push({
-        id: `purchase-${p.id}`,
-        date: p.created_at,
-        type: 'purchase',
-        quantity: p.quantity,
-        reference_id: p.id,
-        reference_type: 'purchase',
-        product_id: p.product_id,
-        company: p.supplier_name,
-        note: `Purchase Order: ${p.reference_id || 'N/A'}`,
-      });
-    });
-
-    // 2. Get sales (orders with items)
+    // 1. Get sales (orders with items) - only data source available with dates
     let orderQuery = supabase
       .from('orders')
-      .select('id, created_at, customer_name, order_items, created_by')
-      .gte('created_at', `${startDate}T00:00:00Z`)
-      .lte('created_at', `${endDate}T23:59:59Z`);
+      .select('id, time, customerName, items, salespersonName')
+      .gte('time', `${startDate}T00:00:00Z`)
+      .lte('time', `${endDate}T23:59:59Z`);
 
-    if (search) orderQuery = orderQuery.or(`customer_name.ilike.%${search}%`);
+    if (search) orderQuery = orderQuery.ilike('customerName', `%${search}%`);
 
     const { data: orders, error: orderError } = await orderQuery;
     if (orderError) throw orderError;
 
     orders?.forEach(order => {
       try {
-        const items = typeof order.order_items === 'string' 
-          ? JSON.parse(order.order_items) 
-          : order.order_items || [];
+        const items = typeof order.items === 'string' 
+          ? JSON.parse(order.items) 
+          : order.items || [];
         
         items.forEach((item: any) => {
           if (!productId || item.product_id === productId) {
             movements.push({
               id: `sale-${order.id}-${item.product_id}`,
-              date: order.created_at,
+              date: order.time || new Date().toISOString(),
               type: 'sale',
               quantity: -(item.quantity || 0),
               reference_id: order.id,
               reference_type: 'order',
               product_id: item.product_id,
-              company: order.customer_name,
+              company: order.customerName,
+              user_name: order.salespersonName,
               note: `Order: ${order.id}`,
             });
           }
@@ -186,60 +161,10 @@ export async function getInventoryMovements(
       }
     });
 
-    // 3. Get returns
-    let returnQuery = supabase
-      .from('returns')
-      .select('id, created_at, product_id, quantity, order_id, reason, created_by')
-      .gte('created_at', `${startDate}T00:00:00Z`)
-      .lte('created_at', `${endDate}T23:59:59Z`);
-
-    if (productId) returnQuery = returnQuery.eq('product_id', productId);
-
-    const { data: returns, error: returnError } = await returnQuery;
-    if (returnError) throw returnError;
-
-    returns?.forEach(ret => {
-      movements.push({
-        id: `return-${ret.id}`,
-        date: ret.created_at,
-        type: 'return',
-        quantity: ret.quantity,
-        reference_id: ret.id,
-        reference_type: 'return',
-        product_id: ret.product_id,
-        note: `Return from Order ${ret.order_id}: ${ret.reason}`,
-      });
-    });
-
-    // 4. Get damage logs
-    let damageQuery = supabase
-      .from('damage_logs')
-      .select('id, created_at, product_id, quantity_damaged, reason, reference_id, created_by')
-      .gte('created_at', `${startDate}T00:00:00Z`)
-      .lte('created_at', `${endDate}T23:59:59Z`);
-
-    if (productId) damageQuery = damageQuery.eq('product_id', productId);
-
-    const { data: damages, error: damageError } = await damageQuery;
-    if (damageError) throw damageError;
-
-    damages?.forEach(damage => {
-      movements.push({
-        id: `damage-${damage.id}`,
-        date: damage.created_at,
-        type: 'damage',
-        quantity: -(damage.quantity_damaged || 0),
-        reference_id: damage.id,
-        reference_type: 'damage',
-        product_id: damage.product_id,
-        note: `Damage: ${damage.reason}. Ref: ${damage.reference_id || 'N/A'}`,
-      });
-    });
-
-    // 5. Get adjustments
+    // 2. Get adjustments
     let adjustmentQuery = supabase
       .from('inventory_adjustments')
-      .select('id, created_at, product_id, qty_delta, reason, note, created_by')
+      .select('id, created_at, product_id, qty_delta, reason, note')
       .gte('created_at', `${startDate}T00:00:00Z`)
       .lte('created_at', `${endDate}T23:59:59Z`);
 
@@ -253,7 +178,7 @@ export async function getInventoryMovements(
         id: `adjustment-${adj.id}`,
         date: adj.created_at,
         type: 'adjustment',
-        quantity: adj.qty_delta,
+        quantity: Number(adj.qty_delta),
         reference_id: adj.id,
         reference_type: 'adjustment',
         product_id: adj.product_id,
@@ -282,10 +207,10 @@ export async function getInventorySummary(
     // Get all products (filtered by search if provided)
     let productQuery = supabase
       .from('products')
-      .select('id, name, company, sku');
+      .select('id, name, companyName, metadata');
 
     if (search) {
-      productQuery = productQuery.or(`name.ilike.%${search}%,company.ilike.%${search}%,sku.ilike.%${search}%`);
+      productQuery = productQuery.or(`name.ilike.%${search}%,companyName.ilike.%${search}%`);
     }
 
     const { data: products, error: productError } = await productQuery;
@@ -294,35 +219,40 @@ export async function getInventorySummary(
     const summary: InventorySummaryItem[] = [];
 
     for (const product of products || []) {
-      // Get opening stock
-      const openingQty = await getOpeningStock(product.id, startDate);
+      try {
+        // Get opening stock
+        const openingQty = await getOpeningStock(product.id, startDate);
 
-      // Get movements
-      const movements = await getInventoryMovements(startDate, endDate, product.id);
+        // Get movements
+        const movements = await getInventoryMovements(startDate, endDate, product.id);
 
-      // Calculate totals
-      const totalIn = movements
-        .filter(m => ['purchase', 'return', 'adjustment'].includes(m.type) && m.quantity > 0)
-        .reduce((sum, m) => sum + m.quantity, 0);
+        // Calculate totals
+        const totalIn = movements
+          .filter(m => ['adjustment'].includes(m.type) && m.quantity > 0)
+          .reduce((sum, m) => sum + m.quantity, 0);
 
-      const totalOut = movements
-        .filter(m => ['sale', 'damage', 'adjustment'].includes(m.type) && m.quantity < 0)
-        .reduce((sum, m) => sum + Math.abs(m.quantity), 0);
+        const totalOut = movements
+          .filter(m => ['sale', 'adjustment'].includes(m.type) && m.quantity < 0)
+          .reduce((sum, m) => sum + Math.abs(m.quantity), 0);
 
-      const netChange = totalIn - totalOut;
-      const currentStock = openingQty + netChange;
+        const netChange = totalIn - totalOut;
+        const currentStock = openingQty + netChange;
 
-      summary.push({
-        product_id: product.id,
-        product_name: product.name,
-        company: product.company,
-        sku: product.sku,
-        opening_qty: openingQty,
-        total_in: totalIn,
-        total_out: totalOut,
-        net_change: netChange,
-        current_stock: currentStock,
-      });
+        summary.push({
+          product_id: product.id,
+          product_name: product.name || '',
+          company: product.companyName || '',
+          sku: product.metadata?.sku || '',
+          opening_qty: openingQty,
+          total_in: totalIn,
+          total_out: totalOut,
+          net_change: netChange,
+          current_stock: currentStock,
+        });
+      } catch (e) {
+        console.error('[InventoryService] Error processing product:', product.id, e);
+        continue;
+      }
     }
 
     return summary.sort((a, b) => a.product_name.localeCompare(b.product_name));
@@ -333,8 +263,8 @@ export async function getInventorySummary(
 }
 
 /**
- * Get stock in transit (dispatched but not delivered)
- * Includes both trip-based and order-based tracking
+ * Get stock in transit (orders with status: dispatched, shipped, out_for_delivery)
+ * Aggregates by product
  */
 export async function getStockInTransitByProduct(
   startDate?: string,
@@ -344,55 +274,38 @@ export async function getStockInTransitByProduct(
   try {
     const inTransitStatuses = ['dispatched', 'shipped', 'out_for_delivery'];
 
-    // Query orders with in-transit status and their items
+    // Query orders with in-transit status
     let orderQuery = supabase
       .from('orders')
-      .select('id, status, dispatch_date, order_items, customer_name')
+      .select('id, status, time, items, customerName')
       .in('status', inTransitStatuses);
 
     if (startDate) {
-      orderQuery = orderQuery.gte('dispatch_date', startDate);
+      orderQuery = orderQuery.gte('time', `${startDate}T00:00:00Z`);
     }
     if (endDate) {
-      orderQuery = orderQuery.lte('dispatch_date', endDate);
+      orderQuery = orderQuery.lte('time', `${endDate}T23:59:59Z`);
     }
 
     const { data: orders, error: orderError } = await orderQuery;
     if (orderError) throw orderError;
 
-    // Query trips with in-transit status and their dispatch items
-    let tripQuery = supabase
-      .from('trips')
-      .select('id, status, dispatch_date, dispatch_items, destination')
-      .in('status', inTransitStatuses);
-
-    if (startDate) {
-      tripQuery = tripQuery.gte('dispatch_date', startDate);
-    }
-    if (endDate) {
-      tripQuery = tripQuery.lte('dispatch_date', endDate);
-    }
-
-    const { data: trips, error: tripError } = await tripQuery;
-    if (tripError) throw tripError;
-
     // Aggregate by product
     const productMap = new Map<string, {
       qty: number;
-      trips: Set<string>;
       orders: Set<string>;
     }>();
 
     // Process orders
     orders?.forEach(order => {
       try {
-        const items = typeof order.order_items === 'string'
-          ? JSON.parse(order.order_items)
-          : order.order_items || [];
+        const items = typeof order.items === 'string'
+          ? JSON.parse(order.items)
+          : order.items || [];
 
         items.forEach((item: any) => {
           const key = item.product_id;
-          const current = productMap.get(key) || { qty: 0, trips: new Set(), orders: new Set() };
+          const current = productMap.get(key) || { qty: 0, orders: new Set() };
           current.qty += item.quantity || 0;
           current.orders.add(order.id);
           productMap.set(key, current);
@@ -402,34 +315,17 @@ export async function getStockInTransitByProduct(
       }
     });
 
-    // Process trips
-    trips?.forEach(trip => {
-      try {
-        const items = typeof trip.dispatch_items === 'string'
-          ? JSON.parse(trip.dispatch_items)
-          : trip.dispatch_items || [];
-
-        items.forEach((item: any) => {
-          const key = item.product_id;
-          const current = productMap.get(key) || { qty: 0, trips: new Set(), orders: new Set() };
-          current.qty += item.quantity || 0;
-          current.trips.add(trip.id);
-          productMap.set(key, current);
-        });
-      } catch (e) {
-        console.error('[InventoryService] Error parsing trip items:', e);
-      }
-    });
-
     // Get product details and build result
     const productIds = Array.from(productMap.keys());
+    if (productIds.length === 0) return [];
+
     let productQuery = supabase
       .from('products')
-      .select('id, name, company, sku')
+      .select('id, name, companyName, metadata')
       .in('id', productIds);
 
     if (search) {
-      productQuery = productQuery.or(`name.ilike.%${search}%,company.ilike.%${search}%,sku.ilike.%${search}%`);
+      productQuery = productQuery.or(`name.ilike.%${search}%,companyName.ilike.%${search}%`);
     }
 
     const { data: products, error: productError } = await productQuery;
@@ -439,11 +335,11 @@ export async function getStockInTransitByProduct(
       const transit = productMap.get(product.id);
       return {
         product_id: product.id,
-        product_name: product.name,
-        company: product.company,
-        sku: product.sku,
+        product_name: product.name || '',
+        company: product.companyName || '',
+        sku: product.metadata?.sku || '',
         total_qty_in_transit: transit?.qty || 0,
-        trip_count: transit?.trips.size || 0,
+        trip_count: 0,
         order_count: transit?.orders.size || 0,
       };
     });
@@ -454,7 +350,7 @@ export async function getStockInTransitByProduct(
 }
 
 /**
- * Get stock in transit grouped by trip/order
+ * Get stock in transit grouped by order
  */
 export async function getStockInTransitByTrip(
   startDate?: string,
@@ -468,12 +364,12 @@ export async function getStockInTransitByTrip(
     // Get in-transit orders
     let orderQuery = supabase
       .from('orders')
-      .select('id, status, dispatch_date, delivery_date, order_items, customer_name, delivery_user, delivery_address')
+      .select('id, status, time, items, customerName, assignedTripId')
       .in('status', inTransitStatuses);
 
-    if (startDate) orderQuery = orderQuery.gte('dispatch_date', startDate);
-    if (endDate) orderQuery = orderQuery.lte('dispatch_date', endDate);
-    if (search) orderQuery = orderQuery.or(`customer_name.ilike.%${search}%`);
+    if (startDate) orderQuery = orderQuery.gte('time', `${startDate}T00:00:00Z`);
+    if (endDate) orderQuery = orderQuery.lte('time', `${endDate}T23:59:59Z`);
+    if (search) orderQuery = orderQuery.ilike('customerName', `%${search}%`);
 
     const { data: orders, error: orderError } = await orderQuery;
     if (orderError) throw orderError;
@@ -481,88 +377,110 @@ export async function getStockInTransitByTrip(
     // Process orders
     for (const order of orders || []) {
       try {
-        const items = typeof order.order_items === 'string'
-          ? JSON.parse(order.order_items)
-          : order.order_items || [];
+        const items = typeof order.items === 'string'
+          ? JSON.parse(order.items)
+          : order.items || [];
 
         // Get product details for items
         const productIds = items.map((i: any) => i.product_id);
+        if (productIds.length === 0) continue;
+
         const { data: products } = await supabase
           .from('products')
-          .select('id, name, sku')
+          .select('id, name')
           .in('id', productIds);
 
         const productMap = new Map((products || []).map(p => [p.id, p]));
 
         result.push({
           trip_id: order.id,
+          order_id: order.id,
           status: order.status,
-          dispatch_date: order.dispatch_date,
-          destination: order.delivery_address || 'N/A',
-          customer_name: order.customer_name,
-          delivery_user_name: order.delivery_user,
+          dispatch_date: order.time || new Date().toISOString(),
+          destination: order.customerName || 'N/A',
+          customer_name: order.customerName,
           items: items.map((item: any) => {
             const product = productMap.get(item.product_id);
             return {
               product_id: item.product_id,
               product_name: product?.name || 'Unknown',
-              qty_in_transit: item.quantity,
-              qty_total_ordered: item.quantity,
+              qty_in_transit: item.quantity || 0,
+              qty_total_ordered: item.quantity || 0,
             };
           }),
         });
       } catch (e) {
-        console.error('[InventoryService] Error processing order:', e);
+        console.error('[InventoryService] Error processing order:', order.id, e);
       }
     }
 
     // Get in-transit trips
     let tripQuery = supabase
       .from('trips')
-      .select('id, status, dispatch_date, dispatch_items, destination, dispatcher, delivery_user')
+      .select('id, status, createdAt, orderIds, routeNames')
       .in('status', inTransitStatuses);
 
-    if (startDate) tripQuery = tripQuery.gte('dispatch_date', startDate);
-    if (endDate) tripQuery = tripQuery.lte('dispatch_date', endDate);
-    if (search) tripQuery = tripQuery.or(`destination.ilike.%${search}%`);
+    if (startDate) tripQuery = tripQuery.gte('createdAt', startDate);
+    if (endDate) tripQuery = tripQuery.lte('createdAt', endDate);
 
     const { data: trips, error: tripError } = await tripQuery;
     if (tripError) throw tripError;
 
-    // Process trips
+    // Process trips - get orders from trip's orderIds
     for (const trip of trips || []) {
       try {
-        const items = typeof trip.dispatch_items === 'string'
-          ? JSON.parse(trip.dispatch_items)
-          : trip.dispatch_items || [];
+        const orderIds = trip.orderIds || [];
+        if (orderIds.length === 0) continue;
 
-        // Get product details for items
-        const productIds = items.map((i: any) => i.product_id);
+        // Get all orders in trip
+        const { data: tripOrders } = await supabase
+          .from('orders')
+          .select('items')
+          .in('id', orderIds);
+
+        // Aggregate items from all orders in trip
+        const allItems: any[] = [];
+        tripOrders?.forEach(o => {
+          try {
+            const items = typeof o.items === 'string' ? JSON.parse(o.items) : o.items || [];
+            allItems.push(...items);
+          } catch (e) {
+            console.error('[InventoryService] Error parsing trip order items:', e);
+          }
+        });
+
+        // Get product details
+        const productIds = [...new Set(allItems.map(i => i.product_id))];
+        if (productIds.length === 0) continue;
+
         const { data: products } = await supabase
           .from('products')
-          .select('id, name, sku')
+          .select('id, name')
           .in('id', productIds);
 
         const productMap = new Map((products || []).map(p => [p.id, p]));
 
+        // Aggregate quantity by product
+        const itemMap = new Map<string, any>();
+        allItems.forEach(item => {
+          const key = item.product_id;
+          const existing = itemMap.get(key);
+          itemMap.set(key, {
+            product_id: key,
+            product_name: productMap.get(key)?.name || 'Unknown',
+            qty_in_transit: (existing?.qty_in_transit || 0) + (item.quantity || 0),
+          });
+        });
+
         result.push({
           trip_id: trip.id,
           status: trip.status,
-          dispatch_date: trip.dispatch_date,
-          destination: trip.destination,
-          dispatcher_name: trip.dispatcher,
-          delivery_user_name: trip.delivery_user,
-          items: items.map((item: any) => {
-            const product = productMap.get(item.product_id);
-            return {
-              product_id: item.product_id,
-              product_name: product?.name || 'Unknown',
-              qty_in_transit: item.quantity,
-            };
-          }),
+          dispatch_date: trip.createdAt || new Date().toISOString(),
+          destination: (trip.routeNames && trip.routeNames.length > 0) ? trip.routeNames[0] : 'Multi-route',
+          items: Array.from(itemMap.values()),
         });
       } catch (e) {
-        console.error('[InventoryService] Error processing trip:', e);
+        console.error('[InventoryService] Error processing trip:', trip.id, e);
       }
     }
 
