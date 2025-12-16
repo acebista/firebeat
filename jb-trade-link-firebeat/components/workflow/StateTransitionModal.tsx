@@ -8,12 +8,12 @@
  */
 
 import React, { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
+import { Modal } from '@/components/ui/Modal';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { StateManager } from '@/services/workflow/stateManager';
 import { OrderStatus, UserRole, StateTransitionResponse } from '@/types/workflow';
 import toast from 'react-hot-toast';
-import { AlertCircle, CheckCircle, Loader } from 'lucide-react';
+import { AlertCircle, CheckCircle, Loader, ArrowRight } from 'lucide-react';
 
 interface StateTransitionModalProps {
   isOpen: boolean;
@@ -66,24 +66,22 @@ export function StateTransitionModal({
 
       // Execute transition
       const response = await StateManager.executeTransition({
-        entityId: orderId,
-        entityType: 'order',
-        currentStatus,
-        targetStatus,
-        userRole,
+        orderId,
+        fromStatus: currentStatus,
+        toStatus: targetStatus,
         userId,
         reason: notes || StateManager.getStatusMessage(targetStatus),
         metadata: {
           timestamp: new Date().toISOString()
         }
-      });
+      }, userRole);
 
       if (response.success) {
         toast.success(`Order ${StateManager.getStatusMessage(targetStatus)}`);
         onSuccess?.(response);
         onClose();
       } else {
-        setValidationErrors([response.error || 'Transition failed']);
+        setValidationErrors(response.errors || ['Transition failed']);
       }
     } catch (error) {
       console.error('State transition error:', error);
@@ -97,50 +95,51 @@ export function StateTransitionModal({
 
   if (!canTransition) {
     return (
-      <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-600">
-              <AlertCircle size={20} />
-              Not Authorized
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <p className="text-sm text-gray-600">
-              You don't have permission to transition this order to{' '}
-              <span className="font-semibold">
-                {StateManager.getStatusMessage(targetStatus)}
-              </span>
-              .
-            </p>
-
-            <p className="text-xs text-gray-500">
-              Required role: Admin, Manager, or Supervisor
-              <br />
-              Current role: {userRole}
-            </p>
-
-            <button
-              onClick={onClose}
-              className="w-full px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
-            >
-              Close
-            </button>
+      <Modal 
+        isOpen={isOpen} 
+        onClose={onClose}
+        title="Not Authorized"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 text-red-600">
+            <AlertCircle size={20} />
+            <span className="font-semibold">Not Authorized</span>
           </div>
-        </DialogContent>
-      </Dialog>
+
+          <p className="text-sm text-gray-600">
+            You don't have permission to transition this order to{' '}
+            <span className="font-semibold">
+              {StateManager.getStatusMessage(targetStatus)}
+            </span>
+            .
+          </p>
+
+          <p className="text-xs text-gray-500">
+            Required role: Admin, Manager, or Supervisor
+            <br />
+            Current role: {userRole}
+          </p>
+
+          <button
+            onClick={onClose}
+            className="w-full px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
+          >
+            Close
+          </button>
+        </div>
+      </Modal>
     );
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Confirm Status Change</DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-6">
+    <Modal 
+      isOpen={isOpen} 
+      onClose={onClose}
+      title="Confirm Status Change"
+      size="md"
+    >
+      <div className="space-y-6">
           {/* Status transition visualization */}
           <div>
             <p className="text-sm font-medium text-gray-700 mb-3">Status Transition</p>
@@ -225,8 +224,7 @@ export function StateTransitionModal({
             </button>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </Modal>
   );
 }
 

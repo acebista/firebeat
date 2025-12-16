@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Input, Select, Badge } from '../../components/ui/Elements';
 import { Modal } from '../../components/ui/Modal';
@@ -31,6 +30,8 @@ export const UserManagement: React.FC = () => {
     phone: '',
     role: 'sales' as UserRole,
     isActive: true,
+    comp_plan_type: 'commission' as 'fixed' | 'commission',
+    base_salary: null as number | null,
   });
 
   const [sendingResetEmail, setSendingResetEmail] = useState(false);
@@ -61,6 +62,8 @@ export const UserManagement: React.FC = () => {
       phone: user.phone || '',
       role: user.role,
       isActive: user.isActive,
+      comp_plan_type: user.comp_plan_type || 'commission',
+      base_salary: user.base_salary || null,
     });
     setValidationErrors({});
     setModalOpen(true);
@@ -74,6 +77,8 @@ export const UserManagement: React.FC = () => {
       phone: '',
       role: 'sales',
       isActive: true,
+      comp_plan_type: 'commission',
+      base_salary: null,
     });
     setValidationErrors({});
     setModalOpen(true);
@@ -81,8 +86,14 @@ export const UserManagement: React.FC = () => {
 
   const handleSave = async () => {
     try {
+      // Ensure phone is a string and not empty
+      const dataToValidate = {
+        ...formData,
+        phone: String(formData.phone || ''),
+      };
+      
       // Validate form data
-      const validatedData = userSchema.parse(formData);
+      const validatedData = userSchema.parse(dataToValidate);
       setValidationErrors({});
 
       if (editingUser) {
@@ -107,7 +118,20 @@ export const UserManagement: React.FC = () => {
       fetchUsers(); // Refresh the list
     } catch (error) {
       console.error("Failed to save user:", error);
-      toast.error("Failed to save user. Please try again.");
+      
+      // Handle Zod validation errors
+      if (error instanceof z.ZodError) {
+        const errors: Record<string, string> = {};
+        (error as any).errors?.forEach((err: any) => {
+          const field = err.path[0] as string;
+          errors[field] = err.message;
+        });
+        setValidationErrors(errors);
+        const firstError = Object.values(errors)[0];
+        toast.error(firstError || 'Validation error. Please check your inputs.');
+      } else {
+        toast.error("Failed to save user. Please try again.");
+      }
     }
   };
 
@@ -197,7 +221,7 @@ export const UserManagement: React.FC = () => {
                 { label: 'Delivery', value: 'delivery' }
               ]}
               value={filterRole}
-              onChange={(e) => setFilterRole(e.target.value)}
+              onChange={(v: any) => setFilterRole(typeof v === 'string' ? v : v.target?.value)}
             />
           </div>
         </div>
@@ -348,13 +372,39 @@ export const UserManagement: React.FC = () => {
             <Select
               label="Role"
               value={formData.role}
-              onChange={e => setFormData({ ...formData, role: e.target.value as UserRole })}
+              onChange={(v: any) => setFormData({ ...formData, role: (typeof v === 'string' ? v : v.target?.value) as UserRole })}
               options={[
                 { label: 'Admin', value: 'admin' },
                 { label: 'Sales', value: 'sales' },
                 { label: 'Delivery', value: 'delivery' }
               ]}
             />
+          </div>
+
+          {/* Compensation Settings */}
+          <div className="mt-4 p-3 border rounded bg-gray-50">
+            <h4 className="text-sm font-medium text-gray-800 mb-2">Compensation</h4>
+            <div className="grid grid-cols-2 gap-4">
+              <Select
+                label="Plan Type"
+                value={String(formData.comp_plan_type || 'commission')}
+                onChange={(v: any) => setFormData({ ...formData, comp_plan_type: (typeof v === 'string' ? v : v.target?.value) as 'fixed' | 'commission' })}
+                options={[
+                  { label: 'Commission', value: 'commission' },
+                  { label: 'Fixed / Salary', value: 'fixed' }
+                ]}
+              />
+
+              <Input
+                label="Base Salary (₹)"
+                type="number"
+                step="0.01"
+                value={String(formData.base_salary ?? '')}
+                onChange={(e) => setFormData({ ...formData, base_salary: e.currentTarget.value ? parseFloat(e.currentTarget.value) : null })}
+                placeholder="e.g. 20000"
+              />
+            </div>
+            <div className="text-xs text-gray-500 mt-2">If Plan Type is 'Fixed', commission fields will be ignored by the HR calculator.</div>
           </div>
 
           <div className="flex items-center gap-2 pt-2">

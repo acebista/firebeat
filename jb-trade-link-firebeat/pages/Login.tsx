@@ -11,7 +11,8 @@ import toast from 'react-hot-toast';
 
 export const Login: React.FC = () => {
   const isDevRegistrationEnabled = import.meta.env.VITE_ENABLE_DEV_REGISTRATION === 'true';
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState(''); // Can be email or phone for login
+  const [email, setEmail] = useState(''); // Used for forgot password and registration
   const [password, setPassword] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
@@ -37,13 +38,30 @@ export const Login: React.FC = () => {
     }
   }, [isDevRegistrationEnabled, isRegistering]);
 
+  // Helper to detect if input is a phone number (10 digits)
+  const isPhoneNumber = (input: string) => /^\d{10}$/.test(input.trim());
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLocalError('');
     setIsSubmitting(true);
 
     try {
-      await login(email, password);
+      let emailToUse = identifier.trim();
+
+      // If identifier looks like a phone number, lookup the email
+      if (isPhoneNumber(identifier)) {
+        const users = await UserService.getByPhone(identifier.trim());
+        if (users.length === 0) {
+          throw new Error('No user found with this phone number');
+        }
+        if (!users[0].isActive) {
+          throw new Error('This account is inactive. Contact your admin.');
+        }
+        emailToUse = users[0].email;
+      }
+
+      await login(emailToUse, password);
       // Navigation will happen automatically via useEffect above
     } catch (err: any) {
       // Error is already in authError, but we can set local error for display
@@ -274,12 +292,13 @@ export const Login: React.FC = () => {
         ) : (
           <form onSubmit={handleLogin} className="space-y-6">
             <Input
-              label="Email Address"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              label="Email or Phone Number"
+              type="text"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              placeholder="Enter email or 10-digit phone"
               required
-              autoComplete="email"
+              autoComplete="username"
             />
             <Input
               label="Password"

@@ -151,7 +151,7 @@ export const UnknownProductCleanup: React.FC = () => {
                             label="Company"
                             options={companies.map(c => ({ label: c.name, value: c.id }))}
                             value={selectedCompany[key] || ''}
-                            onChange={e => setSelectedCompany({ ...selectedCompany, [key]: e.target.value })}
+                            onChange={value => setSelectedCompany({ ...selectedCompany, [key]: value })}
                         />
                         <Button disabled={!selectedCompany[key] || updating} onClick={() => handleApply(key)}>
                             {updating ? 'Updating...' : 'Apply'}

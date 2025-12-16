@@ -1,4 +1,3 @@
-
 export type UserRole = 'admin' | 'sales' | 'delivery';
 
 export interface User {
@@ -12,6 +11,10 @@ export interface User {
   lastLoginAt?: string;
   avatarUrl?: string;
   password?: string;
+  // Compensation fields (optional)
+  base_salary?: number | null; // Monthly base salary
+  comp_plan_type?: 'fixed' | 'commission'; // Compensation plan
+  commission_rate_set?: string | null; // Optional reference to a company rate set
 }
 
 export interface Customer {
@@ -39,6 +42,8 @@ export interface Company {
   code: string;
   isActive: boolean;
   createdAt: string;
+  commission_rate?: number;
+  commission_type?: 'flat' | 'slab';
 }
 
 export interface Product {
@@ -62,6 +67,7 @@ export interface Product {
   secondaryAvailable: boolean;  // "secondary_Available"
   marginPct?: number;           // "Margin"
   isActive: boolean;
+  commission_rate?: number; // Overrides company rate if set
   // Helpers for UI
   mrp?: number; // kept for backward compatibility if needed
   sellingPrice?: number; // kept for backward compatibility if needed
@@ -95,7 +101,7 @@ export interface Order {
   totalItems: number;
   totalAmount: number;
   discount?: number;  // Discount amount (not percentage)
-  status: 'approved' | 'dispatched' | 'delivered' | 'cancelled';
+  status: 'approved' | 'dispatched' | 'delivered' | 'cancelled' | 'completed';
   items: OrderItem[];
   remarks?: string;
   assignedTripId?: string;

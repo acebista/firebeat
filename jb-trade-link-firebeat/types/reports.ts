@@ -6,6 +6,8 @@ export interface ReportFilterState {
   employeeIds: string[];
 }
 
+import { Order } from '../types';
+
 export interface SalesReportRow {
   id: string;
   date: string;
@@ -17,6 +19,9 @@ export interface SalesReportRow {
   discountAmount: number;
   grandTotal: number;
   paymentMode: string;
+  // Extended fields for HR Report
+  order: Order;
+  netAmount: number;
 }
 
 export interface DispatchRow {

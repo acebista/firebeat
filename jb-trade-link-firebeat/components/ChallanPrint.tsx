@@ -1,18 +1,30 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Order } from '../types';
 import toast from 'react-hot-toast';
+import { Layout as LayoutIcon } from 'lucide-react';
 
 interface ChallanPrintProps {
     order: Order;
     customerLocation?: string; // lat,long format
+    orientation?: 'portrait' | 'landscape';
+    showOrientationToggle?: boolean;
 }
 
-export const ChallanPrint: React.FC<ChallanPrintProps> = ({ order, customerLocation }) => {
+export const ChallanPrint: React.FC<ChallanPrintProps> = ({ 
+    order, 
+    customerLocation,
+    orientation = 'portrait',
+    showOrientationToggle = false 
+}) => {
+    const [currentOrientation, setCurrentOrientation] = useState<'portrait' | 'landscape'>(orientation);
+
     // Generate QR code URL for Google Maps location
     const getQRCodeUrl = (location: string) => {
-        const [lat, lng] = location.split(',');
+        const parts = location.split(',').map(p => p.trim());
+        const lat = parts[0];
+        const lng = parts[1];
+        if (!lat || !lng) return undefined;
         const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
-        // Using QR code API
         return `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(mapsUrl)}`;
     };
 
@@ -20,35 +32,65 @@ export const ChallanPrint: React.FC<ChallanPrintProps> = ({ order, customerLocat
     const discountAmount = order.discount || 0;
     const discountPct = subtotal > 0 ? ((discountAmount / subtotal) * 100).toFixed(2) : '0';
     const grandTotal = order.totalAmount || 0;
+    const qrCodeUrl = customerLocation ? getQRCodeUrl(customerLocation) : undefined;
+
+    // Dimension styles based on orientation
+    const pageStyle = currentOrientation === 'portrait' ? {
+        width: '210mm',
+        minHeight: '297mm',
+    } : {
+        width: '297mm',
+        minHeight: '210mm',
+    };
+
+    const containerStyle = {
+        ...pageStyle,
+        padding: '15mm',
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '11pt',
+        backgroundColor: 'white',
+        position: 'relative' as const,
+        border: '3px solid black'
+    };
+
+    const headerStyle = {
+        textAlign: 'center' as const,
+        marginBottom: '15px',
+        position: 'relative' as const,
+        paddingBottom: '10px',
+        borderBottom: '2px solid black',
+    };
+
+    const qrContainerStyle = {
+        position: 'absolute' as const,
+        top: '15mm',
+        right: '15mm',
+        display: 'flex',
+        flexDirection: 'column' as const,
+        alignItems: 'center',
+        gap: '4px'
+    };
 
     return (
-        <div style={{
-            width: '210mm',
-            minHeight: '297mm',
-            padding: '15mm',
-            fontFamily: 'Arial, sans-serif',
-            fontSize: '12pt',
-            backgroundColor: 'white',
-            position: 'relative',
-            border: '3px solid black'
-        }}>
-            {/* Header */}
-            <div style={{ textAlign: 'center', marginBottom: '20px', position: 'relative' }}>
-                <h1 style={{ margin: 0, fontSize: '24pt', fontWeight: 'bold' }}>J.B Trade Link Pvt. Ltd.</h1>
-                <h2 style={{ margin: '5px 0', fontSize: '16pt', fontWeight: 'normal' }}>Delivery Challan</h2>
-                <p style={{ margin: '5px 0', fontSize: '11pt' }}>Phone: 9802379658</p>
-                <p style={{ margin: '5px 0', fontSize: '12pt', fontWeight: 'bold' }}>Customer Copy</p>
+        <div style={containerStyle}>
+            {/* QR Code in top-right corner */}
+            {qrCodeUrl && (
+                <div style={qrContainerStyle}>
+                    <img 
+                        src={qrCodeUrl} 
+                        alt="Location QR Code" 
+                        style={{ width: '120px', height: '120px', border: '1px solid #ccc' }}
+                    />
+                    <small style={{ fontSize: '8pt', textAlign: 'center' }}>Customer Location</small>
+                </div>
+            )}
 
-                {/* QR Code - Top Right */}
-                {customerLocation && (
-                    <div style={{ position: 'absolute', top: 0, right: 0 }}>
-                        <img
-                            src={getQRCodeUrl(customerLocation)}
-                            alt="Location QR"
-                            style={{ width: '120px', height: '120px' }}
-                        />
-                    </div>
-                )}
+            {/* Header */}
+            <div style={headerStyle}>
+                <h1 style={{ margin: '0 0 5px 0', fontSize: '18pt', fontWeight: 'bold' }}>J.B Trade Link Pvt. Ltd.</h1>
+                <h2 style={{ margin: '0 0 5px 0', fontSize: '14pt', fontWeight: 'normal' }}>Delivery Challan</h2>
+                <p style={{ margin: '5px 0', fontSize: '10pt' }}>Phone: 9802379658</p>
+                <p style={{ margin: '5px 0', fontSize: '10pt', fontWeight: 'bold' }}>Customer Copy</p>
             </div>
 
             {/* Invoice Details */}
@@ -144,21 +186,33 @@ export const ChallanPrint: React.FC<ChallanPrintProps> = ({ order, customerLocat
 };
 
 // Print function for individual challan
-export const printChallan = (order: Order, customerLocation?: string) => {
+export const printChallan = (order: Order, customerLocation?: string, orientation: 'portrait' | 'landscape' = 'portrait') => {
     const printWindow = window.open('', '', 'height=800,width=600');
     if (!printWindow) {
         toast.error('Please allow popups to print');
         return;
     }
 
-    const qrUrl = customerLocation
-        ? `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`https://www.google.com/maps?q=${customerLocation}`)}`
-        : '';
+    // Parse GPS coordinates and generate QR code
+    const getQRUrl = (location: string) => {
+        const parts = location.split(',').map(p => p.trim());
+        const lat = parts[0];
+        const lng = parts[1];
+        if (!lat || !lng) return '';
+        const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+        return `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(mapsUrl)}`;
+    };
+
+    const qrUrl = customerLocation ? getQRUrl(customerLocation) : '';
 
     const subtotal = order.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0;
     const discountAmount = order.discount || 0;
     const discountPct = subtotal > 0 ? ((discountAmount / subtotal) * 100).toFixed(2) : '0';
     const grandTotal = order.totalAmount || 0;
+
+    const pageSize = orientation === 'portrait' 
+        ? { width: '210mm', height: '297mm' }
+        : { width: '297mm', height: '210mm' };
 
     printWindow.document.write(`
     <html>
@@ -166,8 +220,11 @@ export const printChallan = (order: Order, customerLocation?: string) => {
         <title>Delivery Challan - ${order.id}</title>
         <style>
           @media print {
-            @page { margin: 0; }
-            body { margin: 15mm; }
+            @page { 
+              size: ${orientation === 'portrait' ? 'A4 portrait' : 'A4 landscape'};
+              margin: 0;
+            }
+            body { margin: 0; padding: 0; }
           }
           body { 
             font-family: Arial, sans-serif; 
@@ -176,37 +233,61 @@ export const printChallan = (order: Order, customerLocation?: string) => {
             padding: 0;
           }
           .container {
-            width: 210mm;
-            min-height: 297mm;
+            width: ${pageSize.width};
+            height: ${pageSize.height};
             padding: 15mm;
             border: 3px solid black;
             box-sizing: border-box;
+            position: relative;
+            page-break-after: always;
           }
-          .header { text-align: center; margin-bottom: 20px; position: relative; }
-          .header h1 { margin: 0; font-size: 24pt; font-weight: bold; }
-          .header h2 { margin: 5px 0; font-size: 16pt; font-weight: normal; }
-          .header p { margin: 5px 0; font-size: 11pt; }
-          .qr-code { position: absolute; top: 0; right: 0; }
+          .header { text-align: center; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 2px solid black; }
+          .header h1 { margin: 0; font-size: 18pt; font-weight: bold; }
+          .header h2 { margin: 5px 0; font-size: 14pt; font-weight: normal; }
+          .header p { margin: 5px 0; font-size: 10pt; }
+          .qr-container { 
+            position: absolute; 
+            top: 15mm; 
+            right: 15mm; 
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+          }
+          .qr-container img { border: 1px solid #ccc; }
+          .qr-label { font-size: 8pt; text-align: center; }
           .details { margin-bottom: 15px; font-size: 11pt; }
           .details div { margin-bottom: 5px; }
-          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 10pt; }
-          th { border: 2px solid black; padding: 8px; background-color: #f0f0f0; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 10pt; }
+          th { border: 2px solid black; padding: 8px; background-color: #f0f0f0; text-align: left; }
           td { border: 1px solid black; padding: 6px; }
-          .totals { margin-bottom: 30px; font-size: 11pt; }
+          th:nth-child(1) { width: 40px; text-align: center; }
+          th:nth-child(3) { width: 80px; text-align: center; }
+          th:nth-child(4) { width: 80px; text-align: right; }
+          th:nth-child(5) { width: 100px; text-align: right; }
+          th:nth-child(6) { width: 80px; text-align: right; }
+          th:nth-child(7) { width: 100px; text-align: right; }
+          .totals { margin-bottom: 20px; font-size: 11pt; }
           .totals div { margin-bottom: 8px; }
           .grand-total { font-size: 14pt; font-weight: bold; margin-top: 10px; }
-          .signatures { margin-top: 50px; font-size: 11pt; }
-          .signatures div { margin-bottom: 50px; }
+          .signatures { margin-top: 30px; font-size: 11pt; }
+          .signatures div { margin-bottom: 40px; }
         </style>
       </head>
       <body>
         <div class="container">
+          ${qrUrl ? `
+            <div class="qr-container">
+              <img src="${qrUrl}" alt="Location QR Code" style="width: 120px; height: 120px;" />
+              <span class="qr-label">Customer Location</span>
+            </div>
+          ` : ''}
+
           <div class="header">
             <h1>J.B Trade Link Pvt. Ltd.</h1>
             <h2>Delivery Challan</h2>
             <p>Phone: 9802379658</p>
             <p style="font-weight: bold;">Customer Copy</p>
-            ${qrUrl ? `<div class="qr-code"><img src="${qrUrl}" alt="Location QR" width="120" height="120" /></div>` : ''}
           </div>
 
           <div class="details">
@@ -221,13 +302,13 @@ export const printChallan = (order: Order, customerLocation?: string) => {
           <table>
             <thead>
               <tr>
-                <th style="width: 40px; text-align: center;">#</th>
-                <th style="text-align: left;">Product</th>
-                <th style="width: 80px; text-align: center;">Qty</th>
-                <th style="width: 80px; text-align: right;">Rate</th>
-                <th style="width: 100px; text-align: right;">SubTotal</th>
-                <th style="width: 80px; text-align: right;">Disc</th>
-                <th style="width: 100px; text-align: right;">Total</th>
+                <th>#</th>
+                <th>Product</th>
+                <th>Qty</th>
+                <th>Rate</th>
+                <th>SubTotal</th>
+                <th>Disc</th>
+                <th>Total</th>
               </tr>
             </thead>
             <tbody>
@@ -272,4 +353,233 @@ export const printChallan = (order: Order, customerLocation?: string) => {
         printWindow.focus();
         printWindow.print();
     }, 500);
+};
+
+// Batch print function for multiple challans with orientation support
+export const printChallans = (
+    orders: Order[],
+    orientation: 'portrait' | 'landscape' = 'portrait',
+    getCustomerLocation?: (order: Order) => string | undefined
+) => {
+    const printWindow = window.open('', '', 'height=800,width=600');
+    if (!printWindow) {
+        toast.error('Please allow popups to print');
+        return;
+    }
+
+    const pageSize = orientation === 'portrait' 
+        ? { width: '210mm', height: '297mm' }
+        : { width: '297mm', height: '210mm' };
+
+    const challanHtml = orders.map(order => {
+        const customerLocation = getCustomerLocation?.(order);
+        
+        // Parse GPS coordinates for QR code
+        let qrUrl = '';
+        if (customerLocation) {
+            const parts = customerLocation.split(',').map(p => p.trim());
+            const lat = parts[0];
+            const lng = parts[1];
+            if (lat && lng) {
+                const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+                qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(mapsUrl)}`;
+            }
+        }
+
+        const subtotal = order.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0;
+        const discountAmount = order.discount || 0;
+        const discountPct = subtotal > 0 ? ((discountAmount / subtotal) * 100).toFixed(2) : '0';
+        const grandTotal = order.totalAmount || 0;
+
+        return `
+          <div class="challan-page">
+            <div class="container">
+              ${qrUrl ? `
+                <div class="qr-container">
+                  <img src="${qrUrl}" alt="Location QR Code" />
+                  <span class="qr-label">Customer Location</span>
+                </div>
+              ` : ''}
+
+              <div class="header">
+                <h1>J.B Trade Link Pvt. Ltd.</h1>
+                <h2>Delivery Challan</h2>
+                <p>Phone: 9802379658</p>
+                <p style="font-weight: bold;">Customer Copy</p>
+              </div>
+
+              <div class="details">
+                <div><strong>Invoice No:</strong> ${order.id}</div>
+                <div><strong>Salesman:</strong> ${order.salespersonName} &nbsp;&nbsp;&nbsp; <strong>Phone:</strong> ${order.salespersonPhone || 'N/A'}</div>
+                <div><strong>Customer Name:</strong> ${order.customerName} &nbsp;&nbsp;&nbsp; <strong>Phone:</strong> ${order.customerPhone || 'N/A'}</div>
+                <div><strong>PAN Number:</strong> ${order.customerPAN || 'N/A'}</div>
+                <div><strong>Payment Mode:</strong> ${order.paymentMode || 'Cash'}</div>
+                <div><strong>Products Sold:</strong></div>
+              </div>
+
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Product</th>
+                    <th>Qty</th>
+                    <th>Rate</th>
+                    <th>SubTotal</th>
+                    <th>Disc</th>
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${order.items?.map((item, index) => {
+            const itemDiscount = (item.discountPct || 0) > 0
+                ? (item.total || 0) * ((item.discountPct || 0) / 100)
+                : 0;
+            return `
+                    <tr>
+                      <td style="text-align: center;">${index + 1}</td>
+                      <td>${item.productName}</td>
+                      <td style="text-align: center;">${item.qty}</td>
+                      <td style="text-align: right;">${(item.rate || 0).toFixed(2)}</td>
+                      <td style="text-align: right;">${(item.total || 0).toFixed(2)}</td>
+                      <td style="text-align: right;">${itemDiscount.toFixed(2)}</td>
+                      <td style="text-align: right; font-weight: bold;">${((item.total || 0) - itemDiscount).toFixed(2)}</td>
+                    </tr>
+                  `;
+        }).join('')}
+                </tbody>
+              </table>
+
+              <div class="totals">
+                <div><strong>Sub Total: Rs. ${subtotal.toFixed(2)}</strong></div>
+                ${discountAmount > 0 ? `<div><strong>Discount (${discountPct}%): Rs. ${discountAmount.toFixed(2)}</strong></div>` : ''}
+                <div class="grand-total">Grand Total: Rs. ${grandTotal.toFixed(2)}</div>
+              </div>
+
+              <div class="signatures">
+                <div>For J.B. Trade Link: _______________________</div>
+                <div>Customer Signature: _______________________</div>
+              </div>
+            </div>
+          </div>
+        `;
+    }).join('');
+
+    printWindow.document.write(`
+    <html>
+      <head>
+        <title>Delivery Challans - Batch Print</title>
+        <style>
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
+          
+          @media print {
+            @page { 
+              size: ${orientation === 'portrait' ? 'A4 portrait' : 'A4 landscape'};
+              margin: 0;
+            }
+            body { 
+              margin: 0;
+              padding: 0;
+            }
+            .challan-page {
+              page-break-after: always;
+              page-break-inside: avoid;
+            }
+            .challan-page:last-child {
+              page-break-after: auto;
+            }
+          }
+          
+          @media screen {
+            body {
+              background: #f0f0f0;
+              padding: 20px;
+            }
+            .challan-page {
+              margin-bottom: 20px;
+              box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            }
+          }
+          
+          body {
+            font-family: Arial, sans-serif;
+            font-size: 12pt;
+          }
+          
+          .challan-page {
+            background: white;
+          }
+          
+          .container {
+            width: ${pageSize.width};
+            height: ${pageSize.height};
+            padding: 15mm;
+            border: 3px solid black;
+            position: relative;
+          }
+          
+          .header { 
+            text-align: center; 
+            margin-bottom: 15px; 
+            padding-bottom: 10px; 
+            border-bottom: 2px solid black; 
+          }
+          .header h1 { margin: 0; font-size: 18pt; font-weight: bold; }
+          .header h2 { margin: 5px 0; font-size: 14pt; font-weight: normal; }
+          .header p { margin: 5px 0; font-size: 10pt; }
+          
+          .qr-container { 
+            position: absolute; 
+            top: 15mm; 
+            right: 15mm; 
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+          }
+          .qr-container img { 
+            width: 120px; 
+            height: 120px; 
+            border: 1px solid #ccc; 
+          }
+          .qr-label { font-size: 8pt; text-align: center; }
+          
+          .details { margin-bottom: 15px; font-size: 11pt; }
+          .details div { margin-bottom: 5px; }
+          
+          table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 10pt; }
+          th { border: 2px solid black; padding: 8px; background-color: #f0f0f0; text-align: left; }
+          td { border: 1px solid black; padding: 6px; }
+          
+          th:nth-child(1) { width: 40px; text-align: center; }
+          th:nth-child(3) { width: 80px; text-align: center; }
+          th:nth-child(4) { width: 80px; text-align: right; }
+          th:nth-child(5) { width: 100px; text-align: right; }
+          th:nth-child(6) { width: 80px; text-align: right; }
+          th:nth-child(7) { width: 100px; text-align: right; }
+          
+          .totals { margin-bottom: 20px; font-size: 11pt; }
+          .totals div { margin-bottom: 8px; }
+          .grand-total { font-size: 14pt; font-weight: bold; margin-top: 10px; }
+          
+          .signatures { margin-top: 30px; font-size: 11pt; }
+          .signatures div { margin-bottom: 40px; }
+        </style>
+      </head>
+      <body>
+        ${challanHtml}
+      </body>
+    </html>
+  `);
+
+    printWindow.document.close();
+
+    // Wait for images (QR codes) to load before printing
+    setTimeout(() => {
+        printWindow.focus();
+        printWindow.print();
+    }, 1000);
 };

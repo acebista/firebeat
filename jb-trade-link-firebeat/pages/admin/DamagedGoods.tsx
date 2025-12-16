@@ -11,7 +11,7 @@ export const DamagedGoodsReport: React.FC = () => {
   const [logs, setLogs] = useState<DamagedGoodsLog[]>([]);
   const [filteredLogs, setFilteredLogs] = useState<DamagedGoodsLog[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [reasonFilter, setReasonFilter] = useState('all');
@@ -19,9 +19,9 @@ export const DamagedGoodsReport: React.FC = () => {
   // Modal State
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [newLog, setNewLog] = useState<{
-    productName: string; 
-    qtyPieces: number; 
-    reason: DamageReason; 
+    productName: string;
+    qtyPieces: number;
+    reason: DamageReason;
     notes: string
   }>({
     productName: '',
@@ -37,15 +37,15 @@ export const DamagedGoodsReport: React.FC = () => {
   const refreshLogs = async () => {
     setLoading(true);
     try {
-        const data = await DamageLogService.getAll();
-        // Sort Desc
-        data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        setLogs(data);
-        setFilteredLogs(data);
-    } catch(e) {
-        console.error(e);
+      const data = await DamageLogService.getAll();
+      // Sort Desc
+      data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setLogs(data);
+      setFilteredLogs(data);
+    } catch (e) {
+      console.error(e);
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   };
 
@@ -62,27 +62,27 @@ export const DamagedGoodsReport: React.FC = () => {
 
   const handleLogInternal = async () => {
     if (!newLog.productName || newLog.qtyPieces <= 0) return;
-    
+
     try {
-        await DamageLogService.add({
-            id: `DMG-${Date.now()}`,
-            productId: 'manual-entry', 
-            productName: newLog.productName,
-            companyName: 'Internal',
-            qtyPieces: newLog.qtyPieces,
-            damageReason: newLog.reason,
-            sourceType: 'internal',
-            createdByUserId: 'admin',
-            createdByUserName: 'Admin',
-            createdAt: new Date().toISOString(),
-            notes: newLog.notes
-        });
-        
-        refreshLogs();
-        setIsLogModalOpen(false);
-        setNewLog({ productName: '', qtyPieces: 0, reason: 'damaged_in_godown', notes: '' });
+      await DamageLogService.add({
+        id: `DMG-${Date.now()}`,
+        productId: 'manual-entry',
+        productName: newLog.productName,
+        companyName: 'Internal',
+        qtyPieces: newLog.qtyPieces,
+        damageReason: newLog.reason,
+        sourceType: 'internal',
+        createdByUserId: 'admin',
+        createdByUserName: 'Admin',
+        createdAt: new Date().toISOString(),
+        notes: newLog.notes
+      });
+
+      refreshLogs();
+      setIsLogModalOpen(false);
+      setNewLog({ productName: '', qtyPieces: 0, reason: 'damaged_in_godown', notes: '' });
     } catch (e) {
-        toast.error("Failed to log damage");
+      toast.error("Failed to log damage");
     }
   };
 
@@ -125,28 +125,28 @@ export const DamagedGoodsReport: React.FC = () => {
       {/* Filters */}
       <Card className="p-4">
         <div className="flex flex-col md:flex-row gap-4">
-           <div className="relative flex-grow">
-             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
-             <Input 
-               placeholder="Search Product Name..." 
-               className="pl-9"
-               value={searchTerm}
-               onChange={(e) => setSearchTerm(e.target.value)}
-             />
-           </div>
-           <div className="w-full md:w-48">
-             <Select 
-               options={[
-                 { label: 'All Reasons', value: 'all' },
-                 { label: 'Transit Damage', value: 'damaged_in_transit' },
-                 { label: 'Customer Damage', value: 'damaged_at_customer' },
-                 { label: 'Godown Damage', value: 'damaged_in_godown' },
-                 { label: 'Expiry', value: 'expiry' }
-               ]}
-               value={reasonFilter}
-               onChange={(e) => setReasonFilter(e.target.value)}
-             />
-           </div>
+          <div className="relative flex-grow">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+            <Input
+              placeholder="Search Product Name..."
+              className="pl-9"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div className="w-full md:w-48">
+            <Select
+              options={[
+                { label: 'All Reasons', value: 'all' },
+                { label: 'Transit Damage', value: 'damaged_in_transit' },
+                { label: 'Customer Damage', value: 'damaged_at_customer' },
+                { label: 'Godown Damage', value: 'damaged_in_godown' },
+                { label: 'Expiry', value: 'expiry' }
+              ]}
+              value={reasonFilter}
+              onChange={(value) => setReasonFilter(value)}
+            />
+          </div>
         </div>
       </Card>
 
@@ -166,9 +166,9 @@ export const DamagedGoodsReport: React.FC = () => {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
-                 <tr><td colSpan={6} className="px-6 py-10 text-center text-gray-500">Loading logs...</td></tr>
+                <tr><td colSpan={6} className="px-6 py-10 text-center text-gray-500">Loading logs...</td></tr>
               ) : filteredLogs.length === 0 ? (
-                 <tr><td colSpan={6} className="px-6 py-10 text-center text-gray-500">No damage logs found.</td></tr>
+                <tr><td colSpan={6} className="px-6 py-10 text-center text-gray-500">No damage logs found.</td></tr>
               ) : (
                 filteredLogs.map((log) => (
                   <tr key={log.id} className="hover:bg-gray-50">
@@ -204,39 +204,39 @@ export const DamagedGoodsReport: React.FC = () => {
       {/* Log Internal Modal */}
       <Modal isOpen={isLogModalOpen} onClose={() => setIsLogModalOpen(false)} title="Log Internal Damage">
         <div className="space-y-4">
-          <Input 
-             label="Product Name" 
-             placeholder="Search or type product..." 
-             value={newLog.productName}
-             onChange={(e) => setNewLog({...newLog, productName: e.target.value})}
+          <Input
+            label="Product Name"
+            placeholder="Search or type product..."
+            value={newLog.productName}
+            onChange={(e) => setNewLog({ ...newLog, productName: e.target.value })}
           />
           <div className="grid grid-cols-2 gap-4">
-             <Input 
-                label="Quantity (Pieces)" 
-                type="number" 
-                value={newLog.qtyPieces}
-                onChange={(e) => setNewLog({...newLog, qtyPieces: parseInt(e.target.value) || 0})}
-             />
-             <Select 
-               label="Reason"
-               value={newLog.reason}
-               onChange={(e) => setNewLog({...newLog, reason: e.target.value as DamageReason})}
-               options={[
-                 { label: 'Godown Damage', value: 'damaged_in_godown' },
-                 { label: 'Expiry', value: 'expiry' },
-                 { label: 'Other', value: 'other' }
-               ]}
-             />
+            <Input
+              label="Quantity (Pieces)"
+              type="number"
+              value={newLog.qtyPieces}
+              onChange={(e) => setNewLog({ ...newLog, qtyPieces: parseInt(e.target.value) || 0 })}
+            />
+            <Select
+              label="Reason"
+              value={newLog.reason}
+              onChange={(value) => setNewLog({ ...newLog, reason: value as DamageReason })}
+              options={[
+                { label: 'Godown Damage', value: 'damaged_in_godown' },
+                { label: 'Expiry', value: 'expiry' },
+                { label: 'Other', value: 'other' }
+              ]}
+            />
           </div>
-          <Input 
-             label="Notes" 
-             placeholder="Cause of damage..." 
-             value={newLog.notes}
-             onChange={(e) => setNewLog({...newLog, notes: e.target.value})}
+          <Input
+            label="Notes"
+            placeholder="Cause of damage..."
+            value={newLog.notes}
+            onChange={(e) => setNewLog({ ...newLog, notes: e.target.value })}
           />
           <div className="flex justify-end gap-3 mt-6">
-             <Button variant="outline" onClick={() => setIsLogModalOpen(false)}>Cancel</Button>
-             <Button onClick={handleLogInternal} variant="danger">Log Damage</Button>
+            <Button variant="outline" onClick={() => setIsLogModalOpen(false)}>Cancel</Button>
+            <Button onClick={handleLogInternal} variant="danger">Log Damage</Button>
           </div>
         </div>
       </Modal>

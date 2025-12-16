@@ -340,7 +340,7 @@ export const SystemHealth: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">1. Select Data Type</label>
                   <Select
                     value={importType}
-                    onChange={(e) => { setImportType(e.target.value as ImportType); setParsedData([]); setFileName(''); }}
+                    onChange={(value) => { setImportType(value as ImportType); setParsedData([]); setFileName(''); }}
                     options={[
                       { label: 'Customers', value: 'customers' },
                       { label: 'Products', value: 'products' },

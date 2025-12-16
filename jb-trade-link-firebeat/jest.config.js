@@ -5,8 +5,10 @@ const config = {
   roots: ['<rootDir>'],
   testMatch: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
+  extensionsToTreatAsEsm: ['.ts', '.tsx'],
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
+      useESM: true,
       tsconfig: {
         jsx: 'react',
         esModuleInterop: true,
@@ -14,16 +16,12 @@ const config = {
       },
     }],
   },
-  globals: {
-    'ts-jest': {
-      isolatedModules: true,
-    },
-  },
   collectCoverageFrom: [
     'lib/**/*.ts',
     'lib/**/*.tsx',
     'services/**/*.ts',
     'types/**/*.ts',
+    'utils/**/*.ts',
     '!**/*.d.ts',
   ],
   coverageThreshold: {
@@ -35,8 +33,8 @@ const config = {
     },
   },
   moduleNameMapper: {
-    '^@/(.*)$': '<rootDir>/src/$1',
+    '^@/(.*)$': '<rootDir>/$1',
   },
 };
 
-module.exports = config;
+export default config;

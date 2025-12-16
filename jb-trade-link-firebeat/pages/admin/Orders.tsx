@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Select, Badge, Input } from '../../components/ui/Elements';
 import { Modal } from '../../components/ui/Modal';
-import { Eye, CheckCircle, XCircle, Search, Truck, Calendar } from 'lucide-react';
+import { Eye, CheckCircle, XCircle, Search, Truck, Calendar, Plus } from 'lucide-react';
 import { Order, User } from '../../types';
 import { useNavigate } from 'react-router-dom';
 import { OrderService, UserService } from '../../services/db';
@@ -29,7 +29,7 @@ export const OrderManagement: React.FC = () => {
   // Modal State
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  
+
   // Bulk Status Update Modal State
   const [isBulkStatusModalOpen, setIsBulkStatusModalOpen] = useState(false);
   const [bulkStatusDateRange, setBulkStatusDateRange] = useState({
@@ -214,6 +214,12 @@ export const OrderManagement: React.FC = () => {
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-800">Order Management</h2>
         <div className="flex gap-2">
+          <Button
+            onClick={() => navigate('/admin/create-order')} // Updated 2025-01-15
+            className="bg-indigo-600 hover:bg-indigo-700 text-white"
+          >
+            <Plus className="mr-2 h-4 w-4" /> New Order
+          </Button>
           <span className="bg-indigo-50 text-indigo-800 px-3 py-1 rounded-full text-sm font-medium flex items-center border border-indigo-100">
             Total: {filteredOrders.length}
           </span>
@@ -267,7 +273,7 @@ export const OrderManagement: React.FC = () => {
               { label: 'Cancelled', value: 'cancelled' },
             ]}
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(value) => setStatusFilter(value)}
           />
 
           <Select
@@ -276,7 +282,7 @@ export const OrderManagement: React.FC = () => {
               ...users.map(u => ({ label: u.name, value: u.id }))
             ]}
             value={salespersonFilter}
-            onChange={(e) => setSalespersonFilter(e.target.value)}
+            onChange={(value) => setSalespersonFilter(value)}
           />
         </div>
       </Card>
@@ -377,9 +383,9 @@ export const OrderManagement: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       <Badge color={
-                        order.status === 'approved' ? 'green' :
+                        order.status === 'approved' ? 'emerald' :
                           order.status === 'cancelled' ? 'red' :
-                            order.status === 'dispatched' ? 'blue' : 'gray'
+                            order.status === 'dispatched' ? 'blue' : 'slate'
                       }>
                         {order.status.toUpperCase()}
                       </Badge>
@@ -414,7 +420,7 @@ export const OrderManagement: React.FC = () => {
               </div>
               <div className="text-right">
                 <Badge color={
-                  selectedOrder.status === 'approved' ? 'green' :
+                  selectedOrder.status === 'approved' ? 'emerald' :
                     selectedOrder.status === 'cancelled' ? 'red' : 'blue'
                 }>
                   {selectedOrder.status.toUpperCase()}
@@ -556,7 +562,7 @@ export const OrderManagement: React.FC = () => {
                   { label: 'Cancelled', value: 'cancelled' },
                 ]}
                 value={bulkStatusTarget}
-                onChange={(e) => setBulkStatusTarget(e.target.value as Order['status'])}
+                onChange={(value) => setBulkStatusTarget(value as Order['status'])}
               />
             </div>
           </div>

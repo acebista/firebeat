@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, Button, Badge } from '../../components/ui/Elements';
-import { Truck, MapPin, CheckCircle, Clock, Users, TrendingUp, ArrowRight, Search } from 'lucide-react';
+import { Truck, MapPin, CheckCircle, Clock, Users, TrendingUp, ArrowRight, Search, Package } from 'lucide-react';
 import { TripService, OrderService, UserService } from '../../services/db';
 import { DispatchTrip, Order, User } from '../../types';
 
@@ -83,7 +83,7 @@ export const TripsOverview: React.FC = () => {
       setTrips(tripsWithStats);
 
       // 4. Calculate stats
-      const activeTrips = tripsWithStats.filter(t => 
+      const activeTrips = tripsWithStats.filter(t =>
         t.trip.status === 'out_for_delivery' || t.trip.status === 'draft'
       ).length;
 
@@ -126,9 +126,9 @@ export const TripsOverview: React.FC = () => {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'draft': return <Badge variant="warning">Draft</Badge>;
-      case 'out_for_delivery': return <Badge variant="info">Out for Delivery</Badge>;
-      case 'completed': return <Badge variant="success">Completed</Badge>;
+      case 'draft': return <Badge color="amber">Draft</Badge>;
+      case 'out_for_delivery': return <Badge color="blue">Out for Delivery</Badge>;
+      case 'completed': return <Badge color="green">Completed</Badge>;
       default: return <Badge>{status}</Badge>;
     }
   };
@@ -194,11 +194,10 @@ export const TripsOverview: React.FC = () => {
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
-              className={`px-3 py-2 rounded-lg font-medium text-sm transition-colors ${
-                statusFilter === status
+              className={`px-3 py-2 rounded-lg font-medium text-sm transition-colors ${statusFilter === status
                   ? 'bg-indigo-600 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+                }`}
             >
               {status === 'all' ? 'All' : status === 'out_for_delivery' ? 'Active' : status.charAt(0).toUpperCase() + status.slice(1)}
             </button>
@@ -335,7 +334,7 @@ export const TripsOverview: React.FC = () => {
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {deliveryUsers.map(person => {
               const personTrips = trips.filter(t => t.trip.deliveryPersonId === person.id);
-              const activeTripsCount = personTrips.filter(t => 
+              const activeTripsCount = personTrips.filter(t =>
                 t.trip.status === 'out_for_delivery' || t.trip.status === 'draft'
               ).length;
               const totalOrdersForPerson = personTrips.reduce((sum, t) => sum + t.orders.length, 0);

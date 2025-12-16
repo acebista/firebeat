@@ -280,7 +280,7 @@ export const DeliveryDashboard: React.FC = () => {
         </Card>
         <Card className="p-3 bg-purple-50 border-purple-100 col-span-2 md:col-span-1">
           <p className="text-xs text-purple-600 font-medium">Total Value</p>
-          <h3 className="text-lg font-bold text-purple-900">₹{myStats.totalValue.toLocaleString('en-IN', {maximumFractionDigits: 0})}</h3>
+          <h3 className="text-lg font-bold text-purple-900">₹{myStats.totalValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</h3>
         </Card>
       </div>
 
@@ -309,14 +309,14 @@ export const DeliveryDashboard: React.FC = () => {
                       </span>
                     </div>
                     <p className="text-sm text-gray-600">
-                      {tripData.trip.deliveryDate} • {tripData.orders.length} order{tripData.orders.length !== 1 ? 's' : ''} • ₹{tripData.totalValue.toLocaleString('en-IN', {maximumFractionDigits: 0})}
+                      {tripData.trip.deliveryDate} • {tripData.orders.length} order{tripData.orders.length !== 1 ? 's' : ''} • ₹{tripData.totalValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3 flex-shrink-0 ml-2">
                   <div className="text-right">
                     <p className="text-xs text-gray-600 font-medium">{tripData.completedCount}/{tripData.orders.length}</p>
-                    <p className="text-xs text-gray-500">{Math.round((tripData.completedCount / tripData.orders.length) * 100)}%</p>
+                    <p className="text-xs text-gray-500">{tripData.orders.length > 0 ? Math.round((tripData.completedCount / tripData.orders.length) * 100) : 0}%</p>
                   </div>
                   {expandedTripId === tripData.trip.id ? (
                     <ChevronUp size={20} className="text-gray-400" />
@@ -331,7 +331,7 @@ export const DeliveryDashboard: React.FC = () => {
                 <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
                   <div
                     className="bg-gradient-to-r from-green-400 to-green-600 h-full transition-all duration-300"
-                    style={{ width: `${(tripData.completedCount / tripData.orders.length) * 100}%` }}
+                    style={{ width: `${tripData.orders.length > 0 ? (tripData.completedCount / tripData.orders.length) * 100 : 0}%` }}
                   />
                 </div>
               </div>
@@ -343,9 +343,8 @@ export const DeliveryDashboard: React.FC = () => {
                     {tripData.orders.map((order, idx) => (
                       <div
                         key={order.id}
-                        className={`p-3 rounded-lg text-sm ${
-                          order.status === 'delivered' ? 'bg-white bg-opacity-40' : 'bg-white'
-                        }`}
+                        className={`p-3 rounded-lg text-sm ${order.status === 'delivered' ? 'bg-white bg-opacity-40' : 'bg-white'
+                          }`}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1 min-w-0">

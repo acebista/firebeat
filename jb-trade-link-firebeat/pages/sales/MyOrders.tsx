@@ -22,7 +22,7 @@ export const MyOrders: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
     const [dateFilter, setDateFilter] = useState({
-        startDate: new Date().toISOString().split('T')[0],
+        startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         endDate: new Date().toISOString().split('T')[0]
     });
     const [salespersonFilter, setSalespersonFilter] = useState('all');
@@ -135,7 +135,15 @@ export const MyOrders: React.FC = () => {
         approved: filteredOrders.filter(o => o.status === 'approved').length,
         dispatched: filteredOrders.filter(o => o.status === 'dispatched').length,
         delivered: filteredOrders.filter(o => o.status === 'delivered').length,
-        totalAmount: filteredOrders.reduce((sum, o) => sum + o.totalAmount, 0)
+        cancelled: filteredOrders.filter(o => o.status === 'cancelled').length,
+        totalAmount: filteredOrders.reduce((sum, o) => sum + o.totalAmount, 0),
+        // Net sales = all orders except cancelled
+        netSales: filteredOrders.filter(o => o.status !== 'cancelled').reduce((sum, o) => sum + o.totalAmount, 0),
+        totalItems: filteredOrders.reduce((sum, o) => sum + (o.totalItems || 0), 0),
+        avgOrderValue: filteredOrders.length > 0
+            ? filteredOrders.filter(o => o.status !== 'cancelled').reduce((sum, o) => sum + o.totalAmount, 0) /
+            filteredOrders.filter(o => o.status !== 'cancelled').length
+            : 0
     };
 
     if (loading) {
@@ -154,37 +162,55 @@ export const MyOrders: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-gray-800">
-                    {user?.role === 'sales' ? 'My Orders' : 'All Sales Orders'}
-                </h2>
-                <div className="flex gap-2">
-                    <span className="bg-indigo-50 text-indigo-800 px-3 py-1 rounded-full text-sm font-medium flex items-center border border-indigo-100">
-                        Total: {stats.total}
-                    </span>
-                    <span className="bg-green-50 text-green-800 px-3 py-1 rounded-full text-sm font-medium flex items-center border border-green-100">
-                        ₹{stats.totalAmount.toLocaleString()}
+            <div className="flex justify-between items-center flex-wrap gap-4">
+                <div>
+                    <h2 className="text-2xl font-bold text-gray-800">
+                        {user?.role === 'sales' ? 'My Orders' : 'All Sales Orders'}
+                    </h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                        Showing {dateFilter.startDate} to {dateFilter.endDate}
+                        <span className="text-indigo-600 ml-2">({stats.total} orders)</span>
+                    </p>
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                    <span className="bg-indigo-100 text-indigo-800 px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 border border-indigo-200 shadow-sm">
+                        <span className="text-xs uppercase tracking-wide opacity-70">Net Sales:</span>
+                        ₹{stats.netSales.toLocaleString()}
                     </span>
                 </div>
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                <Card className="p-4 bg-gradient-to-br from-indigo-500 to-indigo-600 text-white">
+                    <p className="text-sm font-medium opacity-90">Net Sales</p>
+                    <p className="text-2xl font-bold">₹{stats.netSales.toLocaleString()}</p>
+                    <p className="text-xs opacity-75 mt-1">{stats.total - stats.cancelled} orders</p>
+                </Card>
                 <Card className="p-4 bg-green-50 border-green-200">
                     <p className="text-sm text-green-800 font-medium">Approved</p>
                     <p className="text-2xl font-bold text-green-900">{stats.approved}</p>
+                    <p className="text-xs text-green-600">Ready for dispatch</p>
                 </Card>
                 <Card className="p-4 bg-blue-50 border-blue-200">
                     <p className="text-sm text-blue-800 font-medium">Dispatched</p>
                     <p className="text-2xl font-bold text-blue-900">{stats.dispatched}</p>
+                    <p className="text-xs text-blue-600">Out for delivery</p>
                 </Card>
                 <Card className="p-4 bg-purple-50 border-purple-200">
                     <p className="text-sm text-purple-800 font-medium">Delivered</p>
                     <p className="text-2xl font-bold text-purple-900">{stats.delivered}</p>
+                    <p className="text-xs text-purple-600">Completed</p>
                 </Card>
-                <Card className="p-4 bg-indigo-50 border-indigo-200">
-                    <p className="text-sm text-indigo-800 font-medium">Total Value</p>
-                    <p className="text-2xl font-bold text-indigo-900">₹{stats.totalAmount.toLocaleString()}</p>
+                <Card className="p-4 bg-red-50 border-red-200">
+                    <p className="text-sm text-red-800 font-medium">Cancelled</p>
+                    <p className="text-2xl font-bold text-red-900">{stats.cancelled}</p>
+                    <p className="text-xs text-red-600">Not counted in net</p>
+                </Card>
+                <Card className="p-4 bg-amber-50 border-amber-200">
+                    <p className="text-sm text-amber-800 font-medium">Avg Order</p>
+                    <p className="text-2xl font-bold text-amber-900">₹{Math.round(stats.avgOrderValue).toLocaleString()}</p>
+                    <p className="text-xs text-amber-600">{stats.totalItems} items total</p>
                 </Card>
             </div>
 
@@ -225,7 +251,7 @@ export const MyOrders: React.FC = () => {
                             { label: 'Cancelled', value: 'cancelled' },
                         ]}
                         value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value)}
+                        onChange={(value) => setStatusFilter(value)}
                     />
 
                     {user?.role === 'admin' && (
@@ -235,7 +261,7 @@ export const MyOrders: React.FC = () => {
                                 ...users.map(u => ({ label: u.name, value: u.id }))
                             ]}
                             value={salespersonFilter}
-                            onChange={(e) => setSalespersonFilter(e.target.value)}
+                            onChange={(value) => setSalespersonFilter(value)}
                         />
                     )}
                 </div>

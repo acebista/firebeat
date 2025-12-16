@@ -21,6 +21,10 @@ export const ProductManagement: React.FC = () => {
   const [isDetailsOpen, setDetailsOpen] = useState(false);
   const [currentProduct, setCurrentProduct] = useState<Product | null>(null);
 
+  // Sorting State
+  const [sortField, setSortField] = useState<'name' | 'companyName' | 'baseRate' | 'discountedRate' | 'discount'>('name');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
   // Selection State
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
 
@@ -56,8 +60,46 @@ export const ProductManagement: React.FC = () => {
 
   const handleEdit = (product: Product) => {
     setCurrentProduct(product);
-    setFormData({ ...product });
+
+    // Ensure all required fields have valid values for editing
+    // Handle legacy products that might be missing required fields
+    const editData = {
+      ...product,
+      // Ensure companyId is set
+      companyId: product.companyId || (companies.length > 0 ? companies[0].id : ''),
+      // Ensure numeric fields have valid values
+      baseRate: product.baseRate ?? 0,
+      discountedRate: product.discountedRate ?? product.baseRate ?? 0,
+      orderMultiple: product.orderMultiple || 1,
+      packetsPerCarton: product.packetsPerCarton || 1,
+      piecesPerPacket: product.piecesPerPacket || 1,
+      secondaryDiscountPct: product.secondaryDiscountPct ?? 0,
+      secondaryQualifyingQty: product.secondaryQualifyingQty ?? 0,
+      additionalSecondaryDiscountPct: product.additionalSecondaryDiscountPct ?? 0,
+      additionalQualifyingQty: product.additionalQualifyingQty ?? 0,
+      // Booleans with defaults
+      isActive: product.isActive ?? true,
+      stockOut: product.stockOut ?? false,
+      secondaryAvailable: product.secondaryAvailable ?? false,
+      discountEditable: product.discountEditable ?? false,
+      // Calculate productDiscountPct for UI
+      productDiscountPct: product.baseRate > 0
+        ? ((product.baseRate - (product.discountedRate ?? product.baseRate)) / product.baseRate) * 100
+        : 0,
+      commission_rate: product.commission_rate
+    };
+
+    setFormData(editData);
     setValidationErrors({});
+
+    // Warn if companyId was missing
+    if (!product.companyId && companies.length > 0) {
+      toast.error(
+        `Warning: This product had no company assigned. Defaulted to "${companies[0].name}". Please verify and save.`,
+        { duration: 6000 }
+      );
+    }
+
     setModalOpen(true);
   };
 
@@ -79,7 +121,8 @@ export const ProductManagement: React.FC = () => {
       secondaryDiscountPct: 0,
       secondaryQualifyingQty: 0,
       additionalSecondaryDiscountPct: 0,
-      additionalQualifyingQty: 0
+      additionalQualifyingQty: 0,
+      commission_rate: undefined
     });
     setValidationErrors({});
     setModalOpen(true);
@@ -90,27 +133,57 @@ export const ProductManagement: React.FC = () => {
       setIsSaving(true);
       setValidationErrors({});
 
-      // Validate form data
-      // We need to ensure numbers are numbers, not strings from inputs
+      // Pre-validation: Check critical required fields
+      if (!formData.name || formData.name.trim() === '') {
+        setValidationErrors({ name: 'Product name is required' });
+        toast.error('Product name is required');
+        setIsSaving(false);
+        return;
+      }
+
+      if (!formData.companyId || formData.companyId.trim() === '') {
+        setValidationErrors({ companyId: 'Company is required' });
+        toast.error('Please select a company');
+        setIsSaving(false);
+        return;
+      }
+
+      // Coerce and validate all fields with proper defaults
       const dataToValidate = {
-        ...formData,
-        baseRate: Number(formData.baseRate) || 0,
-        discountedRate: Number(formData.discountedRate) || 0,
-        orderMultiple: Number(formData.orderMultiple) || 1,
-        productDiscountPct: formData.productDiscountPct ? Number(formData.productDiscountPct) : 0,
-        packetsPerCarton: formData.packetsPerCarton ? Number(formData.packetsPerCarton) : 1,
-        piecesPerPacket: formData.piecesPerPacket ? Number(formData.piecesPerPacket) : 1,
-        secondaryDiscountPct: formData.secondaryDiscountPct ? Number(formData.secondaryDiscountPct) : 0,
-        secondaryQualifyingQty: formData.secondaryQualifyingQty ? Number(formData.secondaryQualifyingQty) : 0,
-        additionalSecondaryDiscountPct: formData.additionalSecondaryDiscountPct ? Number(formData.additionalSecondaryDiscountPct) : 0,
-        additionalQualifyingQty: formData.additionalQualifyingQty ? Number(formData.additionalQualifyingQty) : 0,
+        name: formData.name.trim(),
+        companyId: formData.companyId,
+        // Numeric fields with defaults
+        baseRate: Math.max(0, Number(formData.baseRate) || 0),
+        discountedRate: Math.max(0, Number(formData.discountedRate) || Number(formData.baseRate) || 0),
+        orderMultiple: Math.max(1, Number(formData.orderMultiple) || 1),
+        packetsPerCarton: Math.max(1, Number(formData.packetsPerCarton) || 1),
+        piecesPerPacket: Math.max(1, Number(formData.piecesPerPacket) || 1),
+        // Boolean fields
+        stockOut: formData.stockOut ?? false,
+        isActive: formData.isActive ?? true,
+        discountEditable: formData.discountEditable ?? false,
+        secondaryAvailable: formData.secondaryAvailable ?? false,
+        // Secondary discount fields
+        secondaryDiscountPct: Math.max(0, Number(formData.secondaryDiscountPct) || 0),
+        secondaryQualifyingQty: Math.max(0, Number(formData.secondaryQualifyingQty) || 0),
+        additionalSecondaryDiscountPct: Math.max(0, Number(formData.additionalSecondaryDiscountPct) || 0),
+        additionalQualifyingQty: Math.max(0, Number(formData.additionalQualifyingQty) || 0),
+        // Optional fields
+        companyName: formData.companyName,
+        category: formData.category,
+        commission_rate: formData.commission_rate === undefined || formData.commission_rate === null
+          ? null
+          : Number(formData.commission_rate)
       };
 
+      // Validate with Zod schema
       const validatedData = productSchema.parse(dataToValidate);
 
+      // Enrich with company name
       const companyName = companies.find(c => c.id === validatedData.companyId)?.name || 'Unknown';
       const productData = { ...validatedData, companyName } as Product;
 
+      // Save to database
       if (currentProduct) {
         await ProductService.update(currentProduct.id, productData);
         setProducts(prev => prev.map(p => p.id === currentProduct.id ? { ...p, ...productData } : p));
@@ -124,13 +197,27 @@ export const ProductManagement: React.FC = () => {
     } catch (e: any) {
       if (e instanceof z.ZodError) {
         const errors: Record<string, string> = {};
+        const errorMessages: string[] = [];
+
         e.issues.forEach((issue: any) => {
-          if (issue.path[0]) {
-            errors[issue.path[0] as string] = issue.message;
+          const field = issue.path[0] as string;
+          const message = issue.message;
+          if (field) {
+            errors[field] = message;
+            errorMessages.push(`${field}: ${message}`);
           }
         });
+
         setValidationErrors(errors);
-        toast.error('Please fix validation errors');
+
+        // Show specific error messages
+        if (errorMessages.length > 0) {
+          const firstError = errorMessages[0];
+          toast.error(`Validation Error: ${firstError}`, { duration: 5000 });
+          console.error('All validation errors:', errorMessages);
+        } else {
+          toast.error('Please fix validation errors');
+        }
       } else {
         const errorMsg = e?.message || 'Failed to save product';
         toast.error(errorMsg);
@@ -195,10 +282,57 @@ export const ProductManagement: React.FC = () => {
     }
   };
 
+  const handleSort = (field: typeof sortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
   const filteredProducts = products.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const searchLower = searchTerm.toLowerCase();
+    const matchesSearch = p.name.toLowerCase().includes(searchLower) ||
+      (p.companyName || '').toLowerCase().includes(searchLower);
     const matchesCompany = filterCompany === 'all' || p.companyId === filterCompany;
     return matchesSearch && matchesCompany;
+  });
+
+  // Sort filtered products
+  const sortedProducts = [...filteredProducts].sort((a, b) => {
+    let aVal: any, bVal: any;
+
+    switch (sortField) {
+      case 'name':
+        aVal = a.name.toLowerCase();
+        bVal = b.name.toLowerCase();
+        break;
+      case 'companyName':
+        aVal = (a.companyName || '').toLowerCase();
+        bVal = (b.companyName || '').toLowerCase();
+        break;
+      case 'baseRate':
+        aVal = a.baseRate || 0;
+        bVal = b.baseRate || 0;
+        break;
+      case 'discountedRate':
+        aVal = a.discountedRate || 0;
+        bVal = b.discountedRate || 0;
+        break;
+      case 'discount':
+        // Calculate discount percentage
+        aVal = a.baseRate > 0 ? ((a.baseRate - a.discountedRate) / a.baseRate) * 100 : 0;
+        bVal = b.baseRate > 0 ? ((b.baseRate - b.discountedRate) / b.baseRate) * 100 : 0;
+        break;
+      default:
+        aVal = a.name.toLowerCase();
+        bVal = b.name.toLowerCase();
+    }
+
+    if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+    if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+    return 0;
   });
 
   return (
@@ -219,7 +353,7 @@ export const ProductManagement: React.FC = () => {
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="w-full sm:w-64">
             <Input
-              placeholder="Search product name..."
+              placeholder="Search product or company name..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -228,7 +362,7 @@ export const ProductManagement: React.FC = () => {
             <Select
               options={[{ label: 'All Companies', value: 'all' }, ...companies.map(c => ({ label: c.name, value: c.id }))]}
               value={filterCompany}
-              onChange={(e) => setFilterCompany(e.target.value)}
+              onChange={(value) => setFilterCompany(value)}
             />
           </div>
         </div>
@@ -288,13 +422,23 @@ export const ProductManagement: React.FC = () => {
                   <input
                     type="checkbox"
                     className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
-                    checked={filteredProducts.length > 0 && selectedProductIds.size === filteredProducts.length}
+                    checked={sortedProducts.length > 0 && selectedProductIds.size === sortedProducts.length}
                     onChange={handleSelectAll}
                   />
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Product</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Company</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Rate Info</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase cursor-pointer hover:bg-gray-100" onClick={() => handleSort('name')}>
+                  Product {sortField === 'name' && (sortDirection === 'asc' ? '↑' : '↓')}
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase cursor-pointer hover:bg-gray-100" onClick={() => handleSort('companyName')}>
+                  Company {sortField === 'companyName' && (sortDirection === 'asc' ? '↑' : '↓')}
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">
+                  <div className="flex flex-col gap-1">
+                    <span className="cursor-pointer hover:text-indigo-600" onClick={() => handleSort('baseRate')}>Base Rate {sortField === 'baseRate' && (sortDirection === 'asc' ? '↑' : '↓')}</span>
+                    <span className="cursor-pointer hover:text-indigo-600" onClick={() => handleSort('discount')}>Discount {sortField === 'discount' && (sortDirection === 'asc' ? '↑' : '↓')}</span>
+                    <span className="cursor-pointer hover:text-indigo-600" onClick={() => handleSort('discountedRate')}>Final Rate {sortField === 'discountedRate' && (sortDirection === 'asc' ? '↑' : '↓')}</span>
+                  </div>
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Stock Status</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Active</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase">Actions</th>
@@ -306,7 +450,7 @@ export const ProductManagement: React.FC = () => {
               ) : filteredProducts.length === 0 ? (
                 <tr><td colSpan={7} className="text-center p-4">No products found.</td></tr>
               ) : (
-                filteredProducts.map((product) => (
+                sortedProducts.map((product) => (
                   <tr key={product.id} className={`hover:bg-gray-50 ${selectedProductIds.has(product.id) ? 'bg-indigo-50' : ''}`}>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <input
@@ -327,14 +471,14 @@ export const ProductManagement: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex flex-col gap-1 items-start">
-                        <Badge color={product.stockOut ? 'red' : (product.currentStock || 0) > 0 ? 'green' : 'yellow'}>
+                        <Badge color={product.stockOut ? 'red' : (product.currentStock || 0) > 0 ? 'emerald' : 'amber'}>
                           {product.stockOut ? 'Stock Out' : (product.currentStock || 0) > 0 ? 'In Stock' : 'Low Stock'}
                         </Badge>
                         {!product.stockOut && <span className="text-xs text-gray-500 font-medium ml-1">Qty: {product.currentStock || 0}</span>}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <Badge color={product.isActive ? 'green' : 'red'}>
+                      <Badge color={product.isActive ? 'emerald' : 'red'}>
                         {product.isActive ? 'Yes' : 'No'}
                       </Badge>
                     </td>
@@ -369,7 +513,7 @@ export const ProductManagement: React.FC = () => {
                   label="Company"
                   options={[{ label: 'Select Company', value: '' }, ...companies.map(c => ({ label: c.name, value: c.id }))]}
                   value={formData.companyId || ''}
-                  onChange={e => setFormData({ ...formData, companyId: e.target.value })}
+                  onChange={value => setFormData({ ...formData, companyId: value })}
                   error={validationErrors.companyId}
                 />
               </div>
@@ -433,6 +577,21 @@ export const ProductManagement: React.FC = () => {
 
               <Input label="Packets / Carton" type="number" min={1} value={formData.packetsPerCarton ?? 1} onChange={e => setFormData({ ...formData, packetsPerCarton: Number(e.target.value) })} error={validationErrors.packetsPerCarton} />
               <Input label="Pieces / Packet" type="number" min={1} value={formData.piecesPerPacket ?? 1} onChange={e => setFormData({ ...formData, piecesPerPacket: Number(e.target.value) })} error={validationErrors.piecesPerPacket} />
+
+              <div className="col-span-1">
+                <Input
+                  label="Comm. Override (%)"
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.01}
+                  placeholder="Default"
+                  value={formData.commission_rate ?? ''}
+                  onChange={e => setFormData({ ...formData, commission_rate: e.target.value ? Number(e.target.value) : undefined })}
+                  error={validationErrors.commission_rate}
+                />
+                <p className="text-[10px] text-gray-500 mt-0.5">Overrides company default</p>
+              </div>
 
               <div className="col-span-3 mt-2">
                 <label className="flex items-center gap-2 text-sm cursor-pointer text-gray-700">
@@ -506,13 +665,13 @@ export const ProductManagement: React.FC = () => {
               </div>
               <div className="p-3 bg-gray-50 rounded">
                 <span className="block text-gray-500">Stock Status</span>
-                <Badge color={currentProduct.stockOut ? 'red' : (currentProduct.currentStock || 0) > 0 ? 'green' : 'yellow'}>
+                <Badge color={currentProduct.stockOut ? 'red' : (currentProduct.currentStock || 0) > 0 ? 'emerald' : 'amber'}>
                   {currentProduct.stockOut ? 'Out of Stock' : (currentProduct.currentStock || 0) > 0 ? `In Stock (${currentProduct.currentStock})` : 'Low Stock'}
                 </Badge>
               </div>
               <div className="p-3 bg-gray-50 rounded">
                 <span className="block text-gray-500">Active Status</span>
-                <Badge color={currentProduct.isActive ? 'green' : 'red'}>
+                <Badge color={currentProduct.isActive ? 'emerald' : 'red'}>
                   {currentProduct.isActive ? 'Active' : 'Inactive'}
                 </Badge>
               </div>

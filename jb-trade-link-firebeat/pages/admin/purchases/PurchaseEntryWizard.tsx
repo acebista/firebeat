@@ -1,15 +1,15 @@
 
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Input, Select, SearchableSelect } from '../../../components/ui/Elements';
-import { 
-  Product, 
-  PurchaseBillDraft, 
-  PurchaseLineDraft, 
-  TaxMode 
+import {
+  Product,
+  PurchaseBillDraft,
+  PurchaseLineDraft,
+  TaxMode
 } from '../../../types/purchase';
-import { 
-  fetchProductCatalog, 
-  fetchPurchaseSearchMeta, 
+import {
+  fetchProductCatalog,
+  fetchPurchaseSearchMeta,
   getSuggestedPurchaseRate
 } from '../../../lib/purchaseApi';
 import { PurchaseService } from '../../../services/db';
@@ -25,7 +25,7 @@ export const PurchaseEntryWizard: React.FC<PurchaseEntryWizardProps> = ({ onBill
   const [loading, setLoading] = useState(false);
   const [meta, setMeta] = useState<{ companies: string[]; taxModes: TaxMode[] }>({ companies: [], taxModes: [] });
   const [catalog, setCatalog] = useState<Product[]>([]);
-  
+
   // Draft State
   const [draft, setDraft] = useState<PurchaseBillDraft>({
     date: new Date().toISOString().split('T')[0],
@@ -77,7 +77,7 @@ export const PurchaseEntryWizard: React.FC<PurchaseEntryWizardProps> = ({ onBill
     };
 
     setDraft(prev => ({ ...prev, lines: [...prev.lines, newLine] }));
-    
+
     // Reset Inputs
     setCurrentProduct('');
     setCurrentQty(0);
@@ -111,11 +111,11 @@ export const PurchaseEntryWizard: React.FC<PurchaseEntryWizardProps> = ({ onBill
     try {
       // Generate Bill ID & Structure for Firestore
       const billId = `PR-${Date.now()}`;
-      
+
       const sumGross = draft.lines.reduce((acc, l) => acc + (l.qty * l.rate), 0);
       const discountAmt = draft.discountType === 'PCT' ? sumGross * (draft.discountValue / 100) : draft.discountValue;
       const taxableBase = Math.max(sumGross - discountAmt, 0);
-      
+
       let taxAmt = 0;
       let net = 0;
 
@@ -133,45 +133,45 @@ export const PurchaseEntryWizard: React.FC<PurchaseEntryWizardProps> = ({ onBill
       const savedBill = {
         id: billId,
         header: {
-            billId,
-            date: draft.date,
-            companySummary: draft.companies.join(', '),
-            vendor: draft.vendor,
-            billNo: draft.billNo,
-            taxMode: draft.taxMode,
-            taxPct: draft.taxPct,
-            discountType: draft.discountType,
-            discountValue: draft.discountValue,
-            otherCharges: draft.otherCharges,
-            notes: draft.notes
+          billId,
+          date: draft.date,
+          companySummary: draft.companies.join(', '),
+          vendor: draft.vendor,
+          billNo: draft.billNo,
+          taxMode: draft.taxMode,
+          taxPct: draft.taxPct,
+          discountType: draft.discountType,
+          discountValue: draft.discountValue,
+          otherCharges: draft.otherCharges,
+          notes: draft.notes
         },
         lines: draft.lines.map((l, idx) => ({
-            lineNo: idx + 1,
-            productId: l.productId,
-            product: l.productName,
-            unit: l.unit,
-            qty: l.qty,
-            rate: l.rate,
-            gross: l.qty * l.rate,
-            discount: 0,
-            tax: 0,
-            other: 0,
-            net: l.qty * l.rate
+          lineNo: idx + 1,
+          productId: l.productId,
+          product: l.productName,
+          unit: l.unit,
+          qty: l.qty,
+          rate: l.rate,
+          gross: l.qty * l.rate,
+          discount: 0,
+          tax: 0,
+          other: 0,
+          net: l.qty * l.rate
         })),
         totals: {
-            qty: draft.lines.reduce((s, l) => s + l.qty, 0),
-            gross: sumGross,
-            discount: discountAmt,
-            tax: taxAmt,
-            other: draft.otherCharges,
-            net
+          qty: draft.lines.reduce((s, l) => s + l.qty, 0),
+          gross: sumGross,
+          discount: discountAmt,
+          tax: taxAmt,
+          other: draft.otherCharges,
+          net
         }
       };
 
       await PurchaseService.add(savedBill);
-      
+
       toast.success(`Bill Saved Successfully! ID: ${billId}`);
-      onBillSaved(); 
+      onBillSaved();
       // Reset
       setDraft({
         date: new Date().toISOString().split('T')[0],
@@ -187,9 +187,9 @@ export const PurchaseEntryWizard: React.FC<PurchaseEntryWizardProps> = ({ onBill
         notes: ''
       });
       setStep(1);
-    } catch(e) {
-        console.error(e);
-        toast.error("Failed to save bill to database.");
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to save bill to database.");
     } finally {
       setLoading(false);
     }
@@ -199,7 +199,7 @@ export const PurchaseEntryWizard: React.FC<PurchaseEntryWizardProps> = ({ onBill
   const sumGross = draft.lines.reduce((sum, l) => sum + (l.qty * l.rate), 0);
   const discountAmt = draft.discountType === 'PCT' ? sumGross * (draft.discountValue / 100) : draft.discountValue;
   const taxableBase = Math.max(sumGross - discountAmt, 0);
-  
+
   let taxAmt = 0;
   let net = 0;
 
@@ -215,7 +215,7 @@ export const PurchaseEntryWizard: React.FC<PurchaseEntryWizardProps> = ({ onBill
   }
 
   // Filtered Catalog based on selected companies
-  const filteredCatalog = draft.companies.length > 0 
+  const filteredCatalog = draft.companies.length > 0
     ? catalog.filter(p => draft.companies.includes(p.company))
     : catalog;
 
@@ -238,86 +238,86 @@ export const PurchaseEntryWizard: React.FC<PurchaseEntryWizardProps> = ({ onBill
       {/* STEP 1: HEADER */}
       {step === 1 && (
         <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-             <div>
-               <label className="block text-sm font-medium text-gray-700 mb-2">Companies</label>
-               <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto border p-2 rounded bg-gray-50">
-                 {meta.companies.map(c => (
-                   <label key={c} className="flex items-center space-x-2 text-sm cursor-pointer">
-                     <input 
-                        type="checkbox" 
-                        className="rounded text-indigo-600"
-                        checked={draft.companies.includes(c)}
-                        onChange={(e) => {
-                          if(e.target.checked) setDraft(p => ({...p, companies: [...p.companies, c]}));
-                          else setDraft(p => ({...p, companies: p.companies.filter(x => x !== c)}));
-                        }}
-                     />
-                     <span>{c}</span>
-                   </label>
-                 ))}
-               </div>
-               {draft.companies.length === 0 && <p className="text-xs text-gray-500 mt-1">Leave empty to allow all products.</p>}
-             </div>
-             <div className="space-y-4">
-                <Input label="Vendor Name" value={draft.vendor} onChange={e => setDraft({...draft, vendor: e.target.value})} />
-                <div className="grid grid-cols-2 gap-4">
-                  <Input label="Bill No" value={draft.billNo} onChange={e => setDraft({...draft, billNo: e.target.value})} />
-                  <Input type="date" label="Date" value={draft.date} onChange={e => setDraft({...draft, date: e.target.value})} />
-                </div>
-             </div>
-           </div>
-
-           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t pt-4">
-             <Select 
-                label="Tax Mode" 
-                value={draft.taxMode}
-                options={meta.taxModes.map(m => ({ label: m, value: m }))}
-                onChange={e => setDraft({...draft, taxMode: e.target.value as TaxMode})}
-             />
-             <Input 
-                label="Tax %" 
-                type="number" 
-                value={draft.taxPct} 
-                onChange={e => setDraft({...draft, taxPct: Number(e.target.value)})} 
-                disabled={draft.taxMode === 'NONE'}
-             />
-             <Input 
-                label="Other Charges" 
-                type="number" 
-                value={draft.otherCharges} 
-                onChange={e => setDraft({...draft, otherCharges: Number(e.target.value)})} 
-             />
-           </div>
-           
-           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="flex gap-2 items-end">
-                <div className="flex-grow">
-                   <Input 
-                     label="Discount" 
-                     type="number" 
-                     value={draft.discountValue} 
-                     onChange={e => setDraft({...draft, discountValue: Number(e.target.value)})} 
-                   />
-                </div>
-                <div className="w-24">
-                   <Select 
-                     options={[{ label: '₹', value: 'ABS' }, { label: '%', value: 'PCT' }]}
-                     value={draft.discountType}
-                     onChange={e => setDraft({...draft, discountType: e.target.value as any})}
-                   />
-                </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Companies</label>
+              <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto border p-2 rounded bg-gray-50">
+                {meta.companies.map(c => (
+                  <label key={c} className="flex items-center space-x-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="rounded text-indigo-600"
+                      checked={draft.companies.includes(c)}
+                      onChange={(e) => {
+                        if (e.target.checked) setDraft(p => ({ ...p, companies: [...p.companies, c] }));
+                        else setDraft(p => ({ ...p, companies: p.companies.filter(x => x !== c) }));
+                      }}
+                    />
+                    <span>{c}</span>
+                  </label>
+                ))}
               </div>
-              <div className="md:col-span-2">
-                 <Input label="Notes" value={draft.notes} onChange={e => setDraft({...draft, notes: e.target.value})} placeholder="Optional remarks" />
+              {draft.companies.length === 0 && <p className="text-xs text-gray-500 mt-1">Leave empty to allow all products.</p>}
+            </div>
+            <div className="space-y-4">
+              <Input label="Vendor Name" value={draft.vendor} onChange={e => setDraft({ ...draft, vendor: e.target.value })} />
+              <div className="grid grid-cols-2 gap-4">
+                <Input label="Bill No" value={draft.billNo} onChange={e => setDraft({ ...draft, billNo: e.target.value })} />
+                <Input type="date" label="Date" value={draft.date} onChange={e => setDraft({ ...draft, date: e.target.value })} />
               </div>
-           </div>
+            </div>
+          </div>
 
-           <div className="flex justify-end pt-4">
-             <Button onClick={() => setStep(2)} disabled={!draft.vendor || !draft.billNo}>
-               Next Step <ArrowRight className="ml-2 h-4 w-4" />
-             </Button>
-           </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t pt-4">
+            <Select
+              label="Tax Mode"
+              value={draft.taxMode}
+              options={meta.taxModes.map(m => ({ label: m, value: m }))}
+              onChange={value => setDraft({ ...draft, taxMode: value as TaxMode })}
+            />
+            <Input
+              label="Tax %"
+              type="number"
+              value={draft.taxPct}
+              onChange={e => setDraft({ ...draft, taxPct: Number(e.target.value) })}
+              disabled={draft.taxMode === 'NONE'}
+            />
+            <Input
+              label="Other Charges"
+              type="number"
+              value={draft.otherCharges}
+              onChange={e => setDraft({ ...draft, otherCharges: Number(e.target.value) })}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="flex gap-2 items-end">
+              <div className="flex-grow">
+                <Input
+                  label="Discount"
+                  type="number"
+                  value={draft.discountValue}
+                  onChange={e => setDraft({ ...draft, discountValue: Number(e.target.value) })}
+                />
+              </div>
+              <div className="w-24">
+                <Select
+                  options={[{ label: '₹', value: 'ABS' }, { label: '%', value: 'PCT' }]}
+                  value={draft.discountType}
+                  onChange={value => setDraft({ ...draft, discountType: value as any })}
+                />
+              </div>
+            </div>
+            <div className="md:col-span-2">
+              <Input label="Notes" value={draft.notes} onChange={e => setDraft({ ...draft, notes: e.target.value })} placeholder="Optional remarks" />
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-4">
+            <Button onClick={() => setStep(2)} disabled={!draft.vendor || !draft.billNo}>
+              Next Step <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          </div>
         </div>
       )}
 
@@ -326,33 +326,33 @@ export const PurchaseEntryWizard: React.FC<PurchaseEntryWizardProps> = ({ onBill
         <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
           {/* Input Row */}
           <div className="bg-gray-50 p-4 rounded border border-gray-200 grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-             <div className="md:col-span-5">
-               <SearchableSelect 
-                 label="Product" 
-                 options={productOptions} 
-                 value={currentProduct} 
-                 onChange={handleProductSelect}
-                 placeholder="Search product..."
-               />
-             </div>
-             <div className="md:col-span-2">
-               <Input label="Qty" type="number" value={currentQty} onChange={e => setCurrentQty(Number(e.target.value))} />
-             </div>
-             <div className="md:col-span-2">
-               <Input label="Rate" type="number" value={currentRate} onChange={e => setCurrentRate(Number(e.target.value))} />
-             </div>
-             <div className="md:col-span-3">
-               <Button onClick={handleAddLine} className="w-full" disabled={!currentProduct || currentQty <= 0}>
-                 Add Line
-               </Button>
-             </div>
-             
-             {/* Info Row */}
-             <div className="md:col-span-12 flex gap-4 text-xs text-gray-600 pt-2">
-               <span className="bg-white border px-2 py-1 rounded">Co: <strong>{lineInfo.company}</strong></span>
-               <span className="bg-white border px-2 py-1 rounded">Sell Rate: <strong>{lineInfo.sellRate}</strong></span>
-               <span className="bg-white border px-2 py-1 rounded">Suggested: <strong>{lineInfo.suggested ?? 'N/A'}</strong></span>
-             </div>
+            <div className="md:col-span-5">
+              <SearchableSelect
+                label="Product"
+                options={productOptions}
+                value={currentProduct}
+                onChange={handleProductSelect}
+                placeholder="Search product..."
+              />
+            </div>
+            <div className="md:col-span-2">
+              <Input label="Qty" type="number" value={currentQty} onChange={e => setCurrentQty(Number(e.target.value))} />
+            </div>
+            <div className="md:col-span-2">
+              <Input label="Rate" type="number" value={currentRate} onChange={e => setCurrentRate(Number(e.target.value))} />
+            </div>
+            <div className="md:col-span-3">
+              <Button onClick={handleAddLine} className="w-full" disabled={!currentProduct || currentQty <= 0}>
+                Add Line
+              </Button>
+            </div>
+
+            {/* Info Row */}
+            <div className="md:col-span-12 flex gap-4 text-xs text-gray-600 pt-2">
+              <span className="bg-white border px-2 py-1 rounded">Co: <strong>{lineInfo.company}</strong></span>
+              <span className="bg-white border px-2 py-1 rounded">Sell Rate: <strong>{lineInfo.sellRate}</strong></span>
+              <span className="bg-white border px-2 py-1 rounded">Suggested: <strong>{lineInfo.suggested ?? 'N/A'}</strong></span>
+            </div>
           </div>
 
           {/* Lines Table */}
@@ -392,15 +392,15 @@ export const PurchaseEntryWizard: React.FC<PurchaseEntryWizardProps> = ({ onBill
                 )}
               </tbody>
               {draft.lines.length > 0 && (
-                 <tfoot className="bg-gray-50 font-bold">
-                   <tr>
-                     <td colSpan={5} className="px-3 py-2 text-right">Total Gross:</td>
-                     <td className="px-3 py-2 text-right">
-                       {draft.lines.reduce((s, l) => s + (l.qty*l.rate), 0).toFixed(2)}
-                     </td>
-                     <td></td>
-                   </tr>
-                 </tfoot>
+                <tfoot className="bg-gray-50 font-bold">
+                  <tr>
+                    <td colSpan={5} className="px-3 py-2 text-right">Total Gross:</td>
+                    <td className="px-3 py-2 text-right">
+                      {draft.lines.reduce((s, l) => s + (l.qty * l.rate), 0).toFixed(2)}
+                    </td>
+                    <td></td>
+                  </tr>
+                </tfoot>
               )}
             </table>
           </div>
@@ -421,7 +421,7 @@ export const PurchaseEntryWizard: React.FC<PurchaseEntryWizardProps> = ({ onBill
         <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
           <div className="bg-indigo-50 p-6 rounded-lg border border-indigo-100 max-w-lg mx-auto">
             <h3 className="text-center font-bold text-indigo-900 text-lg mb-4">Bill Summary</h3>
-            
+
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-600">Gross Total</span>
@@ -439,9 +439,9 @@ export const PurchaseEntryWizard: React.FC<PurchaseEntryWizardProps> = ({ onBill
                 <span className="text-gray-600">Other Charges</span>
                 <span className="font-medium">+ ₹{draft.otherCharges.toFixed(2)}</span>
               </div>
-              
+
               <div className="h-px bg-indigo-200 my-2"></div>
-              
+
               <div className="flex justify-between text-xl font-bold text-indigo-900">
                 <span>Net Payable</span>
                 <span>₹{net.toFixed(2)}</span>

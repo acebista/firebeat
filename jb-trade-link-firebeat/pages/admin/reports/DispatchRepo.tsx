@@ -45,7 +45,16 @@ export const DispatchReport: React.FC<{ data: DispatchRow[] }> = ({ data }) => {
                 </tr>
               ))}
               {data.length === 0 && (
-                <tr><td colSpan={7} className="text-center p-8 text-gray-400">No items found.</td></tr>
+                <tr>
+                  <td colSpan={7} className="text-center p-8">
+                    <div className="text-gray-400 space-y-2">
+                      <p className="font-medium">No dispatch/packing data found.</p>
+                      <p className="text-sm">
+                        Try adjusting your date range or filters. Ensure orders exist for the selected period.
+                      </p>
+                    </div>
+                  </td>
+                </tr>
               )}
             </tbody>
             {data.length > 0 && (

@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE RESTRICT,
   action TEXT NOT NULL CHECK (action IN ('CREATE', 'UPDATE', 'DELETE', 'STATUS_CHANGE')),
   entity_type TEXT NOT NULL CHECK (entity_type IN ('order', 'trip', 'return', 'payment')),
-  entity_id UUID NOT NULL,
+  entity_id TEXT NOT NULL,
   old_data JSONB,
   new_data JSONB NOT NULL,
   reason TEXT,
@@ -61,7 +61,7 @@ CREATE POLICY "audit_logs_insert" ON audit_logs
 
 CREATE TABLE IF NOT EXISTS order_status_history (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
   from_status TEXT NOT NULL,
   to_status TEXT NOT NULL,
   reason TEXT NOT NULL,
@@ -78,17 +78,15 @@ CREATE INDEX IF NOT EXISTS idx_order_status_history_created_at ON order_status_h
 -- Enable RLS
 ALTER TABLE order_status_history ENABLE ROW LEVEL SECURITY;
 
--- RLS Policy: Users can view history for orders in their workspace
+-- RLS Policy: Users can view history for orders (admins/managers can see all)
 CREATE POLICY "order_status_history_select" ON order_status_history
   FOR SELECT USING (
+    auth.uid() = user_id OR
     EXISTS (
-      SELECT 1 FROM orders
-      WHERE orders.id = order_status_history.order_id
+      SELECT 1 FROM auth.users
+      WHERE auth.users.id = auth.uid()
         AND (
-          orders.workspace_id = (
-            SELECT workspace_id FROM auth.users 
-            WHERE auth.users.id = auth.uid() LIMIT 1
-          )
+          auth.users.raw_user_meta_data->>'role' IN ('admin', 'manager', 'supervisor')
         )
     )
   );
@@ -104,7 +102,7 @@ CREATE POLICY "order_status_history_insert" ON order_status_history
 
 CREATE TABLE IF NOT EXISTS trip_status_history (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  trip_id UUID NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
   from_status TEXT NOT NULL,
   to_status TEXT NOT NULL,
   reason TEXT,
@@ -121,17 +119,15 @@ CREATE INDEX IF NOT EXISTS idx_trip_status_history_created_at ON trip_status_his
 -- Enable RLS
 ALTER TABLE trip_status_history ENABLE ROW LEVEL SECURITY;
 
--- RLS Policy: Users can view history for trips in their workspace
+-- RLS Policy: Users can view history for trips (admins/managers can see all)
 CREATE POLICY "trip_status_history_select" ON trip_status_history
   FOR SELECT USING (
+    auth.uid() = user_id OR
     EXISTS (
-      SELECT 1 FROM trips
-      WHERE trips.id = trip_status_history.trip_id
+      SELECT 1 FROM auth.users
+      WHERE auth.users.id = auth.uid()
         AND (
-          trips.workspace_id = (
-            SELECT workspace_id FROM auth.users
-            WHERE auth.users.id = auth.uid() LIMIT 1
-          )
+          auth.users.raw_user_meta_data->>'role' IN ('admin', 'manager', 'supervisor')
         )
     )
   );
@@ -161,7 +157,7 @@ CREATE OR REPLACE FUNCTION audit_log_insert(
   p_user_id UUID,
   p_action TEXT,
   p_entity_type TEXT,
-  p_entity_id UUID,
+  p_entity_id TEXT,
   p_old_data JSONB,
   p_new_data JSONB,
   p_reason TEXT DEFAULT NULL,

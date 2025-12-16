@@ -45,7 +45,7 @@ export type PaymentStatus =
   | 'DISPUTED';
 
 // ============ USER ROLES ============
-export type UserRole = 'admin' | 'manager' | 'supervisor' | 'dispatch' | 'delivery_agent' | 'accountant';
+export type UserRole = 'admin' | 'sales' | 'delivery';
 
 // ============ VALID STATE TRANSITIONS ============
 /**
@@ -54,48 +54,40 @@ export type UserRole = 'admin' | 'manager' | 'supervisor' | 'dispatch' | 'delive
  */
 export const VALID_TRANSITIONS: Record<OrderStatus, Partial<Record<UserRole, OrderStatus[]>>> = {
   DRAFT: {
-    manager: ['APPROVED', 'CANCELLED'],
+    sales: ['APPROVED', 'CANCELLED'],
     admin: ['APPROVED', 'CANCELLED', 'DRAFT']
   },
   APPROVED: {
-    dispatch: ['DISPATCHED', 'CANCELLED'],
-    manager: ['DRAFT', 'CANCELLED'],
-    admin: ['DRAFT', 'DISPATCHED', 'CANCELLED']
+    admin: ['DRAFT', 'DISPATCHED', 'CANCELLED'],
+    sales: ['CANCELLED']
   },
   DISPATCHED: {
-    dispatch: ['OUT_FOR_DELIVERY', 'CANCELLED'],
-    delivery_agent: ['OUT_FOR_DELIVERY'],
-    admin: ['DRAFT', 'APPROVED', 'OUT_FOR_DELIVERY', 'CANCELLED']
+    admin: ['DRAFT', 'APPROVED', 'OUT_FOR_DELIVERY', 'CANCELLED'],
+    delivery: ['OUT_FOR_DELIVERY']
   },
   OUT_FOR_DELIVERY: {
-    delivery_agent: ['DELIVERED', 'FAILED'],
+    delivery: ['DELIVERED', 'FAILED'],
     admin: ['DISPATCHED', 'DELIVERED', 'FAILED', 'CANCELLED']
   },
   DELIVERED: {
-    delivery_agent: ['RETURNED', 'DAMAGED'],
-    accountant: ['DELIVERED'],
+    delivery: ['RETURNED', 'DAMAGED'],
     admin: ['OUT_FOR_DELIVERY', 'RETURNED', 'DAMAGED', 'CANCELLED']
   },
   FAILED: {
-    delivery_agent: ['RESCHEDULED'],
-    dispatch: ['RESCHEDULED', 'CANCELLED'],
+    delivery: ['RESCHEDULED'],
     admin: ['OUT_FOR_DELIVERY', 'RESCHEDULED', 'CANCELLED']
   },
   RESCHEDULED: {
-    dispatch: ['DISPATCHED', 'CANCELLED'],
-    manager: ['CANCELLED'],
     admin: ['APPROVED', 'DISPATCHED', 'CANCELLED']
   },
   CANCELLED: {
     admin: ['DRAFT', 'APPROVED']
   },
   RETURNED: {
-    accountant: ['CLOSED'],
-    admin: ['CLOSED', 'CANCELLED']
+    admin: ['CANCELLED']
   },
   DAMAGED: {
-    accountant: ['CLOSED'],
-    admin: ['CLOSED', 'CANCELLED']
+    admin: ['CANCELLED']
   }
 };
 

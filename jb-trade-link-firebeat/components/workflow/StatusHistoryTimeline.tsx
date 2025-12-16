@@ -106,18 +106,18 @@ export function StatusHistoryTimeline({
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
                 <div className="flex items-center gap-2">
                   <StatusBadge
-                    status={entry.new_status}
+                    status={entry.toStatus}
                     size="sm"
                     showMessage={false}
                   />
                   <span className="text-sm font-semibold text-gray-900">
-                    {entry.new_status}
+                    {entry.toStatus}
                   </span>
                 </div>
 
                 <div className="text-xs text-gray-600 flex items-center gap-1">
                   <Clock size={12} />
-                  {formatDistanceToNow(new Date(entry.created_at), {
+                  {formatDistanceToNow(new Date(entry.createdAt), {
                     addSuffix: true
                   })}
                 </div>
@@ -127,13 +127,13 @@ export function StatusHistoryTimeline({
               <div className="text-sm text-gray-600 mb-2 flex items-center gap-2">
                 <User size={14} className="opacity-60" />
                 <span>
-                  {entry.user?.full_name || 'System'}
+                  {entry.userName || 'System'}
                 </span>
               </div>
 
               {/* Full timestamp */}
               <div className="text-xs text-gray-500 mb-2">
-                {format(new Date(entry.created_at), 'PPpp')}
+                {format(new Date(entry.createdAt), 'PPpp')}
               </div>
 
               {/* Reason/Notes */}
@@ -144,10 +144,10 @@ export function StatusHistoryTimeline({
               )}
 
               {/* From status if available */}
-              {entry.previous_status && (
+              {entry.fromStatus && (
                 <div className="text-xs text-gray-600">
                   Changed from <StatusBadge
-                    status={entry.previous_status}
+                    status={entry.fromStatus}
                     size="sm"
                     showMessage={false}
                   />

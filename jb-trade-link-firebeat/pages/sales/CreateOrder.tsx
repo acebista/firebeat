@@ -62,7 +62,6 @@ export const CreateOrder: React.FC = () => {
         setProducts(prods);
         setCompanies(comps);
         setCustomers(custs);
-        setCustomers(custs);
         setSalespersons(users.filter(u => u.role === 'sales').map(u => ({ id: u.id, name: u.name })));
       } catch (e) {
         console.error(e);
@@ -138,7 +137,7 @@ export const CreateOrder: React.FC = () => {
     };
   };
 
-    const addToCart = (product: Product) => {
+  const addToCart = (product: Product) => {
     if (cartLockedCompanyId && product.companyId !== cartLockedCompanyId) {
       toast.error(`Policy Restriction: This invoice is for ${products.find(p => p.companyId === cartLockedCompanyId)?.companyName}. You cannot add items from other companies.`);
       return;
@@ -343,7 +342,7 @@ export const CreateOrder: React.FC = () => {
     return errors;
   };
 
-    const handlePlaceOrder = async () => {
+  const handlePlaceOrder = async () => {
     if (!selectedCustomer || cart.length === 0) return;
 
     const errors = validateCart();
@@ -394,8 +393,8 @@ export const CreateOrder: React.FC = () => {
       status: 'approved' as const,
       items: cart,
       remarks: '',
-      gps: gpsCoords, // GPS coordinates
-      orderTime: new Date().toISOString() // Current timestamp
+      GPS: gpsCoords || undefined, // GPS coordinates (uppercase to match DB schema, undefined instead of null)
+      time: new Date().toISOString() // Current timestamp (using 'time' column)
     };
 
     try {

@@ -6,9 +6,14 @@ import { DispatchReport } from './reports/DispatchRepo';
 import { SchemeReport } from './reports/SchemeRepo';
 import { DamagedGoodsReport } from './DamagedGoods';
 import { ChallanReport } from './reports/ChallanRepo';
-import { FileText, Truck, Percent, AlertTriangle, FileCheck } from 'lucide-react';
-import { OrderService, ProductService } from '../../services/db';
-import { Order, Product } from '../../types';
+import { DeliveryReport, DeliveryReportData } from './reports/DeliveryRepo';
+import { DeliveryReportFilters, DeliveryReportFilters as DeliveryFiltersType } from '../../components/reports/DeliveryReportFilters';
+import { FileText, Truck, Percent, AlertTriangle, FileCheck, UserCheck } from 'lucide-react';
+import { OrderService, ProductService, UserService, ReturnService, CompanyService } from '../../services/db';
+import { CommissionRateService } from '../../services/hr'; // Import CommissionRateService
+import { Order, Product, User, SalesReturn, Company } from '../../types';
+import { CommissionRate } from '../../types/hr'; // Import CommissionRate type
+import { HRCommissionReport } from './reports/HRCommissionRepo'; // Component
 
 // --- Metric Calculation Helper ---
 // This moves the logic from MockReportService to the Client Component
@@ -34,7 +39,9 @@ const calculateMetrics = (orders: Order[], filters: ReportFilterState, products:
       subTotal: subTotal,
       discountAmount: discountAmount,
       grandTotal: o.totalAmount,
-      paymentMode: (o as any).paymentMethod || 'Cash' // Use actual payment method from order
+      paymentMode: (o as any).paymentMethod || 'Cash', // Use actual payment method from order
+      netAmount: o.totalAmount,
+      order: o
     };
   });
 
@@ -45,17 +52,66 @@ const calculateMetrics = (orders: Order[], filters: ReportFilterState, products:
   const productLookup = new Map<string, Product>();
   products.forEach(p => productLookup.set(p.id, p));
 
+  console.log('[Dispatch Report] Starting calculation with:', {
+    totalOrders: orders.length,
+    totalProducts: products.length,
+    companyFilter: filters.companyIds
+  });
+
+  // Log first order to inspect structure
+  if (orders.length > 0) {
+    console.log('[Dispatch Report] Sample order:', {
+      id: orders[0].id,
+      hasItems: !!orders[0].items,
+      itemsIsArray: Array.isArray(orders[0].items),
+      itemsType: typeof orders[0].items,
+      itemsCount: Array.isArray(orders[0].items) ? orders[0].items.length : 'N/A',
+      firstItem: Array.isArray(orders[0].items) ? orders[0].items[0] : orders[0].items
+    });
+  }
+
   orders.forEach(order => {
-    if (!order.items || !Array.isArray(order.items)) return; // Safety check
+    // Parse items if they're stored as JSON string
+    let items = order.items;
 
-    order.items.forEach(item => {
-      if (filters.companyIds.length > 0 && !filters.companyIds.includes(item.companyId || '')) return;
+    if (typeof items === 'string') {
+      try {
+        items = JSON.parse(items);
+      } catch (e) {
+        console.error('[Dispatch Report] Failed to parse items JSON for order:', order.id, e);
+        return;
+      }
+    }
 
-      if (!productMap.has(item.productId)) {
-        productMap.set(item.productId, {
-          productId: item.productId,
-          productName: item.productName,
-          companyName: item.companyName || 'Unknown',
+    if (!items || !Array.isArray(items)) {
+      console.warn('[Dispatch Report] Order missing or invalid items:', order.id);
+      return; // Safety check
+    }
+
+    items.forEach((item: any) => {
+      // Robust field mapping
+      const pId = item.productId;
+      const masterProduct = productLookup.get(pId);
+
+      // Resolve fields with fallbacks
+      const resolvedProductName = masterProduct?.name || item.productName || item.tempProductName || 'Unknown Product';
+      const resolvedCompanyName = masterProduct?.companyName || item.companyName || 'Unknown';
+      const resolvedQty = Number(item.qty || item.quantity) || 0;
+      const resolvedTotal = Number(item.total || item.amount) || 0;
+
+      // Log if we had to fallback to unknown
+      if (resolvedCompanyName === 'Unknown' || resolvedProductName === 'Unknown Product') {
+        // Keep log concise
+        // console.warn('[Dispatch Report] Could not resolve product/company details for item:', item);
+      }
+
+      if (filters.companyIds.length > 0 && !filters.companyIds.includes(masterProduct?.companyId || item.companyId || '')) return;
+
+      if (!productMap.has(pId)) {
+        productMap.set(pId, {
+          productId: pId,
+          productName: resolvedProductName,
+          companyName: resolvedCompanyName,
           totalQty: 0,
           cartons: 0,
           packets: 0,
@@ -63,28 +119,46 @@ const calculateMetrics = (orders: Order[], filters: ReportFilterState, products:
           totalAmount: 0
         });
       }
-      const entry = productMap.get(item.productId)!;
-      entry.totalQty += Number(item.qty) || 0; // qty is in pieces
-      entry.totalAmount += Number(item.total) || 0;
+      const entry = productMap.get(pId)!;
+      entry.totalQty += resolvedQty;
+      entry.totalAmount += resolvedTotal;
     });
   });
+
+  console.log('[Dispatch Report] Product map size:', productMap.size);
 
   // Calculate cartons, packets, and pieces breakdown using products table
   const dispatchRows = Array.from(productMap.values()).map(row => {
     // Lookup product from products table
     const product = productLookup.get(row.productId);
-    const packetsPerCarton = product?.packetsPerCarton || 1;
-    const piecesPerPacket = product?.piecesPerPacket || 1;
+
+    // Default to 0 if missing to avoid division by zero (logic already protected below)
+    const packetsPerCarton = product?.packetsPerCarton || 0;
+    const piecesPerPacket = product?.piecesPerPacket || 0;
     const totalPieces = row.totalQty; // Total quantity in pieces
 
-    // Calculate pieces per carton
+    // Calculate pieces per carton (avoid division by zero)
     const piecesPerCartonTotal = packetsPerCarton * piecesPerPacket;
 
     // Break down into cartons, packets, and pieces
-    const cartons = Math.floor(totalPieces / piecesPerCartonTotal);
-    const remainingAfterCartons = totalPieces - (cartons * piecesPerCartonTotal);
-    const packets = Math.floor(remainingAfterCartons / piecesPerPacket);
-    const pieces = remainingAfterCartons % piecesPerPacket;
+    let cartons = 0;
+    let packets = 0;
+    let pieces = 0;
+
+    if (piecesPerCartonTotal > 0) {
+      cartons = Math.floor(totalPieces / piecesPerCartonTotal);
+      const remainingAfterCartons = totalPieces - (cartons * piecesPerCartonTotal);
+
+      if (piecesPerPacket > 0) {
+        packets = Math.floor(remainingAfterCartons / piecesPerPacket);
+        pieces = remainingAfterCartons % piecesPerPacket;
+      } else {
+        pieces = remainingAfterCartons;
+      }
+    } else {
+      // If no packaging data, show all as pieces
+      pieces = totalPieces;
+    }
 
     return {
       productId: row.productId,
@@ -97,6 +171,11 @@ const calculateMetrics = (orders: Order[], filters: ReportFilterState, products:
       totalAmount: row.totalAmount
     };
   });
+
+  console.log('[Dispatch Report] Final dispatch rows:', dispatchRows.length);
+  if (dispatchRows.length > 0) {
+    console.log('[Dispatch Report] Sample row:', dispatchRows[0]);
+  }
 
   // 3. Scheme Rows (Simplified)
   const schemeRows: SchemeRow[] = []; // Logic similar to above
@@ -117,8 +196,11 @@ const calculateMetrics = (orders: Order[], filters: ReportFilterState, products:
   return { salesRows, dispatchRows, schemeRows, challanRows };
 };
 
+
+
+// Inside Reports component
 export const Reports: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'sales' | 'dispatch' | 'scheme' | 'damage' | 'challan'>('sales');
+  const [activeTab, setActiveTab] = useState<'sales' | 'dispatch' | 'scheme' | 'damage' | 'challan' | 'delivery' | 'hr'>('sales');
 
   const [filters, setFilters] = useState<ReportFilterState>({
     startDate: new Date().toISOString().split('T')[0],
@@ -127,12 +209,39 @@ export const Reports: React.FC = () => {
     employeeIds: []
   });
 
+  const [products, setProducts] = useState<Product[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [commissionRates, setCommissionRates] = useState<CommissionRate[]>([]);
+
   const [reportData, setReportData] = useState<{
     salesRows: SalesReportRow[],
     dispatchRows: DispatchRow[],
     schemeRows: SchemeRow[],
     challanRows: ChallanValidationRow[]
   }>({ salesRows: [], dispatchRows: [], schemeRows: [], challanRows: [] });
+
+  const [deliveryReportData, setDeliveryReportData] = useState<DeliveryReportData>({
+    rows: [],
+    summary: {
+      totalInvoices: 0,
+      totalDelivered: 0,
+      totalReturned: 0,
+      totalPartiallyReturned: 0,
+      totalAmount: 0,
+      totalCollected: 0,
+      paymentBreakdown: {}
+    }
+  });
+
+  // Delivery report specific filters
+  const [deliveryFilters, setDeliveryFilters] = useState<DeliveryFiltersType>({
+    startDate: new Date().toISOString().split('T')[0],
+    endDate: new Date().toISOString().split('T')[0],
+    deliveryUserId: ''
+  });
+
+  // Delivery users for filter dropdown
+  const [deliveryUsers, setDeliveryUsers] = useState<User[]>([]);
 
   const [loading, setLoading] = useState(false);
 
@@ -148,14 +257,14 @@ export const Reports: React.FC = () => {
 
       if (filters.employeeIds.length === 1) {
         // Optimized path for single employee
-        orders = await OrderService.getOrdersFiltered(
+        orders = await OrderService.getOrdersFilteredPaged(
           filters.startDate,
           filters.endDate,
           filters.employeeIds[0]
         );
       } else {
         // Fetch by date range and filter in memory for multiple employees
-        orders = await OrderService.getOrdersByDateRange(
+        orders = await OrderService.getOrdersByDateRangePaged(
           filters.startDate,
           filters.endDate
         );
@@ -167,8 +276,31 @@ export const Reports: React.FC = () => {
 
       // Fetch all products for packaging data lookup
       const products = await ProductService.getAll();
+      const companies = await CompanyService.getAll();
+      const commissionRates = await CommissionRateService.getAll();
+
+      // Update state for HR Report
+      setProducts(products);
+      setCompanies(companies);
+      setCommissionRates(commissionRates);
+
+      console.log('[Reports] Fetched data:', {
+        ordersCount: orders.length,
+        productsCount: products.length,
+        companiesCount: companies.length,
+        ratesCount: commissionRates.length,
+        filters: filters
+      });
 
       const calculated = calculateMetrics(orders, filters, products);
+
+      console.log('[Reports] Calculated metrics:', {
+        salesRows: calculated.salesRows.length,
+        dispatchRows: calculated.dispatchRows.length,
+        schemeRows: calculated.schemeRows.length,
+        challanRows: calculated.challanRows.length
+      });
+
       setReportData(calculated);
 
     } catch (e) {
@@ -178,9 +310,117 @@ export const Reports: React.FC = () => {
     }
   };
 
+  const fetchDeliveryData = async () => {
+    setLoading(true);
+    try {
+      // Fetch orders for the date range with delivered/completed status
+      let orders = await OrderService.getOrdersByDateRangePaged(
+        deliveryFilters.startDate,
+        deliveryFilters.endDate
+      );
+
+      // Filter to only delivered/completed/returned orders
+      const deliveryStatuses = ['delivered', 'completed', 'dispatched', 'partially_returned', 'returned'];
+      orders = orders.filter(o => deliveryStatuses.includes(o.status));
+
+      // Fetch all users to resolve delivery user names
+      const allUsers = await UserService.getAll();
+      const userMap = new Map<string, User>();
+      allUsers.forEach(u => userMap.set(u.id, u));
+
+      // Store delivery users for filter dropdown (only delivery role users)
+      const deliveryRoleUsers = allUsers.filter(u => u.role === 'delivery');
+      setDeliveryUsers(deliveryRoleUsers);
+
+      // Fetch all returns to link with invoices
+      const allReturns = await ReturnService.getAll();
+      const returnsByInvoiceId = new Map<string, SalesReturn>();
+      allReturns.forEach(r => returnsByInvoiceId.set(r.invoiceId, r));
+
+      // Process each order into a report row
+      const rows = orders.map(order => {
+        const discountAmount = order.discount || 0;
+        const subtotal = order.totalAmount + discountAmount;
+        const salesReturn = returnsByInvoiceId.get(order.id);
+        const returnAmount = salesReturn?.totalReturnAmount || 0;
+
+        // Try to get delivery user from order (if stored) or from assigned trip
+        // For now, we'll use a placeholder since delivery user might not be directly on order
+        const deliveryUserId = (order as any).deliveryUserId || '';
+        const deliveryUser = deliveryUserId ? userMap.get(deliveryUserId) : null;
+        const deliveryUserName = deliveryUser?.name || '';
+
+        // Get payment method from order
+        const paymentMethod = (order as any).paymentMethod || order.paymentMode || 'cash';
+
+        // Calculate collected amount (net amount - return amount for credit, otherwise net amount)
+        let collectedAmount = order.totalAmount - returnAmount;
+        if (paymentMethod.toLowerCase() === 'credit') {
+          collectedAmount = 0; // Credit means not collected yet
+        }
+
+        return {
+          invoiceId: order.id,
+          invoiceNumber: order.id,
+          customerName: order.customerName,
+          salespersonName: order.salespersonName,
+          deliveryUserName,
+          deliveryUserId,
+          status: order.status,
+          subtotal,
+          discount: discountAmount,
+          netAmount: order.totalAmount,
+          paymentMethod,
+          collectedAmount,
+          returnAmount: salesReturn ? salesReturn.totalReturnAmount : undefined,
+          returnQty: salesReturn ? (salesReturn as any).totalReturnQty : undefined,
+          date: order.date,
+          order,
+          salesReturn
+        };
+      });
+
+      // Filter by delivery user if selected
+      let filteredRows = rows;
+      if (deliveryFilters.deliveryUserId) {
+        filteredRows = rows.filter(r => r.deliveryUserId === deliveryFilters.deliveryUserId);
+      }
+
+      // Calculate summary statistics
+      const summary = {
+        totalInvoices: filteredRows.length,
+        totalDelivered: filteredRows.filter(r => r.status.toLowerCase() === 'delivered' || r.status.toLowerCase() === 'completed').length,
+        totalReturned: filteredRows.filter(r => r.status.toLowerCase() === 'returned').length,
+        totalPartiallyReturned: filteredRows.filter(r => r.status.toLowerCase() === 'partially_returned').length,
+        totalAmount: filteredRows.reduce((sum, r) => sum + r.netAmount, 0),
+        totalCollected: filteredRows.reduce((sum, r) => sum + r.collectedAmount, 0),
+        paymentBreakdown: filteredRows.reduce((breakdown, row) => {
+          const method = row.paymentMethod.toString();
+          if (!breakdown[method]) {
+            breakdown[method] = { count: 0, amount: 0 };
+          }
+          breakdown[method].count++;
+          breakdown[method].amount += row.collectedAmount;
+          return breakdown;
+        }, {} as Record<string, { count: number; amount: number }>)
+      };
+
+      setDeliveryReportData({ rows: filteredRows, summary });
+
+    } catch (e) {
+      console.error('Error fetching delivery data:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    fetchData();
-  }, [filters]);
+    if (activeTab === 'delivery') {
+      fetchDeliveryData();
+    } else if (activeTab !== 'damage') {
+      fetchData();
+    }
+  }, [filters, activeTab, deliveryFilters]);
 
   const tabs = [
     { id: 'sales', label: 'Sales Report', icon: FileText },
@@ -188,6 +428,8 @@ export const Reports: React.FC = () => {
     { id: 'scheme', label: 'Secondary Scheme', icon: Percent },
     { id: 'damage', label: 'Damaged Goods', icon: AlertTriangle },
     { id: 'challan', label: 'Challan Validation', icon: FileCheck },
+    { id: 'delivery', label: 'Delivery Report', icon: UserCheck },
+    { id: 'hr', label: 'HR & Commission', icon: UserCheck }, // Reusing UserCheck icon
   ];
 
   return (
@@ -213,17 +455,37 @@ export const Reports: React.FC = () => {
         ))}
       </div>
 
-      {activeTab !== 'damage' && (
+      {activeTab === 'delivery' && (
+        <DeliveryReportFilters
+          filters={deliveryFilters}
+          setFilters={setDeliveryFilters}
+          deliveryUsers={deliveryUsers}
+          onGenerate={fetchDeliveryData}
+          loading={loading}
+        />
+      )}
+
+      {activeTab !== 'damage' && activeTab !== 'delivery' && (
         <ReportFilters filters={filters} setFilters={setFilters} onGenerate={fetchData} />
       )}
 
-      <div className="animate-in fade-in duration-300">
-        {activeTab === 'sales' && <SalesReport data={reportData.salesRows} />}
-        {activeTab === 'dispatch' && <DispatchReport data={reportData.dispatchRows} />}
-        {activeTab === 'scheme' && <SchemeReport data={reportData.schemeRows} />}
-        {activeTab === 'damage' && <DamagedGoodsReport />}
-        {activeTab === 'challan' && <ChallanReport data={reportData.challanRows} />}
-      </div>
+      {loading && activeTab !== 'delivery' && (
+        <div className="flex justify-center p-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+        </div>
+      )}
+
+      {!loading && (
+        <>
+          {activeTab === 'sales' && <SalesReport data={reportData.salesRows} />}
+          {activeTab === 'dispatch' && <DispatchReport data={reportData.dispatchRows} />}
+          {activeTab === 'scheme' && <SchemeReport data={reportData.schemeRows} />}
+          {activeTab === 'damage' && <DamagedGoodsReport />}
+          {activeTab === 'challan' && <ChallanReport data={reportData.challanRows} />}
+          {activeTab === 'delivery' && <DeliveryReport data={deliveryReportData} />}
+          {activeTab === 'hr' && <HRCommissionReport data={reportData.salesRows} products={products} companies={companies} commissionRates={commissionRates} />}
+        </>
+      )}
     </div>
   );
 };

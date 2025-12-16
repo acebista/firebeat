@@ -11,7 +11,7 @@ export const ReturnsList: React.FC = () => {
   const [returns, setReturns] = useState<SalesReturn[]>([]);
   const [filteredReturns, setFilteredReturns] = useState<SalesReturn[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -19,29 +19,29 @@ export const ReturnsList: React.FC = () => {
 
   useEffect(() => {
     const loadData = async () => {
-        setLoading(true);
-        try {
-            const data = await ReturnService.getAll();
-            // Sort by date desc
-            data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-            setReturns(data);
-            setFilteredReturns(data);
-        } catch(e) {
-            console.error(e);
-        } finally {
-            setLoading(false);
-        }
+      setLoading(true);
+      try {
+        const data = await ReturnService.getAll();
+        // Sort by date desc
+        data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setReturns(data);
+        setFilteredReturns(data);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
     };
     loadData();
   }, []);
 
   useEffect(() => {
     let result = returns;
-    
+
     if (searchTerm) {
       const lower = searchTerm.toLowerCase();
-      result = result.filter(r => 
-        r.invoiceNumber.toLowerCase().includes(lower) || 
+      result = result.filter(r =>
+        r.invoiceNumber.toLowerCase().includes(lower) ||
         r.customerName.toLowerCase().includes(lower)
       );
     }
@@ -66,47 +66,47 @@ export const ReturnsList: React.FC = () => {
           <p className="text-sm text-gray-500">Manage customer returns and rejections</p>
         </div>
         <div className="flex gap-2">
-           <Button variant="outline" onClick={() => navigate('/admin/damaged-goods')}>
-             <FileText className="mr-2 h-4 w-4" /> Damaged Report
-           </Button>
-           <Button onClick={() => navigate('/admin/invoices/select-return')}>
-             <Plus className="mr-2 h-4 w-4" /> Create Return
-           </Button>
+          <Button variant="outline" onClick={() => navigate('/admin/damaged-goods')}>
+            <FileText className="mr-2 h-4 w-4" /> Damaged Report
+          </Button>
+          <Button onClick={() => navigate('/admin/invoices/select-return')}>
+            <Plus className="mr-2 h-4 w-4" /> Create Return
+          </Button>
         </div>
       </div>
 
       {/* Filters */}
       <Card className="p-4">
         <div className="flex flex-col md:flex-row gap-4">
-           <div className="relative flex-grow">
-             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
-             <Input 
-               placeholder="Search Invoice or Customer..." 
-               className="pl-9"
-               value={searchTerm}
-               onChange={(e) => setSearchTerm(e.target.value)}
-             />
-           </div>
-           <div className="relative w-full md:w-48">
-             <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 z-10" />
-             <input 
-               type="date"
-               className="w-full rounded-md border border-gray-300 pl-9 pr-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
-               value={dateFilter}
-               onChange={(e) => setDateFilter(e.target.value)}
-             />
-           </div>
-           <div className="w-full md:w-48">
-             <Select 
-               options={[
-                 { label: 'All Types', value: 'all' },
-                 { label: 'Full Return', value: 'full' },
-                 { label: 'Partial Return', value: 'partial' }
-               ]}
-               value={typeFilter}
-               onChange={(e) => setTypeFilter(e.target.value)}
-             />
-           </div>
+          <div className="relative flex-grow">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+            <Input
+              placeholder="Search Invoice or Customer..."
+              className="pl-9"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div className="relative w-full md:w-48">
+            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 z-10" />
+            <input
+              type="date"
+              className="w-full rounded-md border border-gray-300 pl-9 pr-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+            />
+          </div>
+          <div className="w-full md:w-48">
+            <Select
+              options={[
+                { label: 'All Types', value: 'all' },
+                { label: 'Full Return', value: 'full' },
+                { label: 'Partial Return', value: 'partial' }
+              ]}
+              value={typeFilter}
+              onChange={(value) => setTypeFilter(value)}
+            />
+          </div>
         </div>
       </Card>
 
@@ -145,7 +145,7 @@ export const ReturnsList: React.FC = () => {
                       <div className="text-xs text-gray-500">Inv: {ret.invoiceNumber}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <Badge color={ret.returnType === 'full' ? 'red' : 'yellow'}>
+                      <Badge color={ret.returnType === 'full' ? 'red' : 'amber'}>
                         {ret.returnType === 'full' ? 'Full Return' : 'Partial'}
                       </Badge>
                     </td>

@@ -267,9 +267,8 @@ export const DeliveryOrdersList: React.FC = () => {
       {/* Toast */}
       {toastMessage && (
         <div
-          className={`fixed top-4 right-4 px-4 py-3 rounded-lg text-white flex items-center gap-2 z-50 ${
-            toastType === 'success' ? 'bg-green-600' : 'bg-red-600'
-          }`}
+          className={`fixed top-4 right-4 px-4 py-3 rounded-lg text-white flex items-center gap-2 z-50 ${toastType === 'success' ? 'bg-green-600' : 'bg-red-600'
+            }`}
         >
           {toastType === 'success' ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
           {toastMessage}
@@ -307,7 +306,7 @@ export const DeliveryOrdersList: React.FC = () => {
                 onDeliver={() => handleOpenModal(order, 'deliver')}
                 onReturn={() => handleOpenModal(order, 'return')}
                 onDelay={() => handleOpenModal(order, 'delay')}
-                onViewDetails={() => navigate(`/delivery/orders/${order.id}`)}
+                onViewDetails={() => navigate(`/delivery/invoice/${order.id}`)}
               />
             ))}
           </div>

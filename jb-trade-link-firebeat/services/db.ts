@@ -53,7 +53,7 @@ const fetchVehicles = async (): Promise<Vehicle[]> => {
       console.error('Supabase error fetching vehicles:', error);
       throw error;
     }
-    
+
     // Map lowercase database columns to camelCase
     return (data || []).map(v => ({
       id: v.id,
@@ -77,7 +77,7 @@ export const ProductService = {
   add: async (product: Omit<Product, 'id'>) => {
     // Generate a unique ID if not provided (using short UUID prefix)
     const id = (product as any).id || `prod_${crypto.randomUUID().split('-')[0]}`;
-    
+
     // Insert with generated ID
     const { data, error } = await supabase
       .from(COLS.PRODUCTS)
@@ -99,6 +99,34 @@ export const ProductService = {
 
 export const CustomerService = {
   getAll: () => fetchCollection<Customer>(COLS.CUSTOMERS),
+  // New method to fetch ALL customers recursively (bypassing 1000 row limit)
+  getAllRecursively: async (): Promise<Customer[]> => {
+    let from = 0;
+    const batchSize = 1000;
+    let hasMore = true;
+    const allCustomers: Customer[] = [];
+
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from(COLS.CUSTOMERS)
+        .select('*')
+        .range(from, from + batchSize - 1);
+
+      if (error) {
+        console.error('Error fetching all customers recursively:', error);
+        throw error;
+      }
+
+      if (data && data.length > 0) {
+        allCustomers.push(...(data as Customer[]));
+        from += batchSize;
+        hasMore = data.length === batchSize;
+      } else {
+        hasMore = false;
+      }
+    }
+    return allCustomers;
+  },
   add: async (customer: Omit<Customer, 'id'>) => {
     const { data, error } = await supabase.from(COLS.CUSTOMERS).upsert(customer).select().single();
     if (error) throw error;
@@ -135,8 +163,215 @@ export const CompanyService = {
 
 export const OrderService = {
   getAll: () => fetchCollection<Order>(COLS.ORDERS),
+
+  // Fetch ALL order IDs (no limit) for duplicate checking
+  getAllOrderIds: async (): Promise<string[]> => {
+    const allIds: string[] = [];
+    let from = 0;
+    const batchSize = 1000;
+    let hasMore = true;
+
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from(COLS.ORDERS)
+        .select('id')
+        .range(from, from + batchSize - 1);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        allIds.push(...data.map(row => row.id));
+        from += batchSize;
+        hasMore = data.length === batchSize; // Continue if we got a full batch
+      } else {
+        hasMore = false;
+      }
+    }
+
+    return allIds;
+  },
+
+  // Paginated fetch for verification - reads ALL orders in batches
+  getAllPaged: async (onBatch: (orders: Order[], batchNum: number) => void): Promise<number> => {
+    let from = 0;
+    const batchSize = 500;
+    let hasMore = true;
+    let batchNum = 0;
+    let totalCount = 0;
+
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from(COLS.ORDERS)
+        .select('*')
+        .range(from, from + batchSize - 1);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        batchNum++;
+        totalCount += data.length;
+        onBatch(data as Order[], batchNum);
+        from += batchSize;
+        hasMore = data.length === batchSize;
+      } else {
+        hasMore = false;
+      }
+    }
+
+    return totalCount;
+  },
+
+  // Batch insert orders with retry logic
+  batchInsert: async (
+    orders: any[],
+    batchSize: number = 200,
+    onProgress?: (inserted: number, failed: number, total: number) => void
+  ): Promise<{ success: number; failed: Array<{ id: string; error: string }> }> => {
+    let successCount = 0;
+    const failedOrders: Array<{ id: string; error: string }> = [];
+
+    for (let i = 0; i < orders.length; i += batchSize) {
+      const batch = orders.slice(i, i + batchSize);
+
+      try {
+        const { data, error } = await supabase
+          .from(COLS.ORDERS)
+          .insert(batch)
+          .select();
+
+        if (error) {
+          // If batch fails, try one-by-one with retry
+          for (const order of batch) {
+            let retries = 2;
+            let inserted = false;
+
+            while (retries > 0 && !inserted) {
+              try {
+                await supabase.from(COLS.ORDERS).insert(order);
+                successCount++;
+                inserted = true;
+              } catch (err: any) {
+                retries--;
+                if (retries === 0) {
+                  failedOrders.push({ id: order.id, error: err.message || err.toString() });
+                } else {
+                  // Wait 100ms before retry
+                  await new Promise(resolve => setTimeout(resolve, 100));
+                }
+              }
+            }
+          }
+        } else {
+          successCount += batch.length;
+        }
+      } catch (err: any) {
+        // Batch insert failed, try individual inserts with retry
+        for (const order of batch) {
+          let retries = 2;
+          let inserted = false;
+
+          while (retries > 0 && !inserted) {
+            try {
+              await supabase.from(COLS.ORDERS).insert(order);
+              successCount++;
+              inserted = true;
+            } catch (err: any) {
+              retries--;
+              if (retries === 0) {
+                failedOrders.push({ id: order.id, error: err.message || err.toString() });
+              } else {
+                await new Promise(resolve => setTimeout(resolve, 100));
+              }
+            }
+          }
+        }
+      }
+
+      if (onProgress) {
+        onProgress(successCount, failedOrders.length, orders.length);
+      }
+    }
+
+    return { success: successCount, failed: failedOrders };
+  },
+
+  // Batch upsert orders (for update/upsert mode)
+  batchUpsert: async (
+    orders: any[],
+    batchSize: number = 200,
+    onProgress?: (upserted: number, failed: number, total: number) => void
+  ): Promise<{ success: number; failed: Array<{ id: string; error: string }> }> => {
+    let successCount = 0;
+    const failedOrders: Array<{ id: string; error: string }> = [];
+
+    for (let i = 0; i < orders.length; i += batchSize) {
+      const batch = orders.slice(i, i + batchSize);
+
+      try {
+        const { data, error } = await supabase
+          .from(COLS.ORDERS)
+          .upsert(batch, { onConflict: 'id' })
+          .select();
+
+        if (error) {
+          // If batch fails, try one-by-one with retry
+          for (const order of batch) {
+            let retries = 2;
+            let upserted = false;
+
+            while (retries > 0 && !upserted) {
+              try {
+                await supabase.from(COLS.ORDERS).upsert(order, { onConflict: 'id' });
+                successCount++;
+                upserted = true;
+              } catch (err: any) {
+                retries--;
+                if (retries === 0) {
+                  failedOrders.push({ id: order.id, error: err.message || err.toString() });
+                } else {
+                  await new Promise(resolve => setTimeout(resolve, 100));
+                }
+              }
+            }
+          }
+        } else {
+          successCount += batch.length;
+        }
+      } catch (err: any) {
+        // Batch upsert failed, try individual upserts with retry
+        for (const order of batch) {
+          let retries = 2;
+          let upserted = false;
+
+          while (retries > 0 && !upserted) {
+            try {
+              await supabase.from(COLS.ORDERS).upsert(order, { onConflict: 'id' });
+              successCount++;
+              upserted = true;
+            } catch (err: any) {
+              retries--;
+              if (retries === 0) {
+                failedOrders.push({ id: order.id, error: err.message || err.toString() });
+              } else {
+                await new Promise(resolve => setTimeout(resolve, 100));
+              }
+            }
+          }
+        }
+      }
+
+      if (onProgress) {
+        onProgress(successCount, failedOrders.length, orders.length);
+      }
+    }
+
+    return { success: successCount, failed: failedOrders };
+  },
+
   add: async (order: Omit<Order, 'id'>) => {
-    const { data, error } = await supabase.from(COLS.ORDERS).upsert(order).select().single();
+    // Use insert instead of upsert to avoid silent failures
+    // If you need upsert behavior, the caller should handle it explicitly
+    const { data, error } = await supabase.from(COLS.ORDERS).insert(order).select().single();
     if (error) throw error;
     return data as Order;
   },
@@ -195,6 +430,65 @@ export const OrderService = {
     const { data, error } = await query;
     if (error) throw error;
     return data as Order[];
+  },
+
+  getOrdersByDateRangePaged: async (startDate: string, endDate: string) => {
+    let from = 0;
+    const batchSize = 1000;
+    let hasMore = true;
+    const allOrders: Order[] = [];
+
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from(COLS.ORDERS)
+        .select('*')
+        .gte('date', startDate)
+        .lte('date', endDate)
+        .range(from, from + batchSize - 1);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        allOrders.push(...(data as Order[]));
+        from += batchSize;
+        hasMore = data.length === batchSize;
+      } else {
+        hasMore = false;
+      }
+    }
+    return allOrders;
+  },
+
+  getOrdersFilteredPaged: async (startDate: string, endDate: string, salespersonId?: string) => {
+    let from = 0;
+    const batchSize = 1000;
+    let hasMore = true;
+    const allOrders: Order[] = [];
+
+    while (hasMore) {
+      let query = supabase.from(COLS.ORDERS).select('*')
+        .gte('date', startDate)
+        .lte('date', endDate);
+
+      if (salespersonId && salespersonId !== 'all') {
+        query = query.eq('salespersonId', salespersonId);
+      }
+
+      query = query.order('date', { ascending: false });
+
+      const { data, error } = await query.range(from, from + batchSize - 1);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        allOrders.push(...(data as Order[]));
+        from += batchSize;
+        hasMore = data.length === batchSize;
+      } else {
+        hasMore = false;
+      }
+    }
+    return allOrders;
   }
 };
 
@@ -208,7 +502,7 @@ export const TripService = {
   add: async (trip: Omit<DispatchTrip, 'id'>) => {
     // Generate a unique ID for the trip
     const id = `trip_${crypto.randomUUID().split('-')[0]}`;
-    
+
     const { data, error } = await supabase
       .from(COLS.TRIPS)
       .insert({ ...trip, id })
@@ -289,6 +583,11 @@ export const UserService = {
   },
   getByEmail: async (email: string) => {
     const { data, error } = await supabase.from(COLS.USERS).select('*').eq('email', email);
+    if (error) throw error;
+    return data as User[];
+  },
+  getByPhone: async (phone: string) => {
+    const { data, error } = await supabase.from(COLS.USERS).select('*').eq('phone', phone);
     if (error) throw error;
     return data as User[];
   }

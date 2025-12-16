@@ -7,7 +7,7 @@
  * Phase 3.1: Status Model & Workflow Canon
  */
 
-import { supabase } from '@/config/supabase';
+import { supabase } from '../../lib/supabase';
 import {
   OrderStatus,
   UserRole,
@@ -311,9 +311,62 @@ export class StateManager {
   }
 
   /**
-   * Validate if all requirements are met for a transition
+   * Validate if all requirements are met for a transition (async version for component usage)
+   * Fetches order data and validates requirements
    */
-  static validateTransitionRequirements(
+  static async validateTransitionRequirements(
+    orderId: string,
+    toStatus: OrderStatus
+  ): Promise<boolean> {
+    try {
+      // Fetch current order to get current status
+      const { data: order, error: fetchError } = await supabase
+        .from('orders')
+        .select('status')
+        .eq('id', orderId)
+        .single();
+
+      if (fetchError || !order) {
+        return false;
+      }
+
+      const fromStatus = order.status as OrderStatus;
+      const transitionKey = `${fromStatus}->${toStatus}`;
+      const requirements = TRANSITION_REQUIREMENTS[transitionKey];
+
+      // If no specific requirements, transition is valid
+      if (!requirements) {
+        return true;
+      }
+
+      // Check if required fields exist in order
+      if (requirements.requiredFields && requirements.requiredFields.length > 0) {
+        const { data: fullOrder } = await supabase
+          .from('orders')
+          .select('*')
+          .eq('id', orderId)
+          .single();
+
+        if (!fullOrder) return false;
+
+        for (const field of requirements.requiredFields) {
+          if (!(field in fullOrder) || !fullOrder[field as keyof typeof fullOrder]) {
+            return false;
+          }
+        }
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error validating transition requirements:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Validate transition requirements synchronously (returns errors)
+   */
+  static validateTransitionRequirementsSync(
     fromStatus: OrderStatus,
     toStatus: OrderStatus,
     metadata?: Record<string, any>

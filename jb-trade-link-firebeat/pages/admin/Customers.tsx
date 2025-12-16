@@ -173,7 +173,7 @@ export const CustomerManagement: React.FC = () => {
             <Select
               options={[{ label: 'All Routes', value: 'all' }, ...routes.map(r => ({ label: r, value: r }))]}
               value={filterRoute}
-              onChange={(e) => setFilterRoute(e.target.value)}
+              onChange={(value) => setFilterRoute(value)}
             />
           </div>
         </div>

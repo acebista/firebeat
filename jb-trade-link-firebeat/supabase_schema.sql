@@ -73,21 +73,31 @@ CREATE TABLE IF NOT EXISTS "products" (
 );
 
 -- Orders Table
-CREATE TABLE IF NOT EXISTS "orders" (
-  "id" text PRIMARY KEY,
-  "customerId" text NOT NULL,
-  "customerName" text NOT NULL,
-  "salespersonId" text NOT NULL,
-  "salespersonName" text NOT NULL,
-  "date" text NOT NULL,
-  "totalItems" integer,
-  "totalAmount" double precision,
-  "discountPct" double precision DEFAULT 0,
-  "status" text,
-  "remarks" text,
-  "assignedTripId" text,
-  "items" jsonb -- Storing items as JSONB for simplicity and compatibility with existing structure
-);
+create table public.orders (
+  id text not null,
+  "customerId" text null,
+  "customerName" text null,
+  "salespersonId" text null,
+  "salespersonName" text null,
+  date date null,
+  "totalItems" integer null,
+  "totalAmount" real null,
+  status text null,
+  items jsonb null,
+  remarks text null,
+  "assignedTripId" text null,
+  discount real null,
+  "GPS" text null,
+  time timestamp with time zone null,
+  "paymentMethod" text null,
+  "vatRequired?" boolean null,
+  status_updated_at timestamp with time zone null default now(),
+  status_updated_by uuid null,
+  sales_returns numeric null default 0,
+  constraint orders_pkey primary key (id),
+  constraint orders_status_updated_by_fkey foreign KEY (status_updated_by) references auth.users (id) on delete set null,
+  constraint orders_sales_returns_check check ((sales_returns >= (0)::numeric))
+) TABLESPACE pg_default;
 
 -- Trips Table
 CREATE TABLE IF NOT EXISTS "trips" (

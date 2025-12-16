@@ -24,6 +24,7 @@ import { VehicleManagement } from './pages/admin/Vehicles';
 import { Purchases } from './pages/admin/Purchases';
 import { Reports } from './pages/admin/Reports';
 import { SystemHealth } from './pages/admin/SystemHealth';
+import HRPanel from './components/admin/HRPanel';
 
 // Returns & Damages
 import { ReturnsList } from './pages/admin/Returns';
@@ -154,6 +155,7 @@ const App: React.FC = () => {
             <Route path="/admin/trips" element={<TripsOverview />} />
             <Route path="/admin/vehicles" element={<VehicleManagement />} />
             <Route path="/admin/purchases" element={<Purchases />} />
+            <Route path="/admin/hr" element={<HRPanel />} />
 
             {/* Returns & Damages */}
             <Route path="/admin/returns" element={<ReturnsList />} />
@@ -165,6 +167,7 @@ const App: React.FC = () => {
             <Route path="/admin/health" element={<SystemHealth />} />
             <Route path="/admin/migration" element={<Migration />} />
             <Route path="/admin/unknown-product-cleanup" element={<UnknownProductCleanup />} />
+            <Route path="/admin/create-order" element={<CreateOrder />} />
           </Route>
 
           {/* Sales Routes */}

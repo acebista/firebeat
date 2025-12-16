@@ -3,15 +3,26 @@ import { z } from 'zod';
 export const userSchema = z.object({
     name: z.string().min(2, 'Name must be at least 2 characters'),
     email: z.string().email('Invalid email address'),
-    phone: z.string().regex(/^\d{10}$/, 'Phone must be exactly 10 digits').optional().or(z.literal('')),
+    phone: z.union([
+        z.string().regex(/^\d{10}$/, 'Phone must be exactly 10 digits'),
+        z.literal('')
+    ]).optional().or(z.string().regex(/^\d{10}$/, 'Phone must be exactly 10 digits')).optional(),
     role: z.enum(['admin', 'sales', 'delivery']),
     isActive: z.boolean(),
-});
+    // Compensation fields
+    comp_plan_type: z.enum(['fixed', 'commission']).optional(),
+    base_salary: z.number().min(0).nullable().optional(),
+}).transform(data => ({
+    ...data,
+    phone: data.phone || ''
+}));
 
 export const companySchema = z.object({
     name: z.string().min(2, 'Company name must be at least 2 characters'),
     code: z.string().min(2, 'Code must be at least 2 characters').max(10, 'Code too long'),
     isActive: z.boolean(),
+    commission_rate: z.number().min(0).max(100).optional().nullable(),
+    commission_type: z.enum(['flat', 'slab']).default('flat').optional(),
 });
 
 export const tripSchema = z.object({
@@ -48,6 +59,7 @@ export const productSchema = z.object({
     companyName: z.string().optional(),
     category: z.string().optional(),
     metadata: z.unknown().optional(),
+    commission_rate: z.number().min(0).max(100).optional().nullable(),
 });
 
 export const orderItemSchema = z.object({
