@@ -324,16 +324,17 @@ export const Login: React.FC = () => {
               >
                 Forgot password?
               </button>
-              {isDevRegistrationEnabled && (
+              {/* Only show registration in development with explicit flag */}
+              {import.meta.env.DEV && isDevRegistrationEnabled && (
                 <button
                   type="button"
                   onClick={() => {
                     setIsRegistering(true);
                     setLocalError('');
                   }}
-                  className="text-indigo-600 hover:underline"
+                  className="text-gray-500 text-xs hover:underline"
                 >
-                  Register (Dev)
+                  Dev Register
                 </button>
               )}
             </div>

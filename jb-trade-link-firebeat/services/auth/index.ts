@@ -6,15 +6,9 @@ export { useAuth, useUser, useUserStoreData } from './useAuth';
 export type { AuthContextValue, AuthState, AuthErrorType } from './authTypes';
 export { AuthStatus } from './authTypes';
 
-// Utilities
+// Utilities & Helpers
 export { getDashboardPath } from './authUtils';
-
-// Zustand store (for state management)
-export { useUserStore, clearStaleUserData, subscribeToUserChanges } from './userStore';
-
-// Services (for advanced usage)
-export * from './authService';
-export * from './profileService';
-
+export * from './authHelpers';  // Role/permission utilities
+export * from './authSelectors'; // Store selectors & hooks
 // Emergency cleanup (import to activate)
 import './emergencyCleanup';
