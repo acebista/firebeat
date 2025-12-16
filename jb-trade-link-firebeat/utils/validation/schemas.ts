@@ -3,19 +3,16 @@ import { z } from 'zod';
 export const userSchema = z.object({
     name: z.string().min(2, 'Name must be at least 2 characters'),
     email: z.string().email('Invalid email address'),
-    phone: z.union([
-        z.string().regex(/^\d{10}$/, 'Phone must be exactly 10 digits'),
-        z.literal('')
-    ]).optional().or(z.string().regex(/^\d{10}$/, 'Phone must be exactly 10 digits')).optional(),
+    phone: z.string()
+        .regex(/^$|^\d{10}$/, 'Phone must be exactly 10 digits')
+        .optional()
+        .default(''),
     role: z.enum(['admin', 'sales', 'delivery']),
     isActive: z.boolean(),
     // Compensation fields
     comp_plan_type: z.enum(['fixed', 'commission']).optional(),
     base_salary: z.number().min(0).nullable().optional(),
-}).transform(data => ({
-    ...data,
-    phone: data.phone || ''
-}));
+});
 
 export const companySchema = z.object({
     name: z.string().min(2, 'Company name must be at least 2 characters'),
@@ -32,7 +29,7 @@ export const tripSchema = z.object({
 
 export const customerSchema = z.object({
     name: z.string().min(2, 'Shop name must be at least 2 characters'),
-    phone: z.string().regex(/^\d{10}$/, 'Phone must be exactly 10 digits').optional().or(z.literal('')),
+    phone: z.string().regex(/^$|^\d{10}$/, 'Phone must be exactly 10 digits').optional().default(''),
     panNumber: z.string().optional(),
     routeName: z.string().optional(),
     creditLimit: z.number().min(0).optional(),
