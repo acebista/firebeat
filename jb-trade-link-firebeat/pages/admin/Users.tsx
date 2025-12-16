@@ -6,7 +6,7 @@ import { User, UserRole } from '../../types';
 import { UserService } from '../../services/db';
 import { supabase } from '../../lib/supabase';
 import { userSchema } from '../../utils/validation/schemas';
-import { validatePasswordStrength, generateTemporaryPassword } from '../../services/admin/passwordManagement';
+import { validatePasswordStrength, generateTemporaryPassword, adminSetPassword } from '../../services/admin/passwordManagement';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
 
@@ -239,33 +239,14 @@ export const UserManagement: React.FC = () => {
 
     setSettingPassword(true);
     try {
-      // Update user password in Supabase Auth
-      const { error } = await supabase.auth.admin.updateUserById(selectedUserForPassword.id, {
-        password: newPassword,
-      });
-
-      if (error) {
-        // If admin API isn't available, show helpful message
-        if (error.message?.includes('not found') || error.message?.includes('admin')) {
-          toast.error(
-            'Password setting requires admin privileges. ' +
-            'Please contact support or check Supabase Edge Functions are deployed. ' +
-            'For now, use "Send Password Reset Email" button instead.'
-          );
-        } else {
-          throw error;
-        }
-      } else {
-        toast.success(`Password set for ${selectedUserForPassword.name}`);
-        closePasswordModal();
-      }
+      // Call the admin password management Edge Function
+      await adminSetPassword(selectedUserForPassword.id, newPassword);
+      
+      toast.success(`Password set for ${selectedUserForPassword.name}`);
+      closePasswordModal();
     } catch (error: any) {
       console.error('Failed to set password:', error);
-      // Fallback message
-      toast.error(
-        `Supabase admin client needed. Use Edge Function for production. ` +
-        `For testing, manually reset password via Supabase dashboard or use password reset email.`
-      );
+      toast.error(error.message || 'Failed to set password. Make sure you are an admin.');
     } finally {
       setSettingPassword(false);
     }

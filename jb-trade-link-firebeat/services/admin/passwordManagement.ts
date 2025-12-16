@@ -22,22 +22,22 @@ export interface SetPasswordResponse {
 /**
  * Set or reset a user's password (admin only)
  * 
- * This should be called only by admins. In production, this would typically
- * be an Edge Function that verifies admin privileges.
+ * Calls the Supabase Edge Function 'admin-update-password' which verifies
+ * the caller is an admin and updates the user's password with admin privileges.
  * 
- * @param email - User's email address
+ * @param userId - User's ID (UUID)
  * @param newPassword - New password to set
  * @returns Response with success status
  */
 export async function adminSetPassword(
-  email: string,
+  userId: string,
   newPassword: string
 ): Promise<SetPasswordResponse> {
   try {
     // Call the admin password management edge function
-    const { data, error } = await supabase.functions.invoke('admin-set-password', {
+    const { data, error } = await supabase.functions.invoke('admin-update-password', {
       body: {
-        email,
+        userId,
         newPassword,
       },
     });
@@ -49,43 +49,13 @@ export async function adminSetPassword(
 
     return {
       success: true,
-      message: `Password set for ${email}`,
-      userId: data?.userId,
+      message: data?.message || 'Password set successfully',
+      userId,
     };
   } catch (error: any) {
     console.error('[AdminPasswordService] Failed to set password:', error);
     
-    // Fallback if edge function doesn't exist yet
-    if (error?.message?.includes('not found')) {
-      console.warn('[AdminPasswordService] Using fallback method...');
-      return fallbackSetPassword(email, newPassword);
-    }
-
     throw new Error(`Failed to set password: ${error.message || error}`);
-  }
-}
-
-/**
- * Fallback method: Direct Supabase auth API call
- * 
- * Note: This requires the admin client, which is not available in client code.
- * For now, this documents the intended flow.
- */
-async function fallbackSetPassword(
-  email: string,
-  newPassword: string
-): Promise<SetPasswordResponse> {
-  try {
-    // This would typically be done on a backend service with admin privileges
-    // For now, we log what would need to happen
-    console.log('[AdminPasswordService] Fallback: Would call supabase.auth.admin.updateUserById({...})');
-    
-    return {
-      success: true,
-      message: `Password set for ${email} (via fallback)`,
-    };
-  } catch (error: any) {
-    throw new Error(`Fallback password set failed: ${error.message}`);
   }
 }
 
