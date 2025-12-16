@@ -5,7 +5,7 @@
  * Shows by product and by trip/order with filters
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Calendar, AlertCircle, Loader, Package, Truck, ChevronDown } from 'lucide-react';
 import {
   getStockInTransitByProduct,
@@ -14,6 +14,7 @@ import {
   StockInTransitByTrip,
 } from '../../../services/inventory/inventoryService';
 import { getTodayISO, normalizeDateToISO } from '../../../services/inventory/inventoryUtils';
+import { ProductSearchFilter } from '../../../components/inventory/ProductSearchFilter';
 import { subDays } from 'date-fns';
 
 type ViewType = 'byProduct' | 'byTrip';
@@ -28,6 +29,7 @@ export function StockInTransitTab({ isAdmin }: { isAdmin: boolean }) {
   const [startDate, setStartDate] = useState(normalizeDateToISO(subDays(new Date(), 30)));
   const [endDate, setEndDate] = useState(getTodayISO());
   const [search, setSearch] = useState('');
+  const [selectedProductId, setSelectedProductId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     loadData();
@@ -53,9 +55,28 @@ export function StockInTransitTab({ isAdmin }: { isAdmin: boolean }) {
     }
   }
 
+  // Filter data by selected product if any
+  const filteredDataByProduct = useMemo(() => {
+    if (!selectedProductId) return dataByProduct;
+    return dataByProduct.filter(item => item.product_id === selectedProductId);
+  }, [dataByProduct, selectedProductId]);
+
+  const filteredDataByTrip = useMemo(() => {
+    if (!selectedProductId) return dataByTrip;
+    // For trip view, filter trips that contain the selected product
+    return dataByTrip.filter(trip =>
+      trip.items.some(item => item.product_id === selectedProductId)
+    ).map(trip => ({
+      ...trip,
+      // Also filter the items within each trip
+      items: trip.items.filter(item => item.product_id === selectedProductId)
+    }));
+  }, [dataByTrip, selectedProductId]);
+
+  // Calculate totals from filtered data
   const totalQtyInTransit = view === 'byProduct'
-    ? dataByProduct.reduce((sum, item) => sum + item.total_qty_in_transit, 0)
-    : dataByTrip.reduce((sum, trip) => sum + trip.items.reduce((s, i) => s + i.qty_in_transit, 0), 0);
+    ? filteredDataByProduct.reduce((sum, item) => sum + item.total_qty_in_transit, 0)
+    : filteredDataByTrip.reduce((sum, trip) => sum + trip.items.reduce((s, i) => s + i.qty_in_transit, 0), 0);
 
   return (
     <div className="space-y-6">
@@ -63,22 +84,20 @@ export function StockInTransitTab({ isAdmin }: { isAdmin: boolean }) {
       <div className="flex space-x-4 border-b border-gray-200">
         <button
           onClick={() => setView('byProduct')}
-          className={`px-4 py-3 font-medium text-sm border-b-2 transition-colors ${
-            view === 'byProduct'
-              ? 'border-blue-500 text-blue-600'
-              : 'border-transparent text-gray-600 hover:text-gray-900'
-          }`}
+          className={`px-4 py-3 font-medium text-sm border-b-2 transition-colors ${view === 'byProduct'
+            ? 'border-blue-500 text-blue-600'
+            : 'border-transparent text-gray-600 hover:text-gray-900'
+            }`}
         >
           <Package size={16} className="inline mr-2" />
           By Product
         </button>
         <button
           onClick={() => setView('byTrip')}
-          className={`px-4 py-3 font-medium text-sm border-b-2 transition-colors ${
-            view === 'byTrip'
-              ? 'border-blue-500 text-blue-600'
-              : 'border-transparent text-gray-600 hover:text-gray-900'
-          }`}
+          className={`px-4 py-3 font-medium text-sm border-b-2 transition-colors ${view === 'byTrip'
+            ? 'border-blue-500 text-blue-600'
+            : 'border-transparent text-gray-600 hover:text-gray-900'
+            }`}
         >
           <Truck size={16} className="inline mr-2" />
           By Trip/Order
@@ -87,7 +106,7 @@ export function StockInTransitTab({ isAdmin }: { isAdmin: boolean }) {
 
       {/* Filters */}
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Date range */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Dispatch Start Date</label>
@@ -114,14 +133,26 @@ export function StockInTransitTab({ isAdmin }: { isAdmin: boolean }) {
             </div>
           </div>
 
-          {/* Search */}
+          {/* Product Filter with Typeahead */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Product</label>
+            <ProductSearchFilter
+              selectedProductId={selectedProductId}
+              onSelect={(product) => setSelectedProductId(product?.id)}
+              placeholder="Search product..."
+            />
+          </div>
+
+          {/* Text Search */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              {view === 'byProduct' ? 'Company Search' : 'Destination Search'}
+            </label>
             <div className="flex items-center space-x-2 bg-white border border-gray-300 rounded-lg px-3 py-2">
               <Search size={16} className="text-gray-400" />
               <input
                 type="text"
-                placeholder={view === 'byProduct' ? 'Product, company...' : 'Destination, customer...'}
+                placeholder={view === 'byProduct' ? 'Company name...' : 'Destination, customer...'}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 className="flex-1 outline-none text-sm"
@@ -173,14 +204,14 @@ export function StockInTransitTab({ isAdmin }: { isAdmin: boolean }) {
               </tr>
             </thead>
             <tbody>
-              {dataByProduct.length === 0 ? (
+              {filteredDataByProduct.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
                     No items in transit for the selected period.
                   </td>
                 </tr>
               ) : (
-                dataByProduct.map(item => (
+                filteredDataByProduct.map(item => (
                   <tr key={item.product_id} className="border-t border-gray-200 hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{item.product_name}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">{item.company}</td>
@@ -201,12 +232,12 @@ export function StockInTransitTab({ isAdmin }: { isAdmin: boolean }) {
       {/* By Trip/Order View */}
       {!loading && !error && view === 'byTrip' && (
         <div className="space-y-4">
-          {dataByTrip.length === 0 ? (
+          {filteredDataByTrip.length === 0 ? (
             <div className="text-center py-12 text-gray-500">
               No items in transit for the selected period.
             </div>
           ) : (
-            dataByTrip.map(trip => (
+            filteredDataByTrip.map(trip => (
               <TripCard key={trip.trip_id} trip={trip} />
             ))
           )}

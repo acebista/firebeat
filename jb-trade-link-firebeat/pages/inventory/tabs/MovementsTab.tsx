@@ -9,26 +9,28 @@ import React, { useState, useEffect } from 'react';
 import { Search, Calendar, AlertCircle, Loader, TrendingUp, TrendingDown, Package, RefreshCcw, AlertTriangle } from 'lucide-react';
 import { getInventoryMovements, InventoryMovement } from '../../../services/inventory/inventoryService';
 import { getTodayISO, normalizeDateToISO } from '../../../services/inventory/inventoryUtils';
+import { ProductSearchFilter } from '../../../components/inventory/ProductSearchFilter';
 import { format, subDays, parseISO } from 'date-fns';
 
 export function MovementsTab({ isAdmin }: { isAdmin: boolean }) {
   const [data, setData] = useState<InventoryMovement[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [startDate, setStartDate] = useState(normalizeDateToISO(subDays(new Date(), 7)));
   const [endDate, setEndDate] = useState(getTodayISO());
   const [search, setSearch] = useState('');
+  const [selectedProductId, setSelectedProductId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     loadData();
-  }, [startDate, endDate, search]);
+  }, [startDate, endDate, search, selectedProductId]);
 
   async function loadData() {
     try {
       setLoading(true);
       setError(null);
-      const result = await getInventoryMovements(startDate, endDate, undefined, search || undefined);
+      const result = await getInventoryMovements(startDate, endDate, selectedProductId, search || undefined);
       setData(result);
     } catch (err) {
       console.error('[MovementsTab] Error loading data:', err);
@@ -76,7 +78,7 @@ export function MovementsTab({ isAdmin }: { isAdmin: boolean }) {
     <div className="space-y-6">
       {/* Filters */}
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Date range */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
@@ -103,14 +105,24 @@ export function MovementsTab({ isAdmin }: { isAdmin: boolean }) {
             </div>
           </div>
 
-          {/* Search */}
+          {/* Product Filter with Typeahead */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Product</label>
+            <ProductSearchFilter
+              selectedProductId={selectedProductId}
+              onSelect={(product) => setSelectedProductId(product?.id)}
+              placeholder="Search product..."
+            />
+          </div>
+
+          {/* Text Search for customer/reference */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Customer Search</label>
             <div className="flex items-center space-x-2 bg-white border border-gray-300 rounded-lg px-3 py-2">
               <Search size={16} className="text-gray-400" />
               <input
                 type="text"
-                placeholder="Product, company, reference..."
+                placeholder="Customer name..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 className="flex-1 outline-none text-sm"

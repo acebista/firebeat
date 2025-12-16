@@ -139,25 +139,29 @@ export async function getInventoryMovements(
 
     orders?.forEach(order => {
       try {
-        const items = typeof order.items === 'string' 
-          ? JSON.parse(order.items) 
+        const items = typeof order.items === 'string'
+          ? JSON.parse(order.items)
           : order.items || [];
-        
+
         items.forEach((item: any) => {
-          if (!productId || item.product_id === productId) {
+          // Normalize product ID: support both productId (OrderItem interface) and product_id (legacy/snake_case)
+          const itemProductId = item.productId || item.product_id;
+          if (!itemProductId) return; // Skip if no product ID found
+
+          if (!productId || itemProductId === productId) {
             movements.push({
-              id: `sale-${order.id}-${item.product_id}`,
+              id: `sale-${order.id}-${itemProductId}`,
               date: order.time || new Date().toISOString(),
               type: 'sale',
-              quantity: -(item.quantity || 0),
+              quantity: -(item.quantity || item.qty || 0),
               reference_id: order.id,
               reference_type: 'order',
-              product_id: item.product_id,
+              product_id: itemProductId,
               company: order.customerName, // customer company, not product company
               user_name: order.salespersonName,
               note: `Order: ${order.id}`,
             });
-            productIds.add(item.product_id);
+            productIds.add(itemProductId);
           }
         });
       } catch (e) {
@@ -197,12 +201,12 @@ export async function getInventoryMovements(
         .from('products')
         .select('id, name, companyName, metadata')
         .in('id', Array.from(productIds));
-      
+
       if (productError) {
         console.warn('[InventoryService] Failed to fetch product details:', productError);
       } else {
         const productMap = new Map(products?.map(p => [p.id, p]) || []);
-        
+
         // Enrich movements with product names and company
         movements.forEach(m => {
           const product = productMap.get(m.product_id);
@@ -342,9 +346,10 @@ export async function getStockInTransitByProduct(
           : order.items || [];
 
         items.forEach((item: any) => {
-          const key = item.product_id;
+          const key = item.productId || item.product_id;
+          if (!key) return;
           const current = productMap.get(key) || { qty: 0, orders: new Set() };
-          current.qty += item.quantity || 0;
+          current.qty += item.quantity || item.qty || 0;
           current.orders.add(order.id);
           productMap.set(key, current);
         });
@@ -419,8 +424,8 @@ export async function getStockInTransitByTrip(
           ? JSON.parse(order.items)
           : order.items || [];
 
-        // Get product details for items
-        const productIds = items.map((i: any) => i.product_id);
+        // Get product details for items - normalize product ID keys
+        const productIds = items.map((i: any) => i.productId || i.product_id).filter(Boolean);
         if (productIds.length === 0) continue;
 
         const { data: products } = await supabase
@@ -438,12 +443,13 @@ export async function getStockInTransitByTrip(
           destination: order.customerName || 'N/A',
           customer_name: order.customerName,
           items: items.map((item: any) => {
-            const product = productMap.get(item.product_id);
+            const itemProductId = item.productId || item.product_id;
+            const product = productMap.get(itemProductId);
             return {
-              product_id: item.product_id,
+              product_id: itemProductId,
               product_name: product?.name || 'Unknown',
-              qty_in_transit: item.quantity || 0,
-              qty_total_ordered: item.quantity || 0,
+              qty_in_transit: item.quantity || item.qty || 0,
+              qty_total_ordered: item.quantity || item.qty || 0,
             };
           }),
         });
@@ -487,8 +493,8 @@ export async function getStockInTransitByTrip(
           }
         });
 
-        // Get product details
-        const productIds = [...new Set(allItems.map(i => i.product_id))];
+        // Get product details - normalize product ID keys
+        const productIds = [...new Set(allItems.map(i => i.productId || i.product_id).filter(Boolean))];
         if (productIds.length === 0) continue;
 
         const { data: products } = await supabase
@@ -501,12 +507,13 @@ export async function getStockInTransitByTrip(
         // Aggregate quantity by product
         const itemMap = new Map<string, any>();
         allItems.forEach(item => {
-          const key = item.product_id;
+          const key = item.productId || item.product_id;
+          if (!key) return;
           const existing = itemMap.get(key);
           itemMap.set(key, {
             product_id: key,
             product_name: productMap.get(key)?.name || 'Unknown',
-            qty_in_transit: (existing?.qty_in_transit || 0) + (item.quantity || 0),
+            qty_in_transit: (existing?.qty_in_transit || 0) + (item.quantity || item.qty || 0),
           });
         });
 

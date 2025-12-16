@@ -36,7 +36,7 @@ export async function adminSetPassword(
   try {
     // Get the current session to ensure we have a valid auth token
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    
+
     if (sessionError || !session?.access_token) {
       throw new Error('Not authenticated. Please login and try again.');
     }
@@ -51,23 +51,37 @@ export async function adminSetPassword(
     });
 
     if (error) {
-      console.error('[AdminPasswordService] Error:', error);
-      
+      console.error('[AdminPasswordService] Edge function error:', error);
+
       // Extract error message from the error object
-      let errorMessage = error.message || 'Unknown error';
-      
-      // Try to parse JSON error response if available
-      if (typeof error.context?.response === 'string') {
+      let errorMessage = 'Failed to update password';
+
+      // The error response may contain the actual error message
+      if (error.context?.body) {
         try {
-          const parsed = JSON.parse(error.context.response);
-          errorMessage = parsed.error || errorMessage;
+          // Parse the JSON body if it exists
+          const body = typeof error.context.body === 'string'
+            ? JSON.parse(error.context.body)
+            : error.context.body;
+          if (body?.error) {
+            errorMessage = body.error;
+          }
         } catch (e) {
-          // If not JSON, use the raw response
-          errorMessage = error.context.response;
+          // If not parseable, check message
         }
       }
-      
+
+      // Check the error message directly
+      if (error.message) {
+        errorMessage = error.message;
+      }
+
       throw new Error(errorMessage);
+    }
+
+    // Check if the data contains an error (edge function returned 200 but with error)
+    if (data?.error) {
+      throw new Error(data.error);
     }
 
     return {
@@ -77,19 +91,30 @@ export async function adminSetPassword(
     };
   } catch (error: any) {
     console.error('[AdminPasswordService] Failed to set password:', error);
-    
-    // Provide user-friendly error messages
-    if (error.message?.includes('Only admins')) {
+
+    // Provide user-friendly error messages for common issues
+    const msg = error.message || '';
+
+    if (msg.includes('Only admins')) {
       throw new Error('You do not have admin privileges. Only admins can set passwords.');
     }
-    if (error.message?.includes('Invalid or expired authentication')) {
+    if (msg.includes('Invalid or expired authentication')) {
       throw new Error('Your session has expired. Please login again.');
     }
-    if (error.message?.includes('Not authenticated')) {
-      throw new Error(error.message);
+    if (msg.includes('Not authenticated')) {
+      throw new Error(msg);
     }
-    
-    throw new Error(error.message || 'Failed to set password. Please try again.');
+    if (msg.includes('Failed to verify admin status')) {
+      throw new Error('Could not verify your admin status. Please try again.');
+    }
+    if (msg.includes('Password update failed')) {
+      throw new Error(msg);
+    }
+    if (msg.includes('Server configuration error')) {
+      throw new Error('Server configuration issue. Please contact support.');
+    }
+
+    throw new Error(msg || 'Failed to set password. Please try again.');
   }
 }
 
@@ -141,12 +166,12 @@ export function generateTemporaryPassword(): string {
   };
 
   let password = '';
-  
+
   // Ensure at least one of each required type
   password += chars.upper[Math.floor(Math.random() * chars.upper.length)];
   password += chars.lower[Math.floor(Math.random() * chars.lower.length)];
   password += chars.numbers[Math.floor(Math.random() * chars.numbers.length)];
-  
+
   // Add more random characters to reach 12 characters total
   const allChars = chars.upper + chars.lower + chars.numbers;
   for (let i = password.length; i < 12; i++) {

@@ -5,20 +5,22 @@
  * Supports date range and search filters
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Calendar, AlertCircle, Loader } from 'lucide-react';
 import { getInventorySummary, InventorySummaryItem } from '../../../services/inventory/inventoryService';
 import { getTodayISO, normalizeDateToISO } from '../../../services/inventory/inventoryUtils';
+import { ProductSearchFilter } from '../../../components/inventory/ProductSearchFilter';
 import { subDays } from 'date-fns';
 
 export function SummaryTab({ isAdmin }: { isAdmin: boolean }) {
   const [data, setData] = useState<InventorySummaryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [startDate, setStartDate] = useState(normalizeDateToISO(subDays(new Date(), 30)));
   const [endDate, setEndDate] = useState(getTodayISO());
   const [search, setSearch] = useState('');
+  const [selectedProductId, setSelectedProductId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     loadData();
@@ -38,19 +40,25 @@ export function SummaryTab({ isAdmin }: { isAdmin: boolean }) {
     }
   }
 
+  // Filter data by selected product if any
+  const filteredData = useMemo(() => {
+    if (!selectedProductId) return data;
+    return data.filter(item => item.product_id === selectedProductId);
+  }, [data, selectedProductId]);
+
   const totals = {
-    openingQty: data.reduce((sum, item) => sum + item.opening_qty, 0),
-    totalIn: data.reduce((sum, item) => sum + item.total_in, 0),
-    totalOut: data.reduce((sum, item) => sum + item.total_out, 0),
-    netChange: data.reduce((sum, item) => sum + item.net_change, 0),
-    currentStock: data.reduce((sum, item) => sum + item.current_stock, 0),
+    openingQty: filteredData.reduce((sum, item) => sum + item.opening_qty, 0),
+    totalIn: filteredData.reduce((sum, item) => sum + item.total_in, 0),
+    totalOut: filteredData.reduce((sum, item) => sum + item.total_out, 0),
+    netChange: filteredData.reduce((sum, item) => sum + item.net_change, 0),
+    currentStock: filteredData.reduce((sum, item) => sum + item.current_stock, 0),
   };
 
   return (
     <div className="space-y-6">
       {/* Filters */}
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Date range */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
@@ -77,14 +85,24 @@ export function SummaryTab({ isAdmin }: { isAdmin: boolean }) {
             </div>
           </div>
 
-          {/* Search */}
+          {/* Product Filter with Typeahead */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Product</label>
+            <ProductSearchFilter
+              selectedProductId={selectedProductId}
+              onSelect={(product) => setSelectedProductId(product?.id)}
+              placeholder="Search product..."
+            />
+          </div>
+
+          {/* Text Search for company/SKU */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Company/SKU Search</label>
             <div className="flex items-center space-x-2 bg-white border border-gray-300 rounded-lg px-3 py-2">
               <Search size={16} className="text-gray-400" />
               <input
                 type="text"
-                placeholder="Product, company, SKU..."
+                placeholder="Company, SKU..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 className="flex-1 outline-none text-sm"
@@ -143,14 +161,14 @@ export function SummaryTab({ isAdmin }: { isAdmin: boolean }) {
               </tr>
             </thead>
             <tbody>
-              {data.length === 0 ? (
+              {filteredData.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
                     No inventory data found for the selected period.
                   </td>
                 </tr>
               ) : (
-                data.map(item => (
+                filteredData.map(item => (
                   <tr key={item.product_id} className="border-t border-gray-200 hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{item.product_name}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">{item.company}</td>
@@ -173,8 +191,15 @@ export function SummaryTab({ isAdmin }: { isAdmin: boolean }) {
   );
 }
 
-function SummaryCard({ label, value, color, highlight = false }: any) {
-  const colorClasses = {
+interface SummaryCardProps {
+  label: string;
+  value: string;
+  color: 'blue' | 'green' | 'red' | 'purple';
+  highlight?: boolean;
+}
+
+function SummaryCard({ label, value, color, highlight = false }: SummaryCardProps) {
+  const colorClasses: Record<string, string> = {
     blue: 'bg-blue-50 border-blue-200 text-blue-700',
     green: 'bg-green-50 border-green-200 text-green-700',
     red: 'bg-red-50 border-red-200 text-red-700',
@@ -188,3 +213,4 @@ function SummaryCard({ label, value, color, highlight = false }: any) {
     </div>
   );
 }
+
