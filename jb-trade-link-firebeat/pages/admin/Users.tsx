@@ -101,7 +101,7 @@ export const UserManagement: React.FC = () => {
         ...formData,
         phone: String(formData.phone || ''),
       };
-      
+
       // Validate form data
       const validatedData = userSchema.parse(dataToValidate);
       setValidationErrors({});
@@ -128,7 +128,7 @@ export const UserManagement: React.FC = () => {
       fetchUsers(); // Refresh the list
     } catch (error) {
       console.error("Failed to save user:", error);
-      
+
       // Handle Zod validation errors
       if (error instanceof z.ZodError) {
         const errors: Record<string, string> = {};
@@ -239,13 +239,15 @@ export const UserManagement: React.FC = () => {
 
     setSettingPassword(true);
     try {
+      console.log('[Users] Setting password for user:', selectedUserForPassword.id, selectedUserForPassword.name);
       // Call the admin password management Edge Function
-      await adminSetPassword(selectedUserForPassword.id, newPassword);
-      
+      const result = await adminSetPassword(selectedUserForPassword.id, newPassword);
+      console.log('[Users] Password set result:', result);
+
       toast.success(`Password set for ${selectedUserForPassword.name}`);
       closePasswordModal();
     } catch (error: any) {
-      console.error('Failed to set password:', error);
+      console.error('[Users] Failed to set password:', error);
       toast.error(error.message || 'Failed to set password. Make sure you are an admin.');
     } finally {
       setSettingPassword(false);
@@ -332,12 +334,12 @@ export const UserManagement: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <Badge color={user.role === 'admin' ? 'blue' : user.role === 'sales' ? 'green' : 'yellow'}>
+                      <Badge color={user.role === 'admin' ? 'blue' : user.role === 'sales' ? 'emerald' : 'amber'}>
                         {user.role}
                       </Badge>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <Badge color={user.isActive ? 'green' : 'red'}>
+                      <Badge color={user.isActive ? 'emerald' : 'red'}>
                         {user.isActive ? 'Active' : 'Inactive'}
                       </Badge>
                     </td>
@@ -572,7 +574,7 @@ export const UserManagement: React.FC = () => {
           </div>
 
           <div className="bg-amber-50 p-3 rounded border border-amber-200 text-sm text-amber-800">
-            <strong>Tip:</strong> Generate a random password and give it to the user securely. 
+            <strong>Tip:</strong> Generate a random password and give it to the user securely.
             They can change it later.
           </div>
 

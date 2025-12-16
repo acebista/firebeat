@@ -109,19 +109,25 @@ export const SalesReport: React.FC<{ data: SalesReportRow[] }> = ({ data }) => {
 
       {/* Print View - Hidden on screen, with remarks and dark borders */}
       <div id="sales-report-print" style={{ display: 'none' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10pt' }}>
+        <style>{`
+          @media print {
+            @page { size: landscape; margin: 10mm; }
+            body { -webkit-print-color-adjust: exact; }
+          }
+        `}</style>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px', tableLayout: 'auto' }}>
           <thead style={{ backgroundColor: '#f3f4f6' }}>
             <tr>
-              <th style={{ width: '30px', border: '2px solid #4b5563', padding: '8px', textAlign: 'center' }}>S.N.</th>
-              <th style={{ width: '80px', border: '2px solid #4b5563', padding: '8px', textAlign: 'center' }}>Salesperson</th>
-              <th style={{ width: '90px', border: '2px solid #4b5563', padding: '8px', textAlign: 'center' }}>Invoice</th>
-              <th style={{ width: '180px', border: '2px solid #4b5563', padding: '8px', textAlign: 'left' }}>Customer</th>
-              <th style={{ width: '70px', border: '2px solid #4b5563', padding: '8px', textAlign: 'center' }}>Payment</th>
-              <th style={{ width: '80px', border: '2px solid #4b5563', padding: '8px', textAlign: 'right' }}>Subtotal</th>
-              <th style={{ width: '70px', border: '2px solid #4b5563', padding: '8px', textAlign: 'right' }}>Discount</th>
-              <th style={{ width: '75px', border: '2px solid #4b5563', padding: '8px', textAlign: 'center' }}>Discount %</th>
-              <th style={{ width: '90px', border: '2px solid #4b5563', padding: '8px', textAlign: 'right' }}>Grand Total</th>
-              <th style={{ border: '2px solid #4b5563', padding: '8px', textAlign: 'left' }}>Remarks</th>
+              <th style={{ width: '3%', border: '1px solid #4b5563', padding: '4px', textAlign: 'center' }}>S.N.</th>
+              <th style={{ width: '8%', border: '1px solid #4b5563', padding: '4px', textAlign: 'center' }}>Salesperson</th>
+              <th style={{ width: '10%', border: '1px solid #4b5563', padding: '4px', textAlign: 'center' }}>Invoice</th>
+              <th style={{ width: '15%', border: '1px solid #4b5563', padding: '4px', textAlign: 'left' }}>Customer</th>
+              <th style={{ width: '6%', border: '1px solid #4b5563', padding: '4px', textAlign: 'center' }}>Pay</th>
+              <th style={{ width: '8%', border: '1px solid #4b5563', padding: '4px', textAlign: 'right' }}>Subtotal</th>
+              <th style={{ width: '7%', border: '1px solid #4b5563', padding: '4px', textAlign: 'right' }}>Disc</th>
+              <th style={{ width: '5%', border: '1px solid #4b5563', padding: '4px', textAlign: 'center' }}>%</th>
+              <th style={{ width: '9%', border: '1px solid #4b5563', padding: '4px', textAlign: 'right' }}>Total</th>
+              <th style={{ width: '29%', border: '1px solid #4b5563', padding: '4px', textAlign: 'left' }}>Remarks</th>
             </tr>
           </thead>
           <tbody>
@@ -134,46 +140,48 @@ export const SalesReport: React.FC<{ data: SalesReportRow[] }> = ({ data }) => {
               const spSubTotal = rows.reduce((s, r) => s + r.subTotal, 0);
               const spDiscTotal = rows.reduce((s, r) => s + r.discountAmount, 0);
               const spGrandTotal = rows.reduce((s, r) => s + r.grandTotal, 0);
+              // Print only first name
+              const spFirstName = salesperson.split(' ')[0];
 
               return (
                 <React.Fragment key={salesperson}>
                   {rows.map((row, idx) => {
-                    const discountPct = row.subTotal > 0 ? ((row.discountAmount / row.subTotal) * 100).toFixed(2) : '0.00';
+                    const discountPct = row.subTotal > 0 ? ((row.discountAmount / row.subTotal) * 100).toFixed(1) : '0.0';
                     return (
                       <tr key={row.id}>
-                        <td style={{ border: '1px solid #4b5563', padding: '6px', textAlign: 'center' }}>{idx + 1}</td>
-                        <td style={{ border: '1px solid #4b5563', padding: '6px', textAlign: 'center' }}>{salesperson}</td>
-                        <td style={{ border: '1px solid #4b5563', padding: '6px', textAlign: 'center', fontFamily: 'monospace', fontSize: '9pt' }}>{row.invoiceNo}</td>
-                        <td style={{ border: '1px solid #4b5563', padding: '6px' }}>{row.customerName}</td>
-                        <td style={{ border: '1px solid #4b5563', padding: '6px', textAlign: 'center' }}>{row.paymentMode || 'Cash'}</td>
-                        <td style={{ border: '1px solid #4b5563', padding: '6px', textAlign: 'right' }}>{row.subTotal.toFixed(2)}</td>
-                        <td style={{ border: '1px solid #4b5563', padding: '6px', textAlign: 'right' }}>{row.discountAmount.toFixed(2)}</td>
-                        <td style={{ border: '1px solid #4b5563', padding: '6px', textAlign: 'center' }}>{discountPct}%</td>
-                        <td style={{ border: '1px solid #4b5563', padding: '6px', textAlign: 'right', fontWeight: 'bold' }}>{row.grandTotal.toFixed(2)}</td>
-                        <td style={{ border: '1px solid #4b5563', padding: '6px' }}></td>
+                        <td style={{ border: '1px solid #4b5563', padding: '2px', textAlign: 'center' }}>{idx + 1}</td>
+                        <td style={{ border: '1px solid #4b5563', padding: '2px', textAlign: 'center' }}>{spFirstName}</td>
+                        <td style={{ border: '1px solid #4b5563', padding: '2px', textAlign: 'center', fontFamily: 'monospace' }}>{row.invoiceNo.slice(0, 8)}</td>
+                        <td style={{ border: '1px solid #4b5563', padding: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '150px' }}>{row.customerName}</td>
+                        <td style={{ border: '1px solid #4b5563', padding: '2px', textAlign: 'center' }}>{row.paymentMode === 'Cash' ? 'Cash' : row.paymentMode === 'Credit' ? 'Cr' : row.paymentMode?.slice(0, 4)}</td>
+                        <td style={{ border: '1px solid #4b5563', padding: '2px', textAlign: 'right' }}>{Math.round(row.subTotal)}</td>
+                        <td style={{ border: '1px solid #4b5563', padding: '2px', textAlign: 'right' }}>{Math.round(row.discountAmount)}</td>
+                        <td style={{ border: '1px solid #4b5563', padding: '2px', textAlign: 'center' }}>{discountPct}</td>
+                        <td style={{ border: '1px solid #4b5563', padding: '2px', textAlign: 'right', fontWeight: 'bold' }}>{Math.round(row.grandTotal)}</td>
+                        <td style={{ border: '1px solid #4b5563', padding: '2px' }}></td>
                       </tr>
                     );
                   })}
                   <tr style={{ backgroundColor: '#f3f4f6', fontWeight: 'bold' }}>
-                    <td colSpan={5} style={{ border: '1px solid #4b5563', padding: '8px', textAlign: 'right' }}>Total for {salesperson}:</td>
-                    <td style={{ border: '1px solid #4b5563', padding: '8px', textAlign: 'right' }}>{spSubTotal.toFixed(2)}</td>
-                    <td style={{ border: '1px solid #4b5563', padding: '8px', textAlign: 'right' }}>{spDiscTotal.toFixed(2)}</td>
-                    <td style={{ border: '1px solid #4b5563', padding: '8px' }}></td>
-                    <td style={{ border: '1px solid #4b5563', padding: '8px', textAlign: 'right' }}>{spGrandTotal.toFixed(2)}</td>
-                    <td style={{ border: '1px solid #4b5563', padding: '8px' }}></td>
+                    <td colSpan={5} style={{ border: '1px solid #4b5563', padding: '4px', textAlign: 'right' }}>Total {spFirstName}:</td>
+                    <td style={{ border: '1px solid #4b5563', padding: '4px', textAlign: 'right' }}>{Math.round(spSubTotal)}</td>
+                    <td style={{ border: '1px solid #4b5563', padding: '4px', textAlign: 'right' }}>{Math.round(spDiscTotal)}</td>
+                    <td style={{ border: '1px solid #4b5563', padding: '4px' }}></td>
+                    <td style={{ border: '1px solid #4b5563', padding: '4px', textAlign: 'right' }}>{Math.round(spGrandTotal)}</td>
+                    <td style={{ border: '1px solid #4b5563', padding: '4px' }}></td>
                   </tr>
                 </React.Fragment>
               );
             })}
             {/* Grand Total Row for Print */}
             {data.length > 0 && (
-              <tr style={{ backgroundColor: '#86efac', fontWeight: 'bold', fontSize: '12pt' }}>
-                <td colSpan={5} style={{ border: '2px solid #4b5563', padding: '10px', textAlign: 'right' }}>GRAND TOTAL:</td>
-                <td style={{ border: '2px solid #4b5563', padding: '10px', textAlign: 'right' }}>{totalSub.toFixed(2)}</td>
-                <td style={{ border: '2px solid #4b5563', padding: '10px', textAlign: 'right' }}>{totalDisc.toFixed(2)}</td>
-                <td style={{ border: '2px solid #4b5563', padding: '10px' }}></td>
-                <td style={{ border: '2px solid #4b5563', padding: '10px', textAlign: 'right' }}>{totalGrand.toFixed(2)}</td>
-                <td style={{ border: '2px solid #4b5563', padding: '10px' }}></td>
+              <tr style={{ backgroundColor: '#e5e7eb', fontWeight: 'bold', fontSize: '10px' }}>
+                <td colSpan={5} style={{ border: '2px solid #4b5563', padding: '6px', textAlign: 'right' }}>GRAND TOTAL:</td>
+                <td style={{ border: '2px solid #4b5563', padding: '6px', textAlign: 'right' }}>{Math.round(totalSub)}</td>
+                <td style={{ border: '2px solid #4b5563', padding: '6px', textAlign: 'right' }}>{Math.round(totalDisc)}</td>
+                <td style={{ border: '2px solid #4b5563', padding: '6px' }}></td>
+                <td style={{ border: '2px solid #4b5563', padding: '10px', textAlign: 'right' }}>{Math.round(totalGrand)}</td>
+                <td style={{ border: '2px solid #4b5563', padding: '6px' }}></td>
               </tr>
             )}
           </tbody>
