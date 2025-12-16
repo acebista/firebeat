@@ -244,6 +244,7 @@ export const Reports: React.FC = () => {
   const [deliveryUsers, setDeliveryUsers] = useState<User[]>([]);
 
   const [loading, setLoading] = useState(false);
+  const [deliveryReportError, setDeliveryReportError] = useState<string | null>(null);
 
   const fetchData = async () => {
     setLoading(true);
@@ -313,6 +314,8 @@ export const Reports: React.FC = () => {
   const fetchDeliveryData = async () => {
     setLoading(true);
     try {
+      console.log('[Delivery] Starting data fetch...');
+      
       // Fetch orders for the date range with delivered/completed status
       let orders = await OrderService.getOrdersByDateRangePaged(
         deliveryFilters.startDate,
@@ -405,10 +408,32 @@ export const Reports: React.FC = () => {
         }, {} as Record<string, { count: number; amount: number }>)
       };
 
+      console.log('[Delivery] Data fetched successfully:', {
+        ordersCount: filteredRows.length,
+        totalAmount: summary.totalAmount,
+      });
+      
       setDeliveryReportData({ rows: filteredRows, summary });
+      setDeliveryReportError(null);
 
-    } catch (e) {
-      console.error('Error fetching delivery data:', e);
+    } catch (e: any) {
+      console.error('[Delivery] Error fetching data:', e);
+      const errorMsg = e?.message || 'Failed to fetch delivery data';
+      setDeliveryReportError(errorMsg);
+      
+      // Set empty data instead of leaving stale data
+      setDeliveryReportData({
+        rows: [],
+        summary: {
+          totalInvoices: 0,
+          totalDelivered: 0,
+          totalReturned: 0,
+          totalPartiallyReturned: 0,
+          totalAmount: 0,
+          totalCollected: 0,
+          paymentBreakdown: {},
+        },
+      });
     } finally {
       setLoading(false);
     }
@@ -482,7 +507,23 @@ export const Reports: React.FC = () => {
           {activeTab === 'scheme' && <SchemeReport data={reportData.schemeRows} />}
           {activeTab === 'damage' && <DamagedGoodsReport />}
           {activeTab === 'challan' && <ChallanReport data={reportData.challanRows} />}
-          {activeTab === 'delivery' && <DeliveryReport data={deliveryReportData} />}
+          {activeTab === 'delivery' && (
+            <>
+              {deliveryReportError && (
+                <div className="mb-4 p-4 bg-red-50 border border-red-300 rounded-lg text-red-700">
+                  <strong>Error loading delivery data:</strong> {deliveryReportError}
+                  <button 
+                    onClick={() => fetchDeliveryData()}
+                    className="ml-2 text-red-600 hover:text-red-800 font-semibold"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+              {loading && <div className="text-center py-8 text-gray-500">Loading delivery data...</div>}
+              {!loading && <DeliveryReport data={deliveryReportData} />}
+            </>
+          )}
           {activeTab === 'hr' && <HRCommissionReport data={reportData.salesRows} products={products} companies={companies} commissionRates={commissionRates} />}
         </>
       )}

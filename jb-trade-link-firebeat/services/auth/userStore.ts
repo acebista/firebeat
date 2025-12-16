@@ -4,7 +4,7 @@ import { User } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { loadUserProfile } from './profileService';
 
-type BootStatus = 'idle' | 'checking' | 'ready' | 'error';
+type BootStatus = 'idle' | 'checking' | 'ready';
 
 interface UserState {
   bootStatus: BootStatus;
@@ -18,6 +18,7 @@ interface UserState {
   setError: (error: string | null) => void;
   retryBoot: () => Promise<void>;
   logout: () => Promise<void>;
+  resetStore: () => void;  // New: hard reset with stale cleanup
 }
 
 const initialState = {
@@ -34,9 +35,39 @@ export const useUserStore = create<UserState>()(
       (set, get) => ({
         ...initialState,
 
+        resetStore: () => {
+          /**
+           * Hard reset: clears all persisted auth keys and resets store to initial state.
+           * Called before rehydration to prevent stale data resurrection.
+           */
+          console.log('[Boot] Performing hard reset of auth store...');
+          clearStaleTokens();
+          clearPersistedAuthKey();
+          set({ 
+            bootStatus: 'idle',
+            user: null,
+            session: null,
+            error: null,
+            bootError: null,
+          });
+        },
+
         rehydrateFromSession: async () => {
           set({ bootStatus: 'checking' });
           
+          // Boot timeout guard: if checking takes >10 seconds, force ready state
+          const timeoutId = setTimeout(() => {
+            const current = get();
+            if (current.bootStatus === 'checking') {
+              console.warn('[Boot] Boot timeout (10s exceeded), forcing ready state');
+              set({
+                bootStatus: 'ready',
+                bootError: 'Session check timed out. Please try refreshing.',
+                user: null,
+              });
+            }
+          }, 10000);
+
           try {
             console.log('[Boot] Starting session rehydration...');
             
@@ -56,7 +87,7 @@ export const useUserStore = create<UserState>()(
 
             if (!session?.user) {
               console.log('[Boot] No active session, clearing auth state');
-              set({ bootStatus: 'ready', user: null, session: null });
+              set({ bootStatus: 'ready', user: null, session: null, bootError: null });
               clearStaleTokens();
               return;
             }
@@ -90,6 +121,8 @@ export const useUserStore = create<UserState>()(
               session: null,
               bootError: err?.message || 'Boot failed',
             });
+          } finally {
+            clearTimeout(timeoutId);
           }
         },
 
@@ -217,6 +250,19 @@ function clearStaleTokens() {
     });
   } catch (e) {
     console.error('[Tokens] Failed to clear tokens:', e);
+  }
+}
+
+/**
+ * Clear the persisted auth-user-storage key to prevent stale rehydration
+ */
+function clearPersistedAuthKey() {
+  try {
+    const STORAGE_KEY = 'auth-user-storage';
+    localStorage.removeItem(STORAGE_KEY);
+    console.log(`[Storage] Cleared persisted key: ${STORAGE_KEY}`);
+  } catch (e) {
+    console.error('[Storage] Failed to clear persisted auth key:', e);
   }
 }
 

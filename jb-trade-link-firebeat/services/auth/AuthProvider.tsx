@@ -41,11 +41,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [state, dispatch] = useReducer(authReducer, initialState);
     const [isInitialized, setIsInitialized] = React.useState(false);
 
+    // Initialize boot: reset stale data, then rehydrate
     useEffect(() => {
         const boot = async () => {
             try {
+                // Hard reset before rehydration to clear stale persisted state
+                useUserStore.getState().resetStore();
+                
+                // Start rehydration (with built-in 10s timeout)
                 await useUserStore.getState().rehydrateFromSession();
-                setIsInitialized(true);
                 
                 const storeState = useUserStore.getState();
                 if (storeState.user) {
@@ -60,12 +64,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             } catch (err) {
                 console.error('[AuthProvider] Boot error:', err);
                 dispatch({ type: 'SET_ERROR', error: err });
+            } finally {
+                // Mark initialized even on error to prevent infinite loading
                 setIsInitialized(true);
             }
         };
         boot();
     }, []);
 
+    // Sync Supabase auth state changes across tabs
+    useEffect(() => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            console.log('[AuthProvider] Auth state changed:', event);
+            if (event === 'SIGNED_OUT') {
+                useUserStore.getState().resetStore();
+                dispatch({ type: 'SET_UNAUTHENTICATED' });
+            } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+                // Let rehydration handle this
+                useUserStore.getState().rehydrateFromSession();
+            }
+        });
+
+        return () => {
+            subscription?.unsubscribe();
+        };
+    }, []);
+
+    // Subscribe to store changes to keep context in sync
     useEffect(() => {
         return useUserStore.subscribe(
             (storeState) => ({
