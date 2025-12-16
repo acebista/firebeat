@@ -34,11 +34,21 @@ export async function adminSetPassword(
   newPassword: string
 ): Promise<SetPasswordResponse> {
   try {
-    // Call the admin password management edge function
+    // Get the current session to ensure we have a valid auth token
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError || !session?.access_token) {
+      throw new Error('Not authenticated. Please login and try again.');
+    }
+
+    // Call the admin password management edge function with explicit headers
     const { data, error } = await supabase.functions.invoke('admin-update-password', {
       body: {
         userId,
         newPassword,
+      },
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
       },
     });
 
