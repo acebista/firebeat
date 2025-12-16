@@ -7,18 +7,18 @@ import { Order, Customer } from '../../types';
 import toast from 'react-hot-toast';
 
 interface DamageItem {
-  productId: string;
-  productName: string;
-  quantity: number;
-  reason: string;
+    productId: string;
+    productName: string;
+    quantity: number;
+    reason: string;
 }
 
 interface ReturnItem {
-  productId: string;
-  productName: string;
-  originalQty: number;
-  returnQty: number;
-  rate: number;
+    productId: string;
+    productName: string;
+    originalQty: number;
+    returnQty: number;
+    rate: number;
 }
 
 export const DeliveryOrderDetails: React.FC = () => {
@@ -48,16 +48,26 @@ export const DeliveryOrderDetails: React.FC = () => {
             try {
                 const orderData = await OrderService.getById(id);
                 if (orderData) {
+                    // Handle potential string format for items
+                    if (typeof orderData.items === 'string') {
+                        try {
+                            orderData.items = JSON.parse(orderData.items);
+                        } catch (e) {
+                            console.error('Failed to parse order items', e);
+                            orderData.items = [];
+                        }
+                    }
                     setOrder(orderData);
                     setAmountCollected(orderData.totalAmount.toString());
 
+                    // Fetch customer details
                     if (orderData.customerId) {
                         const custData = await CustomerService.getById(orderData.customerId);
-                        setCustomer(custData);
+                        if (custData) setCustomer(custData);
                     }
                 }
-            } catch (e) {
-                console.error("Failed to load order", e);
+            } catch (error) {
+                console.error("Failed to load order", error);
             } finally {
                 setLoading(false);
             }
@@ -86,7 +96,7 @@ export const DeliveryOrderDetails: React.FC = () => {
             let remarkText = `Payment: ${paymentMode.toUpperCase()}`;
             if (paymentReference) remarkText += ` (${paymentReference})`;
             if (remarks) remarkText += ` | ${remarks}`;
-            
+
             if (damages.length > 0) {
                 remarkText += ` | Damages: ${damages.map(d => `${d.productName}(${d.quantity}) - ${d.reason}`).join(', ')}`;
             }
@@ -182,7 +192,7 @@ export const DeliveryOrderDetails: React.FC = () => {
                     </div>
                     <Package className="h-6 w-6 text-blue-500" />
                 </div>
-                
+
                 <div className="space-y-3 mb-4">
                     <div className="flex items-center gap-3 text-gray-700">
                         <MapPin className="h-4 w-4 text-gray-400" />
@@ -211,10 +221,10 @@ export const DeliveryOrderDetails: React.FC = () => {
             <Card className="p-5 bg-white border border-gray-200 rounded-xl shadow-sm mb-4">
                 <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
                     <Package className="h-5 w-5 text-gray-600" />
-                    Order Items ({order.totalItems})
+                    Order Items ({order.totalItems || 0})
                 </h3>
                 <div className="space-y-3 divide-y">
-                    {order.items.map((item, idx) => (
+                    {(order.items || []).map((item, idx) => (
                         <div key={idx} className="flex justify-between items-center py-2 first:pt-0 last:pb-0">
                             <div className="flex-1">
                                 <p className="font-medium text-gray-900 text-sm">{item.productName}</p>
@@ -253,11 +263,10 @@ export const DeliveryOrderDetails: React.FC = () => {
                                             setShowQRModal(true);
                                         }
                                     }}
-                                    className={`p-3 rounded-lg font-medium text-sm transition-all ${
-                                        paymentMode === method.value
-                                            ? 'bg-white text-blue-700 border-2 border-blue-500 shadow-md'
-                                            : 'bg-white text-gray-700 border border-gray-300 hover:border-gray-400'
-                                    }`}
+                                    className={`p-3 rounded-lg font-medium text-sm transition-all ${paymentMode === method.value
+                                        ? 'bg-white text-blue-700 border-2 border-blue-500 shadow-md'
+                                        : 'bg-white text-gray-700 border border-gray-300 hover:border-gray-400'
+                                        }`}
                                 >
                                     {method.label}
                                 </button>
@@ -293,8 +302,8 @@ export const DeliveryOrderDetails: React.FC = () => {
                                 onChange={(e) => setPaymentReference(e.target.value)}
                                 placeholder={
                                     paymentMode === 'qr' ? 'e.g., TXN123456789'
-                                    : paymentMode === 'cheque' ? 'e.g., CHQ123456'
-                                    : 'e.g., Credit terms'
+                                        : paymentMode === 'cheque' ? 'e.g., CHQ123456'
+                                            : 'e.g., Credit terms'
                                 }
                                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                             />
@@ -458,7 +467,7 @@ const DamageModal: React.FC<{
             setFilteredProducts([]);
             setShowDropdown(false);
         } else {
-            const filtered = allProducts.filter(p => 
+            const filtered = allProducts.filter(p =>
                 (p.name || p.productName || '').toLowerCase().includes(searchTerm.toLowerCase())
             ).slice(0, 10); // Limit to 10 results
             setFilteredProducts(filtered);
@@ -580,9 +589,8 @@ const DamageModal: React.FC<{
                                     <button
                                         key={product.id}
                                         onClick={() => handleSelectProduct(product)}
-                                        className={`w-full text-left px-4 py-3 hover:bg-orange-50 border-b border-gray-100 last:border-b-0 transition-colors ${
-                                            selectedProduct === product.id ? 'bg-orange-100 font-medium' : ''
-                                        }`}
+                                        className={`w-full text-left px-4 py-3 hover:bg-orange-50 border-b border-gray-100 last:border-b-0 transition-colors ${selectedProduct === product.id ? 'bg-orange-100 font-medium' : ''
+                                            }`}
                                     >
                                         <div className="font-medium text-gray-900">{product.name || product.productName}</div>
                                         <div className="text-xs text-gray-600">SKU: {product.sku || 'N/A'}</div>
@@ -615,11 +623,10 @@ const DamageModal: React.FC<{
                                             setOtherReason('');
                                         }
                                     }}
-                                    className={`p-3 rounded-lg text-sm font-medium transition-all border-2 ${
-                                        reason === dmgReason.value
-                                            ? 'bg-orange-100 border-orange-500 text-orange-700'
-                                            : 'bg-gray-50 border-gray-200 text-gray-700 hover:border-gray-300'
-                                    }`}
+                                    className={`p-3 rounded-lg text-sm font-medium transition-all border-2 ${reason === dmgReason.value
+                                        ? 'bg-orange-100 border-orange-500 text-orange-700'
+                                        : 'bg-gray-50 border-gray-200 text-gray-700 hover:border-gray-300'
+                                        }`}
                                 >
                                     {dmgReason.label}
                                 </button>
@@ -758,7 +765,7 @@ const ReturnModal: React.FC<{
         // Check if already returning this product
         const existing = returnItems.findIndex(r => r.productId === selectedProduct);
         const currentReturnQty = existing >= 0 ? returnItems[existing].returnQty : 0;
-        
+
         if (currentReturnQty + returnQtyNum > product.qty) {
             toast.error(`Total return quantity cannot exceed ${product.qty}. Currently returning: ${currentReturnQty}, Trying to add: ${returnQtyNum}`);
             return;
@@ -805,7 +812,7 @@ const ReturnModal: React.FC<{
                                     const alreadyReturning = returnItems.find(r => r.productId === item.productId);
                                     const remainingQty = item.qty - (alreadyReturning?.returnQty || 0);
                                     const isSelected = selectedProduct === item.productId;
-                                    
+
                                     return (
                                         <button
                                             key={item.productId}
@@ -813,11 +820,10 @@ const ReturnModal: React.FC<{
                                                 setSelectedProduct(item.productId);
                                                 setReturnQty('1');
                                             }}
-                                            className={`text-left p-3 rounded-lg border-2 transition-all ${
-                                                isSelected
-                                                    ? 'bg-purple-50 border-purple-500'
-                                                    : 'bg-gray-50 border-gray-200 hover:border-purple-300'
-                                            }`}
+                                            className={`text-left p-3 rounded-lg border-2 transition-all ${isSelected
+                                                ? 'bg-purple-50 border-purple-500'
+                                                : 'bg-gray-50 border-gray-200 hover:border-purple-300'
+                                                }`}
                                         >
                                             <div className="font-medium text-gray-900">{item.productName}</div>
                                             <div className="text-xs text-gray-600 mt-1 space-y-0.5">
@@ -859,11 +865,10 @@ const ReturnModal: React.FC<{
                                     max={maxReturnQty}
                                     value={returnQty}
                                     onChange={(e) => setReturnQty(e.target.value)}
-                                    className={`flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 text-center font-bold text-lg ${
-                                        selectedProduct && !isReturnQtyValid
-                                            ? 'border-red-500 focus:ring-red-500 bg-red-50'
-                                            : 'border-purple-300 focus:ring-purple-500 bg-white'
-                                    }`}
+                                    className={`flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 text-center font-bold text-lg ${selectedProduct && !isReturnQtyValid
+                                        ? 'border-red-500 focus:ring-red-500 bg-red-50'
+                                        : 'border-purple-300 focus:ring-purple-500 bg-white'
+                                        }`}
                                 />
                                 <button
                                     onClick={() => setReturnQty(Math.min(maxReturnQty, returnQtyNum + 1).toString())}
@@ -986,7 +991,7 @@ const QRModal: React.FC<{
                 <div className="p-6 flex flex-col items-center">
                     {/* QR Code Image */}
                     <div className="bg-gray-100 p-4 rounded-lg mb-4 border-2 border-gray-200">
-                        <img 
+                        <img
                             src={qrUrl}
                             alt="QR Payment Code"
                             className="w-64 h-64 object-cover rounded-lg"
