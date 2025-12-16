@@ -41,17 +41,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [state, dispatch] = useReducer(authReducer, initialState);
     const [isInitialized, setIsInitialized] = React.useState(false);
 
-    // Initialize boot: reset stale data, then rehydrate
+    // Initialize boot: rehydrate session (guards clear internally)
     useEffect(() => {
         const boot = async () => {
             try {
-                // Hard reset before rehydration to clear stale persisted state
-                useUserStore.getState().resetStore();
+                console.log('[AuthProvider] Starting boot...');
                 
-                // Start rehydration (with built-in 10s timeout)
+                // Rehydrate session WITHOUT clearing tokens first
+                // rehydrateFromSession() will check getSession() first,
+                // then only clear tokens if session is missing/invalid
                 await useUserStore.getState().rehydrateFromSession();
                 
                 const storeState = useUserStore.getState();
+                console.log('[AuthProvider] Boot complete. User authenticated:', !!storeState.user);
+                
                 if (storeState.user) {
                     dispatch({ 
                         type: 'SET_AUTHENTICATED', 

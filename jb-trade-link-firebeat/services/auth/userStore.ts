@@ -38,7 +38,8 @@ export const useUserStore = create<UserState>()(
         resetStore: () => {
           /**
            * Hard reset: clears all persisted auth keys and resets store to initial state.
-           * Called before rehydration to prevent stale data resurrection.
+           * Called ONLY when truly logging out or when session is confirmed invalid.
+           * NOT called on regular boot—that would destroy valid sessions on refresh!
            */
           console.log('[Boot] Performing hard reset of auth store...');
           clearStaleTokens();
@@ -71,50 +72,61 @@ export const useUserStore = create<UserState>()(
           try {
             console.log('[Boot] Starting session rehydration...');
             
+            // CRITICAL: Check Supabase session FIRST before clearing anything
             const { data, error } = await supabase.auth.getSession();
 
             if (error) {
               console.error('[Boot] getSession error:', error);
+              // Session lookup failed - clear tokens and stay logged out
+              clearStaleTokens();
               set({ 
                 bootStatus: 'ready',
                 bootError: `Session fetch failed: ${error.message}`,
+                user: null,
+                session: null,
               });
               return;
             }
 
             const session = data.session;
-            console.log('[Boot] Session check:', session ? 'Found' : 'None');
+            console.log('[Boot] Session check:', session ? 'Found valid session' : 'No session found');
 
             if (!session?.user) {
-              console.log('[Boot] No active session, clearing auth state');
-              set({ bootStatus: 'ready', user: null, session: null, bootError: null });
+              console.log('[Boot] No active session found, clearing auth state');
               clearStaleTokens();
+              set({ bootStatus: 'ready', user: null, session: null, bootError: null });
               return;
             }
 
+            // Session exists - now load profile
             console.log('[Boot] Valid session found, loading profile for user:', session.user.id);
             
             try {
               const profile = await loadUserProfile(session.user.id);
               console.log('[Boot] Profile loaded successfully');
+              // Success - set authenticated state WITHOUT clearing tokens
               set({ 
                 bootStatus: 'ready',
                 user: profile,
                 session,
                 bootError: null,
+                error: null,
               });
             } catch (profileErr: any) {
               console.error('[Boot] Profile fetch failed:', profileErr);
+              // Profile fetch failed - clear tokens since session is unrecoverable
+              clearStaleTokens();
               set({ 
                 bootStatus: 'ready',
                 user: null,
                 session: null,
                 bootError: `Profile fetch failed: ${profileErr?.message || 'Unknown error'}. Please log in again.`,
               });
-              clearStaleTokens();
             }
           } catch (err: any) {
             console.error('[Boot] Unexpected boot error:', err);
+            // Unexpected error - stay logged out
+            clearStaleTokens();
             set({ 
               bootStatus: 'ready',
               user: null,
