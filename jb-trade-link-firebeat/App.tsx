@@ -32,6 +32,7 @@ import { CreateReturn } from './pages/admin/CreateReturn';
 import { DamagedGoodsReport } from './pages/admin/DamagedGoods';
 import { Migration } from './pages/admin/Migration';
 import { SupabaseTest } from './pages/admin/SupabaseTest';
+import { InventoryPage } from './pages/inventory/InventoryPage';
 
 // Sales Pages
 import { SalesDashboard } from './pages/sales/SalesDashboard';
@@ -147,6 +148,7 @@ const App: React.FC = () => {
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
             <Route path="/admin/users" element={<UserManagement />} />
             <Route path="/admin/products" element={<ProductManagement />} />
+            <Route path="/admin/inventory" element={<InventoryPage />} />
             <Route path="/admin/companies" element={<CompanyManagement />} />
             <Route path="/admin/customers" element={<CustomerManagement />} />
             <Route path="/admin/orders" element={<OrderManagement />} />

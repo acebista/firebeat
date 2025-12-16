@@ -18,7 +18,8 @@ import {
   AlertTriangle,
   ShoppingCart,
   Activity,
-  DollarSign
+  DollarSign,
+  Boxes
 } from 'lucide-react';
 import { useAuth } from '../../services/auth';
 import { UserRole } from '../../types';
@@ -28,6 +29,7 @@ const navItems: Record<UserRole, { label: string; path: string; icon: any }[]> =
   admin: [
     { label: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
     { label: 'Reports', path: '/admin/reports', icon: FileText },
+    { label: 'Inventory', path: '/admin/inventory', icon: Boxes },
     { label: 'Unknown Cleanup', path: '/admin/unknown-product-cleanup', icon: AlertTriangle },
     { label: 'System Health', path: '/admin/health', icon: Activity }, // Moved up for visibility
     { label: 'New Order', path: '/admin/create-order', icon: PlusCircle },
