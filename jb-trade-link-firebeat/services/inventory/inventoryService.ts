@@ -6,6 +6,8 @@
  */
 
 import { supabase } from '../../lib/supabase';
+import type { InventoryProduct } from './inventoryUtils';
+import { deriveProductSku } from './inventoryUtils';
 
 export interface InventoryMovement {
   id: string;
@@ -558,3 +560,97 @@ export function calculateCurrentStock(
   const totalDelta = movements.reduce((sum, m) => sum + m.quantity, 0);
   return openingQty + totalDelta;
 }
+
+/**
+ * Fetch all products with only existing columns (no sku field)
+ * Uses columns available in the actual schema
+ */
+export async function getAllProducts(): Promise<InventoryProduct[]> {
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .select('id, name, companyId, companyName, orderMultiple, packetsPerCarton, piecesPerPacket, isActive, secondaryAvailable')
+      .eq('isActive', true)
+      .order('name', { ascending: true });
+
+    if (error) throw error;
+
+    // Add derived sku field
+    return (data || []).map(product => ({
+      ...product,
+      sku: deriveProductSku(product),
+    }));
+  } catch (error) {
+    console.error('[InventoryService] Failed to fetch products:', error);
+    throw error;
+  }
+}
+
+/**
+ * Fetch products with optional search filter
+ */
+export async function searchProducts(search?: string): Promise<InventoryProduct[]> {
+  try {
+    let query = supabase
+      .from('products')
+      .select('id, name, companyId, companyName, orderMultiple, packetsPerCarton, piecesPerPacket, isActive, secondaryAvailable')
+      .eq('isActive', true);
+
+    if (search && search.trim()) {
+      query = query.or(`name.ilike.%${search}%,companyName.ilike.%${search}%`);
+    }
+
+    const { data, error } = await query.order('name', { ascending: true });
+
+    if (error) throw error;
+
+    // Add derived sku field
+    return (data || []).map(product => ({
+      ...product,
+      sku: deriveProductSku(product),
+    }));
+  } catch (error) {
+    console.error('[InventoryService] Failed to search products:', error);
+    throw error;
+  }
+}
+
+/**
+ * Batch upsert opening stock records
+ */
+export async function batchUpsertOpeningStock(
+  records: Array<{ product_id: string; opening_qty: number; effective_date: string }>
+): Promise<void> {
+  if (records.length === 0) return;
+
+  try {
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      throw new Error('Not authenticated');
+    }
+
+    const recordsWithUser = records.map(r => ({
+      product_id: r.product_id,
+      opening_qty: r.opening_qty,
+      effective_date: r.effective_date,
+      created_by: user.id,
+    }));
+
+    // Batch upsert (chunks if very large)
+    const batchSize = 100;
+    for (let i = 0; i < recordsWithUser.length; i += batchSize) {
+      const batch = recordsWithUser.slice(i, i + batchSize);
+      const { error } = await supabase
+        .from('inventory_opening')
+        .upsert(batch, {
+          onConflict: 'product_id,effective_date',
+        });
+
+      if (error) throw error;
+    }
+  } catch (error) {
+    console.error('[InventoryService] Failed to batch upsert opening stock:', error);
+    throw error;
+  }
+}
+

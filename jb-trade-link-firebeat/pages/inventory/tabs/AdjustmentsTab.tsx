@@ -10,22 +10,18 @@ import { Search, Plus, AlertCircle, Loader, CheckCircle, X } from 'lucide-react'
 import {
   createInventoryAdjustment,
   setOpeningStock,
+  getAllProducts,
   InventoryAdjustment,
   InventoryOpening,
 } from '../../../services/inventory/inventoryService';
-import { supabase } from '../../../lib/supabase';
+import type { InventoryProduct } from '../../../services/inventory/inventoryUtils';
+import { deriveProductSku } from '../../../services/inventory/inventoryUtils';
 import { format } from 'date-fns';
 
-interface Product {
-  id: string;
-  name: string;
-  sku: string;
-  company: string;
-}
-
 export function AdjustmentsTab({ isAdmin }: { isAdmin: boolean }) {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<InventoryProduct[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
+  const [productError, setProductError] = useState<string | null>(null);
   
   const [activeForm, setActiveForm] = useState<'adjustment' | 'opening' | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -37,15 +33,13 @@ export function AdjustmentsTab({ isAdmin }: { isAdmin: boolean }) {
 
   async function loadProducts() {
     try {
-      const { data, error } = await supabase
-        .from('products')
-        .select('id, name, sku, company')
-        .order('name');
-
-      if (error) throw error;
-      setProducts(data || []);
+      setLoadingProducts(true);
+      setProductError(null);
+      const data = await getAllProducts();
+      setProducts(data);
     } catch (err) {
       console.error('[AdjustmentsTab] Error loading products:', err);
+      setProductError(err instanceof Error ? err.message : 'Failed to load products');
     } finally {
       setLoadingProducts(false);
     }
@@ -60,6 +54,36 @@ export function AdjustmentsTab({ isAdmin }: { isAdmin: boolean }) {
           <p className="text-sm text-gray-600 mt-2">
             Only administrators can create inventory adjustments or set opening stock.
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading state
+  if (loadingProducts) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center">
+          <Loader className="w-8 h-8 animate-spin text-blue-500 mx-auto mb-2" />
+          <p className="text-gray-600">Loading products...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state with retry
+  if (productError) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center">
+          <AlertCircle className="w-8 h-8 text-red-500 mx-auto mb-2" />
+          <p className="text-gray-900 font-medium mb-4">{productError}</p>
+          <button
+            onClick={loadProducts}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Retry
+          </button>
         </div>
       </div>
     );
@@ -148,7 +172,7 @@ function AdjustmentForm({
   loadingProducts,
   onSuccess,
 }: {
-  products: Product[];
+  products: InventoryProduct[];
   loadingProducts: boolean;
   onSuccess: (msg: string) => void;
 }) {
@@ -233,7 +257,7 @@ function AdjustmentForm({
             <option value="">Select a product...</option>
             {products.map(p => (
               <option key={p.id} value={p.id}>
-                {p.name} ({p.sku}) - {p.company}
+                {deriveProductSku(p)} - {p.name}
               </option>
             ))}
           </select>
@@ -312,7 +336,7 @@ function OpeningStockForm({
   loadingProducts,
   onSuccess,
 }: {
-  products: Product[];
+  products: InventoryProduct[];
   loadingProducts: boolean;
   onSuccess: (msg: string) => void;
 }) {
@@ -389,7 +413,7 @@ function OpeningStockForm({
             <option value="">Select a product...</option>
             {products.map(p => (
               <option key={p.id} value={p.id}>
-                {p.name} ({p.sku}) - {p.company}
+                {deriveProductSku(p)} - {p.name}
               </option>
             ))}
           </select>
