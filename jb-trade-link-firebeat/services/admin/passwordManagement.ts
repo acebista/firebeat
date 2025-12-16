@@ -41,14 +41,12 @@ export async function adminSetPassword(
       throw new Error('Not authenticated. Please login and try again.');
     }
 
-    // Call the admin password management edge function with explicit headers
+    // Call the admin password management edge function
+    // The supabase.functions.invoke() automatically includes the session token
     const { data, error } = await supabase.functions.invoke('admin-update-password', {
       body: {
         userId,
         newPassword,
-      },
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
       },
     });
 
