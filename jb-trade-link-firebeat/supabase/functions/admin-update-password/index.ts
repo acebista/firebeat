@@ -1,19 +1,32 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import "jsr:@supabase/functions-js/edge-runtime.d.ts"
+import { createClient } from 'jsr:@supabase/supabase-js@2'
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
     // Handle CORS preflight requests
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
     }
 
     try {
-        // Get the authorization header to verify the caller is authenticated
+        // Get environment variables first
+        const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+        const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+        const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+
+        if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceKey) {
+            console.error('[admin-update-password] Missing required environment variables')
+            return new Response(
+                JSON.stringify({ error: 'Server configuration error: Missing environment variables' }),
+                { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            )
+        }
+
+        // Get the authorization header
         const authHeader = req.headers.get('Authorization')
         if (!authHeader) {
             console.log('[admin-update-password] No authorization header provided')
@@ -23,18 +36,23 @@ serve(async (req) => {
             )
         }
 
-        // Get environment variables
-        const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
-        const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
-        const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+        // Create a Supabase client with the user's JWT
+        const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+            global: { headers: { Authorization: authHeader } }
+        })
 
-        if (!supabaseUrl || !supabaseServiceKey) {
-            console.error('[admin-update-password] Missing required environment variables')
+        // Verify the user
+        const { data: { user: callerUser }, error: userError } = await userClient.auth.getUser()
+
+        if (userError || !callerUser) {
+            console.error('[admin-update-password] Auth error:', userError?.message)
             return new Response(
-                JSON.stringify({ error: 'Server configuration error' }),
-                { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                JSON.stringify({ error: 'Invalid authentication' }),
+                { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             )
         }
+
+        console.log(`[admin-update-password] Caller authenticated: ${callerUser.id}`)
 
         // Create admin client with service role key (bypasses RLS)
         const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
@@ -44,57 +62,23 @@ serve(async (req) => {
             }
         })
 
-        // Verify the caller's JWT using the service client
-        // Extract JWT from Authorization header
-        const jwt = authHeader.replace('Bearer ', '')
-        const { data: { user: callerUser }, error: userError } = await adminClient.auth.getUser(jwt)
-
-        if (userError) {
-            console.error('[admin-update-password] JWT verification failed:', userError.message)
-            return new Response(
-                JSON.stringify({ error: 'Invalid or expired authentication token' }),
-                { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            )
-        }
-
-        if (!callerUser) {
-            console.log('[admin-update-password] No user found for token')
-            return new Response(
-                JSON.stringify({ error: 'Invalid authentication' }),
-                { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            )
-        }
-
-        console.log(`[admin-update-password] Caller authenticated: ${callerUser.id}`)
-
         // Check if caller is an admin by looking up their role in the public.users table
-        // Use service client to bypass RLS and query by ID (stored as text)
         const { data: callerProfile, error: profileError } = await adminClient
             .from('users')
-            .select('id, role')
+            .select('role')
             .eq('id', callerUser.id)
             .single()
 
         if (profileError) {
-            console.error('[admin-update-password] Profile lookup error:', profileError.message, profileError.code)
+            console.error('[admin-update-password] Profile lookup error:', profileError.message)
             return new Response(
                 JSON.stringify({ error: `Failed to verify admin status: ${profileError.message}` }),
                 { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             )
         }
 
-        if (!callerProfile) {
-            console.log('[admin-update-password] No profile found for user:', callerUser.id)
-            return new Response(
-                JSON.stringify({ error: 'User profile not found' }),
-                { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            )
-        }
-
-        console.log(`[admin-update-password] User role: ${callerProfile.role}`)
-
-        if (callerProfile.role !== 'admin') {
-            console.log('[admin-update-password] Non-admin attempted password change:', callerUser.id)
+        if (!callerProfile || callerProfile.role !== 'admin') {
+            console.log('[admin-update-password] Unauthorized access attempt by:', callerUser.id)
             return new Response(
                 JSON.stringify({ error: 'Only admins can update user passwords' }),
                 { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -102,7 +86,17 @@ serve(async (req) => {
         }
 
         // Parse the request body
-        const { userId, newPassword } = await req.json()
+        let body;
+        try {
+            body = await req.json()
+        } catch (e) {
+            return new Response(
+                JSON.stringify({ error: 'Invalid request body' }),
+                { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            )
+        }
+
+        const { userId, newPassword } = body
 
         if (!userId || !newPassword) {
             return new Response(
@@ -121,15 +115,15 @@ serve(async (req) => {
         console.log(`[admin-update-password] Admin ${callerUser.id} updating password for user ${userId}`)
 
         // Update the user's password using admin privileges
-        const { data, error } = await adminClient.auth.admin.updateUserById(
+        const { error: updateError } = await adminClient.auth.admin.updateUserById(
             userId,
             { password: newPassword }
         )
 
-        if (error) {
-            console.error('[admin-update-password] Password update failed:', error.message)
+        if (updateError) {
+            console.error('[admin-update-password] Password update failed:', updateError.message)
             return new Response(
-                JSON.stringify({ error: `Password update failed: ${error.message}` }),
+                JSON.stringify({ error: `Password update failed: ${updateError.message}` }),
                 { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             )
         }
