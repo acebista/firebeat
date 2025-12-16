@@ -105,6 +105,7 @@ Deno.serve(async (req) => {
             )
         }
 
+
         if (newPassword.length < 6) {
             return new Response(
                 JSON.stringify({ error: 'Password must be at least 6 characters' }),
@@ -112,27 +113,94 @@ Deno.serve(async (req) => {
             )
         }
 
-        console.log(`[admin-update-password] Admin ${callerUser.id} updating password for user ${userId}`)
+        console.log(`[admin-update-password] Admin ${callerUser.id} processing user ${userId}`)
 
-        // Update the user's password using admin privileges
-        const { error: updateError } = await adminClient.auth.admin.updateUserById(
-            userId,
-            { password: newPassword }
-        )
+        // 1. Check if the user exists in Auth
+        const { data: { user: existingAuthUser }, error: getUserError } = await adminClient.auth.admin.getUserById(userId)
 
-        if (updateError) {
-            console.error('[admin-update-password] Password update failed:', updateError.message)
+        if (existingAuthUser) {
+            // User exists in Auth, update password
+            console.log(`[admin-update-password] Auth user found, updating password for ${userId}`)
+
+            const { error: updateError } = await adminClient.auth.admin.updateUserById(
+                userId,
+                { password: newPassword }
+            )
+
+            if (updateError) {
+                console.error('[admin-update-password] Password update failed:', updateError.message)
+                return new Response(
+                    JSON.stringify({ error: `Password update failed: ${updateError.message}` }),
+                    { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                )
+            }
+
+            console.log(`[admin-update-password] Password updated successfully for user ${userId}`)
             return new Response(
-                JSON.stringify({ error: `Password update failed: ${updateError.message}` }),
+                JSON.stringify({ success: true, message: 'Password updated successfully' }),
+                { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            )
+
+        } else {
+            // User does not exist in Auth, we need to create them (Backfill)
+            // We need their email from the public profile first
+            console.log(`[admin-update-password] Auth user not found from ID, attempting to create backfill for ${userId}`)
+
+            const { data: targetProfile, error: targetProfileError } = await adminClient
+                .from('users')
+                .select('email')
+                .eq('id', userId)
+                .single()
+
+            if (targetProfileError || !targetProfile) {
+                console.error('[admin-update-password] Could not find public profile for backfill:', targetProfileError?.message)
+                return new Response(
+                    JSON.stringify({ error: 'User profile not found. Cannot create login without email.' }),
+                    { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                )
+            }
+
+            const email = targetProfile.email
+            if (!email) {
+                return new Response(
+                    JSON.stringify({ error: 'User profile has no email. Cannot create login.' }),
+                    { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                )
+            }
+
+            console.log(`[admin-update-password] Creating new Auth user for ${email} with ID ${userId}`)
+
+            const { data: createdUser, error: createError } = await adminClient.auth.admin.createUser({
+                id: userId,
+                email: email,
+                password: newPassword,
+                email_confirm: true,
+                user_metadata: { source: 'admin-backfill' }
+            })
+
+            if (createError) {
+                console.error('[admin-update-password] User creation failed:', createError.message)
+
+                // Friendly error if email is taken
+                if (createError.message.includes('already been registered')) {
+                    return new Response(
+                        JSON.stringify({ error: `The email ${email} is already associated with another user ID.` }),
+                        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                    )
+                }
+
+                return new Response(
+                    JSON.stringify({ error: `Failed to create login: ${createError.message}` }),
+                    { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                )
+            }
+
+            console.log(`[admin-update-password] User created successfully: ${userId}`)
+            return new Response(
+                JSON.stringify({ success: true, message: 'User login created and password set successfully' }),
                 { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             )
         }
-
-        console.log(`[admin-update-password] Password updated successfully for user ${userId}`)
-        return new Response(
-            JSON.stringify({ success: true, message: 'Password updated successfully' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
 
     } catch (error: any) {
         console.error('[admin-update-password] Unexpected error:', error?.message || error)
