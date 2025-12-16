@@ -46,20 +46,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const boot = async () => {
             try {
                 console.log('[AuthProvider] Starting boot...');
-                
+
                 // Rehydrate session WITHOUT clearing tokens first
                 // rehydrateFromSession() will check getSession() first,
                 // then only clear tokens if session is missing/invalid
                 await useUserStore.getState().rehydrateFromSession();
-                
+
                 const storeState = useUserStore.getState();
                 console.log('[AuthProvider] Boot complete. User authenticated:', !!storeState.user);
-                
+
                 if (storeState.user) {
-                    dispatch({ 
-                        type: 'SET_AUTHENTICATED', 
-                        user: storeState.user, 
-                        session: storeState.session 
+                    dispatch({
+                        type: 'SET_AUTHENTICATED',
+                        user: storeState.user,
+                        session: storeState.session
                     });
                 } else {
                     dispatch({ type: 'SET_UNAUTHENTICATED' });
@@ -82,9 +82,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (event === 'SIGNED_OUT') {
                 useUserStore.getState().resetStore();
                 dispatch({ type: 'SET_UNAUTHENTICATED' });
-            } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-                // Let rehydration handle this
+            } else if (event === 'SIGNED_IN') {
+                // Only rehydrate on actual sign-in (not tab switch token refresh)
                 useUserStore.getState().rehydrateFromSession();
+            } else if (event === 'TOKEN_REFRESHED') {
+                // For token refresh (tab switch), just update the session silently
+                // Don't trigger full rehydration which causes loading screen
+                const currentUser = useUserStore.getState().user;
+                if (!currentUser && session) {
+                    // User became authenticated from another context, rehydrate
+                    useUserStore.getState().rehydrateFromSession();
+                } else if (session) {
+                    // User already authenticated, just update session quietly
+                    useUserStore.setState({ session });
+                    console.log('[AuthProvider] Session refreshed quietly (no reload)');
+                }
             }
         });
 
@@ -163,12 +175,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             useUserStore.setState({ session });
             await useUserStore.getState().rehydrateFromSession();
-            
+
             const storeState = useUserStore.getState();
-            dispatch({ 
-                type: 'SET_AUTHENTICATED', 
-                user: storeState.user!, 
-                session: storeState.session 
+            dispatch({
+                type: 'SET_AUTHENTICATED',
+                user: storeState.user!,
+                session: storeState.session
             });
         } catch (error) {
             console.error('[AuthProvider] Login error:', error);
@@ -191,11 +203,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
             const { data, error } = await supabase.auth.refreshSession();
             if (error) throw error;
-            
+
             if (data.session && data.user) {
                 useUserStore.setState({ session: data.session });
                 await useUserStore.getState().rehydrateFromSession();
-                
+
                 const storeState = useUserStore.getState();
                 dispatch({
                     type: 'SET_AUTHENTICATED',
