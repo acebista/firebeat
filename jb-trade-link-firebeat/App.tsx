@@ -45,6 +45,7 @@ import { PerformanceDashboard } from './pages/sales/PerformanceDashboard';
 import { DeliveryDashboard } from './pages/delivery/DeliveryDashboard';
 import { DeliveryOrderDetails } from './pages/delivery/DeliveryOrderDetails';
 import { RouteMap } from './pages/delivery/RouteMap';
+import { PackingListPage } from './pages/delivery/PackingListPage';
 
 // Placeholder for missing pages
 const Placeholder = ({ title }: { title: string }) => (
@@ -186,6 +187,7 @@ const App: React.FC = () => {
             <Route path="/delivery/dashboard" element={<DeliveryDashboard />} />
             <Route path="/delivery/route-map" element={<RouteMap />} />
             <Route path="/delivery/invoice/:id" element={<DeliveryOrderDetails />} />
+            <Route path="/delivery/packing-list/:tripId" element={<PackingListPage />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/login" />} />

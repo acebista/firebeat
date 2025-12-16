@@ -336,6 +336,19 @@ export const DeliveryDashboard: React.FC = () => {
                 </div>
               </div>
 
+              {/* Packing List Button */}
+              {expandedTripId === tripData.trip.id && (
+                <div className="px-4 py-2 bg-white bg-opacity-50 border-t border-opacity-20 border-current flex gap-2">
+                  <Button
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => navigate(`/delivery/packing-list/${tripData.trip.id}`)}
+                  >
+                    📦 Packing List
+                  </Button>
+                </div>
+              )}
+
               {/* Trip Details */}
               {expandedTripId === tripData.trip.id && (
                 <div className="px-4 pb-4 border-t border-opacity-20 border-current">
