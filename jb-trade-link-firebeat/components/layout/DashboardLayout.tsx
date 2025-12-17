@@ -37,6 +37,7 @@ const navItems: Record<UserRole, { label: string; path: string; icon: any }[]> =
     { label: 'Companies', path: '/admin/companies', icon: Building2 },
     { label: 'Products', path: '/admin/products', icon: Package },
     { label: 'Customers', path: '/admin/customers', icon: Users },
+    { label: 'All Credits (AR)', path: '/admin/credits', icon: DollarSign },
     { label: 'Sales Orders', path: '/admin/orders', icon: ShoppingBag },
     { label: 'Purchases', path: '/admin/purchases', icon: ShoppingCart },
     { label: 'Vehicles', path: '/admin/vehicles', icon: Truck },

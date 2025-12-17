@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, Button, Input, Select, Badge } from '../../components/ui/Elements';
 import { Modal } from '../../components/ui/Modal';
-import { Edit2, Eye, MapPin, CreditCard, UserPlus, Navigation } from 'lucide-react';
+import { Edit2, Eye, MapPin, CreditCard, UserPlus, Navigation, FileText } from 'lucide-react';
 import { Customer } from '../../types';
 import { CustomerService } from '../../services/db';
 import { customerSchema } from '../../utils/validation/schemas';
@@ -23,6 +24,7 @@ export const mockCustomers: Customer[] = [
 ];
 
 export const CustomerManagement: React.FC = () => {
+  const navigate = useNavigate();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -201,7 +203,12 @@ export const CustomerManagement: React.FC = () => {
                 filteredCustomers.map((customer) => (
                   <tr key={customer.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="font-medium text-gray-900">{customer.name}</div>
+                      <button
+                        onClick={() => navigate(`/admin/customers/${customer.id}/ledger`)}
+                        className="font-medium text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                      >
+                        {customer.name}
+                      </button>
                       <div className="text-sm text-gray-500">{customer.phone}</div>
                       {customer.panNumber && <div className="text-xs text-gray-500">PAN: {customer.panNumber}</div>}
                     </td>
@@ -215,7 +222,7 @@ export const CustomerManagement: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <Badge color={customer.isActive ? 'green' : 'red'}>
+                      <Badge color={customer.isActive ? 'emerald' : 'red'}>
                         {customer.isActive ? 'Active' : 'Inactive'}
                       </Badge>
                     </td>
@@ -316,7 +323,7 @@ export const CustomerManagement: React.FC = () => {
                   <MapPin className="h-3 w-3" /> {currentCustomer.locationText || "Location not tagged"}
                 </p>
               </div>
-              <Badge color={currentCustomer.isActive ? 'green' : 'red'}>{currentCustomer.isActive ? 'Active' : 'Inactive'}</Badge>
+              <Badge color={currentCustomer.isActive ? 'emerald' : 'red'}>{currentCustomer.isActive ? 'Active' : 'Inactive'}</Badge>
             </div>
 
             <div className="grid grid-cols-2 gap-4 text-sm">
@@ -352,6 +359,15 @@ export const CustomerManagement: React.FC = () => {
                 <span className="text-gray-600 text-sm">Credit Days</span>
                 <span className="font-medium text-gray-900">{currentCustomer.creditDays} Days</span>
               </div>
+            </div>
+
+            <div className="flex justify-end pt-4 border-t mt-4">
+              <Button onClick={() => {
+                setDetailsOpen(false);
+                navigate(`/admin/customers/${currentCustomer.id}/ledger`);
+              }}>
+                <FileText className="h-4 w-4 mr-2" /> View Full Ledger
+              </Button>
             </div>
           </div>
         )}

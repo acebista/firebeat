@@ -3,7 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Button, Input } from '../../components/ui/Elements';
 import { MapPin, Phone, CheckCircle, XCircle, ArrowLeft, Banknote, CreditCard, Clock, Package, Trash2, Plus, Minus, X, AlertCircle } from 'lucide-react';
 import { OrderService, CustomerService, ProductService } from '../../services/db';
+import { PaymentsService } from '../../services/ledger';
 import { Order, Customer } from '../../types';
+import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 
 interface DamageItem {
@@ -49,13 +51,54 @@ export const DeliveryOrderDetails: React.FC = () => {
                 const orderData = await OrderService.getById(id);
                 if (orderData) {
                     // Handle potential string format for items
-                    if (typeof orderData.items === 'string') {
+                    let parsedItems = orderData.items;
+                    if (typeof parsedItems === 'string') {
                         try {
-                            orderData.items = JSON.parse(orderData.items);
+                            parsedItems = JSON.parse(parsedItems);
                         } catch (e) {
                             console.error('Failed to parse order items', e);
-                            orderData.items = [];
+                            parsedItems = [];
                         }
+                    }
+
+                    // Normalize items to ensure strict types and prevent crashes
+                    if (Array.isArray(parsedItems)) {
+                        let normalizedItems = parsedItems.map((item: any) => ({
+                            ...item,
+                            productId: item.productId || item.product_id || item.id || '',
+                            productName: item.productName || item.product_name || item.name || 'Unknown Item',
+                            qty: Number(item.qty || item.quantity || 0),
+                            rate: Number(item.rate || item.price || item.unit_price || 0),
+                            total: Number(item.total || item.amount || 0)
+                        }));
+
+                        // Enrichment: Fetch product names if missing and ID exists
+                        const hasUnknown = normalizedItems.some((i: any) => i.productName === 'Unknown Item' && i.productId);
+                        if (hasUnknown) {
+                            try {
+                                const allProducts = await ProductService.getAll();
+                                const productMap = new Map(allProducts.map((p: any) => [p.id, p.name || p.productName]));
+
+                                normalizedItems = normalizedItems.map((item: any) => {
+                                    if (item.productName === 'Unknown Item' && item.productId) {
+                                        const foundName = productMap.get(item.productId);
+                                        if (foundName) {
+                                            item.productName = foundName;
+                                        } else {
+                                            item.productName = `Unknown (ID: ${item.productId})`;
+                                        }
+                                    } else if (item.productName === 'Unknown Item' && !item.productId) {
+                                        item.productName = 'Unknown (No ID)';
+                                    }
+                                    return item;
+                                });
+                            } catch (e) {
+                                console.error("Enrichment failed", e);
+                            }
+                        }
+                        orderData.items = normalizedItems;
+                    } else {
+                        orderData.items = [];
                     }
                     setOrder(orderData);
                     setAmountCollected(orderData.totalAmount.toString());
@@ -93,6 +136,10 @@ export const DeliveryOrderDetails: React.FC = () => {
 
         setProcessing(true);
         try {
+            // Get current user for delivered_by tracking
+            const { data: { session } } = await supabase.auth.getSession();
+            const userId = session?.user?.id;
+
             let remarkText = `Payment: ${paymentMode.toUpperCase()}`;
             if (paymentReference) remarkText += ` (${paymentReference})`;
             if (remarks) remarkText += ` | ${remarks}`;
@@ -104,13 +151,37 @@ export const DeliveryOrderDetails: React.FC = () => {
                 remarkText += ` | Returns: ${returnItems.map(r => `${r.productName}(${r.returnQty})`).join(', ')}`;
             }
 
-            const finalAmount = parseFloat(amountCollected) - calculateDamageTotal() - calculateReturnTotal();
+            const paymentAmount = parseFloat(amountCollected);
+            const finalAmount = paymentAmount - calculateDamageTotal() - calculateReturnTotal();
 
+            // Update order with delivery info for AR/Ledger system
             await OrderService.update(order.id, {
                 status: 'delivered',
                 remarks: remarkText,
-                totalAmount: Math.max(0, finalAmount)
-            });
+                totalAmount: Math.max(0, finalAmount),
+                // New AR fields
+                delivered_at: new Date().toISOString(),
+                delivered_by: userId || null,
+                payment_collected: paymentAmount,
+                payment_method_at_delivery: paymentMode
+            } as any);
+
+            // Create invoice payment record if payment > 0 (for proper ledger tracking)
+            if (paymentAmount > 0 && order.customerId) {
+                try {
+                    await PaymentsService.addPayment({
+                        invoiceId: order.id,
+                        customerId: order.customerId,
+                        amount: paymentAmount,
+                        method: paymentMode,
+                        reference: paymentReference || undefined,
+                        notes: `Payment at delivery`
+                    });
+                } catch (paymentError) {
+                    console.error('Failed to create payment record', paymentError);
+                    // Don't fail delivery if payment record fails - the order is still delivered
+                }
+            }
 
             toast.success("Order marked as delivered!");
             navigate('/delivery/dashboard');
@@ -224,19 +295,21 @@ export const DeliveryOrderDetails: React.FC = () => {
                     Order Items ({order.totalItems || 0})
                 </h3>
                 <div className="space-y-3 divide-y">
-                    {(order.items || []).map((item, idx) => (
+                    {(order.items || []).map((item: any, idx) => (
                         <div key={idx} className="flex justify-between items-center py-2 first:pt-0 last:pb-0">
                             <div className="flex-1">
-                                <p className="font-medium text-gray-900 text-sm">{item.productName}</p>
-                                <p className="text-xs text-gray-600">{item.qty} × ₹{item.rate.toFixed(2)}</p>
+                                <p className="font-medium text-gray-900 text-sm">{item.productName || item.product_name || 'Unknown Item'}</p>
+                                <p className="text-xs text-gray-600">
+                                    {item.qty || item.quantity || 0} × ₹{(Number(item.rate) || 0).toFixed(2)}
+                                </p>
                             </div>
-                            <p className="font-semibold text-gray-900">₹{item.total.toFixed(2)}</p>
+                            <p className="font-semibold text-gray-900">₹{(Number(item.total) || 0).toFixed(2)}</p>
                         </div>
                     ))}
                 </div>
                 <div className="mt-4 pt-4 border-t border-gray-200 flex justify-between items-center">
                     <span className="font-bold text-gray-900">Total</span>
-                    <span className="text-lg font-bold text-gray-900">₹{order.totalAmount.toFixed(2)}</span>
+                    <span className="text-lg font-bold text-gray-900">₹{(Number(order.totalAmount) || 0).toFixed(2)}</span>
                 </div>
             </Card>
 

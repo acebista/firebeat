@@ -14,6 +14,7 @@ export interface PackingItem {
   product_name: string;
   company: string;
   quantity: number;
+  total?: number;
   is_done?: boolean;
 }
 
@@ -100,15 +101,19 @@ export async function getTripWithOrders(tripId: string): Promise<TripWithOrders 
       return {
         id: order.id,
         customerName: order.customerName,
-        items: items.map((item: any, index: number) => ({
-          id: `${order.id}-${index}`,
-          order_id: order.id,
-          customer_name: order.customerName,
-          product_id: item.product_id || '',
-          product_name: item.name || item.product_name || 'Unknown',
-          company: item.company || '',
-          quantity: item.quantity || 0,
-        })),
+        items: items.map((item: any, index: number) => {
+          return {
+            id: `${order.id}-${index}`,
+            order_id: order.id,
+            customer_name: order.customerName,
+            // Handle both snake_case (legacy/db) and camelCase (app) property names
+            product_id: item.product_id || item.productId || '',
+            product_name: item.name || item.product_name || item.productName || 'Unknown',
+            company: item.company || item.companyName || '',
+            quantity: Number(item.quantity) || Number(item.qty) || 0,
+            total: Number(item.total) || Number(item.amount) || 0,
+          };
+        }),
       };
     });
 

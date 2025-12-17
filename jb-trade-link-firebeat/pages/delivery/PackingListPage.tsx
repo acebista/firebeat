@@ -1,20 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Circle, Search, Check, AlertCircle, FileText, ListChecks, Printer } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Circle, Search, Printer, Package, ChevronDown, ChevronUp } from 'lucide-react';
 import {
   getTripWithOrders,
   getPackingProgress,
   upsertPackingProgress,
-  markAllDone,
   PackingItem,
   TripWithOrders,
 } from '../../services/packing/packingService';
 import { ProductService } from '../../services/db';
 import { Product } from '../../types';
 import { DispatchRow } from '../../types/reports';
-
-type FilterType = 'all' | 'done' | 'pending';
-type TabType = 'checklist' | 'summary';
 
 export function PackingListPage() {
   const { tripId } = useParams<{ tripId: string }>();
@@ -24,566 +20,336 @@ export function PackingListPage() {
   const [allItems, setAllItems] = useState<PackingItem[]>([]);
   const [progressMap, setProgressMap] = useState<Map<string, boolean>>(new Map());
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<FilterType>('all');
-  const [activeTab, setActiveTab] = useState<TabType>('summary'); // Default to summary as per request
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-
-  // Data for summary view
   const [products, setProducts] = useState<Product[]>([]);
-  const [dispatchRows, setDispatchRows] = useState<DispatchRow[]>([]);
 
-  // Fetch trip and progress data
+  // Expanded cards state for mobile
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  // Fetch data
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        setError(null);
+        if (!tripId) throw new Error('No trip ID provided');
 
-        if (!tripId) {
-          throw new Error('No trip ID provided');
-        }
-
-        // Fetch parallel: Trip data and All Products (for packaging metadata)
-        const [tripData, allProducts] = await Promise.all([
+        const [tripData, allProducts, progress] = await Promise.all([
           getTripWithOrders(tripId),
-          ProductService.getAll() // Ensure this returns Product[]
+          ProductService.getAll(),
+          getPackingProgress(tripId)
         ]);
 
-        if (!tripData) {
-          throw new Error('Trip not found');
-        }
+        if (!tripData) throw new Error('Trip not found');
 
         setTrip(tripData);
         setProducts(allProducts);
 
-        // Flatten items from all orders (for checklist)
+        // Flatten items
         const items: PackingItem[] = [];
-        tripData.orders.forEach(order => {
-          items.push(...order.items);
-        });
+        tripData.orders.forEach(order => items.push(...order.items));
         setAllItems(items);
 
-        // Fetch packing progress
-        const progress = await getPackingProgress(tripId);
-        const progressMap = new Map(progress.map(p => [p.item_id, p.is_done]));
-        setProgressMap(progressMap);
-
-        // --- Calculate Dispatch Rows (Summary View) ---
-        calculateDispatchRows(tripData.orders, allProducts);
+        // Progress map
+        const pMap = new Map(progress.map(p => [p.item_id, p.is_done]));
+        setProgressMap(pMap);
 
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to load packing list';
-        setError(message);
-        console.error('[PackingList] Error:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load');
       } finally {
         setLoading(false);
       }
     };
-
     fetchData();
   }, [tripId]);
 
-  // Copy of logic from Reports.tsx -> calculateMetrics
-  const calculateDispatchRows = (orders: any[], products: Product[]) => {
-    const productLookup = new Map<string, Product>();
-    products.forEach(p => productLookup.set(p.id, p));
+  // Aggregate Data (Dispatch Style)
+  const aggregatedRows = useMemo(() => {
+    const productLookup = new Map(products.map(p => [p.id, p]));
+    const rowMap = new Map<string, DispatchRow & { itemIds: string[], isFullyLoaded: boolean }>();
 
-    const productMap = new Map<string, DispatchRow>();
+    // Helper to check if item is done
+    const isItemDone = (itemId: string) => progressMap.get(itemId) || false;
 
-    orders.forEach((order: any) => {
-      // Items are already parsed in tripData.orders
-      const items = order.items || [];
+    // Group items by Product ID
+    allItems.forEach(item => {
+      const pId = item.product_id || '';
+      if (!pId) return;
 
-      items.forEach((item: any) => {
-        // Handle both PackingItem (snake_case) and OrderItem (camelCase) keys
-        const pId = item.product_id || item.productId;
-        const masterProduct = productLookup.get(pId);
+      const masterProduct = productLookup.get(pId);
+      const name = masterProduct?.name || item.product_name || 'Unknown';
+      const company = masterProduct?.companyName || item.company || 'Unknown';
+      const qty = Number(item.quantity) || 0;
+      const total = Number(item.total) || 0;
 
-        const resolvedProductName = masterProduct?.name || item.product_name || item.productName || 'Unknown Product';
-        const resolvedCompanyName = masterProduct?.companyName || item.company || item.companyName || 'Unknown';
-        const resolvedQty = Number(item.quantity) || Number(item.qty) || 0;
-        // PackingItem doesn't have amount, so we might miss value here unless we fetch orders fully
-        const resolvedTotal = Number(item.total) || Number(item.amount) || 0;
+      if (!rowMap.has(pId)) {
+        rowMap.set(pId, {
+          productId: pId,
+          productName: name,
+          companyName: company,
+          totalQty: 0,
+          cartons: 0,
+          packets: 0,
+          pieces: 0,
+          totalAmount: 0,
+          itemIds: [],
+          isFullyLoaded: true // starts true, becomes false if any item is not done
+        });
+      }
 
-        if (!pId) return; // Skip if no product ID
-
-        if (!productMap.has(pId)) {
-          productMap.set(pId, {
-            productId: pId,
-            productName: resolvedProductName,
-            companyName: resolvedCompanyName,
-            totalQty: 0,
-            cartons: 0,
-            packets: 0,
-            pieces: 0,
-            totalAmount: 0
-          });
-        }
-        const entry = productMap.get(pId)!;
-        entry.totalQty += resolvedQty;
-        entry.totalAmount += resolvedTotal;
-      });
+      const row = rowMap.get(pId)!;
+      row.totalQty += qty;
+      row.totalAmount += total;
+      row.itemIds.push(item.id);
+      if (!isItemDone(item.id)) {
+        row.isFullyLoaded = false;
+      }
     });
 
-    // Breakdown Logic
-    const rows = Array.from(productMap.values()).map(row => {
+    // Calculate cartons/packets/pieces
+    const rows = Array.from(rowMap.values()).map(row => {
+      // Search filter
+      if (search.trim()) {
+        const s = search.toLowerCase();
+        if (!row.productName.toLowerCase().includes(s) && !row.companyName.toLowerCase().includes(s)) {
+          return null;
+        }
+      }
+
       const product = productLookup.get(row.productId);
       const packetsPerCarton = product?.packetsPerCarton || 0;
       const piecesPerPacket = product?.piecesPerPacket || 0;
       const totalPieces = row.totalQty;
 
       const piecesPerCartonTotal = packetsPerCarton * piecesPerPacket;
-
-      let cartons = 0;
-      let packets = 0;
-      let pieces = 0;
+      let cartons = 0, packets = 0, pieces = 0;
 
       if (piecesPerCartonTotal > 0) {
         cartons = Math.floor(totalPieces / piecesPerCartonTotal);
-        const remainingAfterCartons = totalPieces - (cartons * piecesPerCartonTotal);
-
+        let rem = totalPieces % piecesPerCartonTotal;
         if (piecesPerPacket > 0) {
-          packets = Math.floor(remainingAfterCartons / piecesPerPacket);
-          pieces = remainingAfterCartons % piecesPerPacket;
+          packets = Math.floor(rem / piecesPerPacket);
+          pieces = rem % piecesPerPacket;
         } else {
-          pieces = remainingAfterCartons;
+          pieces = rem;
         }
       } else {
         pieces = totalPieces;
       }
 
-      return {
-        ...row,
-        cartons,
-        packets,
-        pieces
-      };
-    });
+      return { ...row, cartons, packets, pieces };
+    }).filter(Boolean) as (DispatchRow & { itemIds: string[], isFullyLoaded: boolean })[];
 
-    // Sort by Company then Product Name
-    rows.sort((a, b) => {
-      // Handle missing company names
-      const companyA = a.companyName || '';
-      const companyB = b.companyName || '';
-      if (companyA !== companyB) return companyA.localeCompare(companyB);
-      return a.productName.localeCompare(b.productName);
-    });
+    // Sort by Company then Product
+    return rows.sort((a, b) =>
+      a.companyName.localeCompare(b.companyName) || a.productName.localeCompare(b.productName)
+    );
 
-    setDispatchRows(rows);
-  };
+  }, [allItems, products, progressMap, search]);
 
-  // Show toast and auto-hide
-  const showToast = (type: 'success' | 'error', message: string) => {
-    setToast({ type, message });
-    const timer = setTimeout(() => setToast(null), 3000);
-    return () => clearTimeout(timer);
-  };
+  const totalTripValue = aggregatedRows.reduce((sum, r) => sum + r.totalAmount, 0);
 
-  // Toggle item done state
-  const handleToggleDone = async (item: PackingItem) => {
+  // Mark all items for a specific product as Loaded/Unloaded
+  const handleToggleProduct = async (row: typeof aggregatedRows[0]) => {
     if (!tripId) return;
 
-    try {
-      setSaving(true);
-      const currentState = progressMap.get(item.id) || false;
-      const newState = !currentState;
+    // Toggle Logic: If not fully loaded, mark ALL as true. If fully loaded, mark ALL as false.
+    const targetState = !row.isFullyLoaded;
 
-      // Optimistic update
-      const newProgressMap = new Map(progressMap);
-      newProgressMap.set(item.id, newState);
-      setProgressMap(newProgressMap);
-
-      // Persist to server
-      await upsertPackingProgress(tripId, item.order_id, item.id, newState);
-      showToast('success', newState ? 'Item marked as done' : 'Item marked as pending');
-    } catch (err) {
-      // Rollback
-      const progressMap_copy = new Map(progressMap);
-      const oldState = progressMap.get(item.id) || false;
-      progressMap_copy.set(item.id, !oldState);
-      setProgressMap(progressMap_copy);
-
-      const message = err instanceof Error ? err.message : 'Failed to update item';
-      setError(message);
-      showToast('error', message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // Mark all items as done
-  const handleMarkAllDone = async () => {
-    if (!tripId || allItems.length === 0) return;
+    // Optimistic Update
+    const newMap = new Map(progressMap);
+    row.itemIds.forEach(id => newMap.set(id, targetState));
+    setProgressMap(newMap);
 
     try {
       setSaving(true);
-      await markAllDone(tripId, allItems);
+      // Find items that actually need updating to save bandwidth? 
+      // Or just update all to be safe. We'll update only changed ones for efficiency locally, but server needs specific calls.
+      // Parallel requests might be heavy if chunks are large.
 
-      // Update progress map
-      const newProgressMap = new Map<string, boolean>();
-      allItems.forEach(item => {
-        newProgressMap.set(item.id, true);
+      const promises = row.itemIds.map(itemId => {
+        // Only update if changed (optional optimization, but good for reducing calls)
+        /* if (progressMap.get(itemId) === targetState) return Promise.resolve(); */
+        return upsertPackingProgress(tripId, allItems.find(i => i.id === itemId)?.order_id!, itemId, targetState);
       });
-      setProgressMap(newProgressMap);
 
-      showToast('success', `All ${allItems.length} items marked as done`);
+      await Promise.all(promises);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to mark all items';
-      setError(message);
-      showToast('error', message);
+      console.error(err);
+      // Revert on error could be complex, just refetch?
+      alert("Failed to save progress. Resyncing...");
+      window.location.reload();
     } finally {
       setSaving(false);
     }
   };
 
-  const handlePrint = () => {
-    // Simple print implementation
-    window.print();
+  const toggleExpand = (id: string) => {
+    const newSet = new Set(expandedRows);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setExpandedRows(newSet);
   };
 
-  // Filter and search items
-  const filteredItems = allItems.filter(item => {
-    // Apply search filter
-    if (search.trim()) {
-      const searchLower = search.toLowerCase();
-      const matchesSearch =
-        item.product_name.toLowerCase().includes(searchLower) ||
-        item.company.toLowerCase().includes(searchLower) ||
-        item.customer_name.toLowerCase().includes(searchLower);
-
-      if (!matchesSearch) return false;
-    }
-
-    // Apply done/pending filter
-    const isDone = progressMap.get(item.id) || false;
-    if (filter === 'done') return isDone;
-    if (filter === 'pending') return !isDone;
-
-    return true;
-  });
-
-  const doneCount = allItems.filter(item => progressMap.get(item.id)).length;
-  const pendingCount = allItems.length - doneCount;
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin mb-4">
-            <Circle className="w-12 h-12 text-blue-500" />
-          </div>
-          <p className="text-gray-600">Loading packing list...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error && !trip) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-red-50 p-4">
-        <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-        <p className="text-red-700 text-center mb-4">{error}</p>
-        <button
-          onClick={() => navigate('/delivery')}
-          className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-        >
-          Back to Delivery
-        </button>
-      </div>
-    );
-  }
+  if (loading) return <div className="p-8 text-center">Loading...</div>;
+  if (error) return <div className="p-8 text-center text-red-600">{error}</div>;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-10 print:static">
-        <div className="max-w-6xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => navigate('/delivery')}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors print:hidden"
-              >
-                <ArrowLeft className="w-5 h-5 text-gray-600" />
-              </button>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Packing List</h1>
-                <p className="text-sm text-gray-600">Trip {trip?.id?.slice(0, 8)}</p>
+      {/* Sticky Header */}
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-20 shadow-sm print:hidden">
+        <div className="max-w-4xl mx-auto px-4 py-3">
+          <div className="flex items-center gap-3 mb-3">
+            <button onClick={() => navigate('/delivery')} className="p-1 rounded hover:bg-gray-100">
+              <ArrowLeft className="w-5 h-5 text-gray-600" />
+            </button>
+            <div>
+              <h1 className="text-lg font-bold text-gray-900 leading-tight">Packing List</h1>
+              <p className="text-xs text-gray-500">{new Date().toDateString()}</p>
+            </div>
+            <div className="ml-auto flex items-center gap-2">
+              <div className="text-right hidden sm:block">
+                <p className="text-xs text-gray-500">Trip Value</p>
+                <p className="font-bold text-green-700">₹{totalTripValue.toLocaleString()}</p>
               </div>
-            </div>
-            <button
-              onClick={handlePrint}
-              className="p-2 border border-gray-300 rounded hover:bg-gray-50 print:hidden"
-              title="Print Packing List"
-            >
-              <Printer className="w-5 h-5 text-gray-700" />
-            </button>
-          </div>
-
-          {/* Trip Info */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
-            <div>
-              <p className="text-xs text-gray-600 uppercase tracking-wider">Delivery Person</p>
-              <p className="font-medium text-gray-900">{trip?.deliveryPersonName}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-600 uppercase tracking-wider">Route</p>
-              <p className="font-medium text-gray-900">{trip?.routeNames?.join(', ') || 'N/A'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-600 uppercase tracking-wider">Delivery Date</p>
-              <p className="font-medium text-gray-900">
-                {trip?.deliveryDate ? new Date(trip.deliveryDate).toLocaleDateString() : 'N/A'}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-600 uppercase tracking-wider">Total Orders</p>
-              <p className="font-medium text-gray-900">{trip?.orders.length}</p>
+              <button onClick={() => window.print()} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200">
+                <Printer className="w-5 h-5 text-gray-700" />
+              </button>
             </div>
           </div>
-        </div>
 
-        {/* Tabs */}
-        <div className="max-w-6xl mx-auto px-4 print:hidden">
-          <div className="flex space-x-4 border-b border-gray-200">
-            <button
-              onClick={() => setActiveTab('summary')}
-              className={`pb-3 px-1 flex items-center gap-2 font-medium text-sm transition-colors border-b-2 ${activeTab === 'summary'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-            >
-              <FileText className="w-4 h-4" /> Summary (Packing List)
-            </button>
-            <button
-              onClick={() => setActiveTab('checklist')}
-              className={`pb-3 px-1 flex items-center gap-2 font-medium text-sm transition-colors border-b-2 ${activeTab === 'checklist'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-            >
-              <ListChecks className="w-4 h-4" /> Item Checklist
-            </button>
+          {/* Mobile Value Summary Line */}
+          <div className="sm:hidden flex justify-between items-center bg-green-50 px-3 py-2 rounded-lg mb-3 border border-green-100">
+            <span className="text-xs font-semibold text-green-800 uppercase">Total Value</span>
+            <span className="font-bold text-green-700">₹{totalTripValue.toLocaleString()}</span>
+          </div>
+
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search product or company..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-gray-100 border-none rounded-lg text-sm focus:ring-2 focus:ring-blue-500 transition-all"
+            />
           </div>
         </div>
       </div>
 
-      {/* Toast */}
-      {toast && (
-        <div
-          className={`fixed top-4 right-4 px-4 py-3 rounded-lg shadow-lg text-white transition-all z-50 print:hidden ${toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'
-            }`}
-        >
-          {toast.message}
-        </div>
-      )}
-
-      {/* Content */}
-      <div className="max-w-6xl mx-auto px-4 py-6">
-
-        {/* SUMMARY TAB (Dispatch style) */}
-        {(activeTab === 'summary' || typeof window !== 'undefined' && window.matchMedia('print').matches) && (
-          <div className="bg-white rounded-lg shadow overflow-hidden print:shadow-none">
-            <div className="p-4 bg-gray-50 border-b border-gray-200 print:hidden">
-              <h2 className="font-bold text-gray-800">Consolidated Packing List</h2>
-              <p className="text-xs text-gray-500">Aggregate items across all orders for this trip.</p>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 text-sm">
-                <thead className="bg-gray-100 print:bg-gray-100">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Company</th>
-                    <th className="px-4 py-3 text-left font-medium text-gray-600">Product</th>
-                    <th className="px-4 py-3 text-center font-medium text-gray-600">Cartons</th>
-                    <th className="px-4 py-3 text-center font-medium text-gray-600">Packets</th>
-                    <th className="px-4 py-3 text-center font-medium text-gray-600">Pieces</th>
-                    <th className="px-4 py-3 text-center font-bold text-indigo-700 bg-indigo-50 print:bg-gray-100 print:text-black">Total Qty</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 bg-white">
-                  {dispatchRows.map((row, idx) => (
-                    <tr key={row.productId} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                      <td className="px-4 py-2 text-gray-900 font-medium">{row.companyName}</td>
-                      <td className="px-4 py-2 text-gray-600">{row.productName}</td>
-                      <td className="px-4 py-2 text-center text-gray-900">{row.cartons > 0 ? row.cartons : '-'}</td>
-                      <td className="px-4 py-2 text-center text-gray-900">{row.packets > 0 ? row.packets : '-'}</td>
-                      <td className="px-4 py-2 text-center text-gray-900">{row.pieces > 0 ? row.pieces : '-'}</td>
-                      <td className="px-4 py-2 text-center font-bold bg-indigo-50 text-indigo-700 print:bg-gray-50 print:text-black">{row.totalQty}</td>
-                    </tr>
-                  ))}
-                  {dispatchRows.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="text-center p-8 text-gray-500">
-                        No items found in this trip.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-                {dispatchRows.length > 0 && (
-                  <tfoot className="bg-gray-100 font-bold text-gray-900 border-t-2 border-gray-300">
-                    <tr>
-                      <td colSpan={2} className="px-4 py-3 text-right text-gray-700 uppercase">Grand Total</td>
-                      <td className="px-4 py-3 text-center">{dispatchRows.reduce((sum, row) => sum + row.cartons, 0)}</td>
-                      <td className="px-4 py-3 text-center">{dispatchRows.reduce((sum, row) => sum + row.packets, 0)}</td>
-                      <td className="px-4 py-3 text-center">{dispatchRows.reduce((sum, row) => sum + row.pieces, 0)}</td>
-                      <td className="px-4 py-3 text-center bg-indigo-100 text-indigo-900 text-lg print:bg-gray-200 print:text-black">
-                        {dispatchRows.reduce((sum, row) => sum + row.totalQty, 0)}
-                      </td>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-            </div>
+      <div className="max-w-4xl mx-auto px-4 py-4 space-y-3">
+        {aggregatedRows.length === 0 ? (
+          <div className="text-center py-12 text-gray-500">
+            <Package className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+            No items found.
           </div>
-        )}
+        ) : (
+          aggregatedRows.map(row => (
+            <div
+              key={row.productId}
+              className={`bg-white rounded-xl shadow-sm border transition-all duration-200 ${row.isFullyLoaded ? 'border-green-200 bg-green-50/30' : 'border-gray-200'
+                }`}
+            >
+              {/* Card Header / Main Row */}
+              <div className="p-4 flex items-start gap-4">
+                <button
+                  onClick={() => handleToggleProduct(row)}
+                  disabled={saving}
+                  className={`flex-shrink-0 w-12 h-12 rounded-full border-2 flex items-center justify-center transition-all ${row.isFullyLoaded
+                      ? 'bg-green-500 border-green-500 text-white shadow-md scale-105'
+                      : 'border-gray-300 text-transparent hover:border-gray-400 bg-white'
+                    }`}
+                >
+                  <CheckCircle2 className="w-8 h-8" fill="currentColor" />
+                </button>
 
-        {/* CHECKLIST TAB (Original Logic) */}
-        {activeTab === 'checklist' && (
-          <div className="space-y-4 print:hidden">
-            {/* Progress Bar */}
-            <div className="bg-white p-4 rounded-lg shadow">
-              <div className="flex items-center gap-4">
-                <div className="flex-1">
-                  <div className="bg-gray-200 rounded-full h-2">
-                    <div
-                      className="bg-green-500 h-2 rounded-full transition-all duration-300"
-                      style={{
-                        width: allItems.length > 0 ? `${(doneCount / allItems.length) * 100}%` : '0%',
-                      }}
-                    />
+                <div className="flex-1 min-w-0" onClick={() => toggleExpand(row.productId)}>
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <h3 className={`text-base font-bold text-gray-900 leading-tight ${row.isFullyLoaded ? 'line-through text-gray-500' : ''}`}>
+                        {row.productName}
+                      </h3>
+                      <p className="text-sm text-gray-500 font-medium">{row.companyName}</p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Total</div>
+                      <div className="text-lg font-black text-gray-800 leading-none">
+                        {row.totalQty}
+                      </div>
+                      <div className="text-xs text-green-600 font-medium mt-1">
+                        ₹{row.totalAmount.toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Prominent Packaging Breakdown */}
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {row.cartons > 0 && (
+                      <div className="flex flex-col items-center justify-center bg-amber-100 border-l-4 border-amber-500 px-3 py-1.5 rounded pr-4 min-w-[3.5rem]">
+                        <span className="text-xl font-bold text-amber-900 leading-none">{row.cartons}</span>
+                        <span className="text-[10px] uppercase font-bold text-amber-700 tracking-wide">Cartons</span>
+                      </div>
+                    )}
+                    {row.packets > 0 && (
+                      <div className="flex flex-col items-center justify-center bg-blue-100 border-l-4 border-blue-500 px-3 py-1.5 rounded pr-4 min-w-[3.5rem]">
+                        <span className="text-xl font-bold text-blue-900 leading-none">{row.packets}</span>
+                        <span className="text-[10px] uppercase font-bold text-blue-700 tracking-wide">Packets</span>
+                      </div>
+                    )}
+                    {row.pieces > 0 && (
+                      <div className="flex flex-col items-center justify-center bg-gray-100 border-l-4 border-gray-500 px-3 py-1.5 rounded pr-4 min-w-[3.5rem]">
+                        <span className="text-xl font-bold text-gray-900 leading-none">{row.pieces}</span>
+                        <span className="text-[10px] uppercase font-bold text-gray-600 tracking-wide">Pieces</span>
+                      </div>
+                    )}
                   </div>
                 </div>
-                <p className="text-sm text-gray-600 whitespace-nowrap">
-                  {doneCount}/{allItems.length} done
-                </p>
               </div>
             </div>
-
-            {/* Controls */}
-            <div className="flex flex-col md:flex-row gap-4 mb-6">
-              {/* Search */}
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search terms..."
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              {/* Filter Buttons */}
-              <div className="flex gap-2">
-                {(['all', 'pending', 'done'] as const).map(f => (
-                  <button
-                    key={f}
-                    onClick={() => setFilter(f)}
-                    className={`px-3 py-2 rounded-lg font-medium text-xs md:text-sm transition-colors ${filter === f
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
-                      }`}
-                  >
-                    {f === 'all' && `All`}
-                    {f === 'pending' && `Pending`}
-                    {f === 'done' && `Done`}
-                  </button>
-                ))}
-              </div>
-
-              {/* Mark All Done */}
-              {allItems.length > 0 && pendingCount > 0 && (
-                <button
-                  onClick={handleMarkAllDone}
-                  disabled={saving}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors whitespace-nowrap"
-                >
-                  Mark All Done
-                </button>
-              )}
-            </div>
-
-            {/* Items List */}
-            {filteredItems.length === 0 ? (
-              <div className="bg-white rounded-lg p-8 text-center">
-                <Circle className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-600 font-medium">
-                  {allItems.length === 0
-                    ? 'No items in this trip'
-                    : 'No items match your search or filter'}
-                </p>
-              </div>
-            ) : (
-              <div className="bg-white rounded-lg shadow overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-200">
-                        <th className="px-4 py-3 text-left font-medium text-gray-600 w-12">
-                          Status
-                        </th>
-                        <th className="px-4 py-3 text-left font-medium text-gray-600">
-                          Product
-                        </th>
-                        <th className="px-4 py-3 text-left font-medium text-gray-600">
-                          Company
-                        </th>
-                        <th className="px-4 py-3 text-left font-medium text-gray-600">
-                          Customer
-                        </th>
-                        <th className="px-4 py-3 text-right font-medium text-gray-600">
-                          Qty
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {filteredItems.map(item => {
-                        const isDone = progressMap.get(item.id) || false;
-                        return (
-                          <tr
-                            key={item.id}
-                            className={`transition-colors hover:bg-gray-50 ${isDone ? 'bg-gray-50 opacity-75' : 'bg-white'
-                              }`}
-                          >
-                            <td className="px-4 py-3 text-left">
-                              <button
-                                onClick={() => handleToggleDone(item)}
-                                disabled={saving}
-                                className="p-1 hover:bg-gray-200 rounded transition-colors disabled:opacity-50"
-                              >
-                                {isDone ? (
-                                  <CheckCircle2 className="w-5 h-5 text-green-500" />
-                                ) : (
-                                  <Circle className="w-5 h-5 text-gray-400" />
-                                )}
-                              </button>
-                            </td>
-                            <td className={`px-4 py-3 font-medium ${isDone ? 'line-through text-gray-500' : 'text-gray-900'}`}>
-                              {item.product_name}
-                            </td>
-                            <td className={`px-4 py-3 ${isDone ? 'line-through text-gray-500' : 'text-gray-600'}`}>
-                              {item.company}
-                            </td>
-                            <td className={`px-4 py-3 ${isDone ? 'line-through text-gray-500' : 'text-gray-600'}`}>
-                              {item.customer_name}
-                            </td>
-                            <td className={`px-4 py-3 text-right font-medium ${isDone ? 'line-through text-gray-500' : 'text-gray-900'}`}>
-                              {item.quantity}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
+          ))
         )}
+      </div>
+
+      {/* Print View (Only visible when printing) */}
+      <div className="hidden print:block absolute top-0 left-0 w-full bg-white p-8">
+        <h1 className="text-2xl font-bold mb-4">Packing List</h1>
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          <div>
+            <p className="text-sm text-gray-600">Trip ID: {tripId?.slice(0, 8)}</p>
+            <p className="text-sm text-gray-600">Delivery: {trip?.deliveryPersonName}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-sm text-gray-600">Date: {new Date().toLocaleDateString()}</p>
+            <p className="font-bold">Total Value: ₹{totalTripValue.toLocaleString()}</p>
+          </div>
+        </div>
+
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="border-b-2 border-black">
+              <th className="text-left py-2">Company</th>
+              <th className="text-left py-2">Product</th>
+              <th className="text-center py-2">Ctn</th>
+              <th className="text-center py-2">Pkt</th>
+              <th className="text-center py-2">Pcs</th>
+              <th className="text-center py-2">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {aggregatedRows.map(row => (
+              <tr key={row.productId} className="border-b border-gray-200">
+                <td className="py-2">{row.companyName}</td>
+                <td className="py-2">{row.productName}</td>
+                <td className="py-2 text-center">{row.cartons || '-'}</td>
+                <td className="py-2 text-center">{row.packets || '-'}</td>
+                <td className="py-2 text-center">{row.pieces || '-'}</td>
+                <td className="py-2 text-center font-bold">{row.totalQty}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

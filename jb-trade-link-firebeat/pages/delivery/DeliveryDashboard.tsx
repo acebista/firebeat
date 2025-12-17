@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Card, Button } from '../../components/ui/Elements';
 import { AllTripsModal } from '../../components/delivery/AllTripsModal';
-import { MapPin, CheckCircle, Clock, Navigation, Truck, ChevronDown, ChevronUp, TrendingUp, Users, Zap } from 'lucide-react';
+import { MapPin, CheckCircle, Clock, Navigation, Truck, ChevronDown, ChevronUp, TrendingUp, Users, Zap, Search, Package, AlertCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../services/auth';
 import { TripService, OrderService, UserService } from '../../services/db';
+import { getPackingProgress } from '../../services/packing/packingService';
 import { DispatchTrip, Order, User } from '../../types';
 
 interface TripWithStats {
@@ -13,6 +14,9 @@ interface TripWithStats {
   completedCount: number;
   pendingCount: number;
   totalValue: number;
+  isPackingComplete: boolean;
+  totalItems: number;
+  packedItems: number;
 }
 
 interface UserTripsData {
@@ -32,7 +36,8 @@ export const DeliveryDashboard: React.FC = () => {
   const [myTrips, setMyTrips] = useState<TripWithStats[]>([]);
   const [allUsersTrips, setAllUsersTrips] = useState<UserTripsData[]>([]);
   const [expandedTripId, setExpandedTripId] = useState<string | null>(null);
-  const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
   const [myStats, setMyStats] = useState({
     totalTrips: 0,
     activeTrips: 0,
@@ -82,11 +87,9 @@ export const DeliveryDashboard: React.FC = () => {
   const loadAllUsersTrips = async () => {
     if (!user) return;
     try {
-      // Get all delivery users
       const allUsers = await UserService.getAll();
       const deliveryUsers = allUsers.filter(u => u.role === 'delivery');
 
-      // Load trips for each user
       const usersTripsData: UserTripsData[] = [];
       let grandTotalTrips = 0;
       let grandTotalActive = 0;
@@ -156,12 +159,34 @@ export const DeliveryDashboard: React.FC = () => {
         const pending = orders.length - completed;
         const tripValue = orders.reduce((sum, o) => sum + o.totalAmount, 0);
 
+        // Check packing progress
+        // Calculate total items (handling JSON string parsing safety)
+        let totalItems = 0;
+        orders.forEach(o => {
+          let items = o.items;
+          if (typeof items === 'string') {
+            try { items = JSON.parse(items); } catch { items = []; }
+          }
+          if (Array.isArray(items)) {
+            totalItems += items.length;
+          }
+        });
+
+        // Get done progress
+        const progress = await getPackingProgress(trip.id);
+        const packedItems = progress.filter(p => p.is_done).length;
+        // Packing is complete if ALL items are marked done
+        const isPackingComplete = totalItems > 0 && packedItems >= totalItems;
+
         tripsWithStats.push({
           trip,
           orders,
           completedCount: completed,
           pendingCount: pending,
-          totalValue: tripValue
+          totalValue: tripValue,
+          isPackingComplete,
+          totalItems,
+          packedItems
         });
       }
     }
@@ -204,60 +229,77 @@ export const DeliveryDashboard: React.FC = () => {
 
   const getStatusColor = (status: string): string => {
     switch (status) {
-      case 'draft':
-        return 'bg-yellow-50 border-yellow-100';
-      case 'out_for_delivery':
-        return 'bg-blue-50 border-blue-100';
-      case 'completed':
-        return 'bg-green-50 border-green-100';
-      default:
-        return 'bg-gray-50 border-gray-100';
+      case 'draft': return 'bg-yellow-50 border-yellow-100';
+      case 'out_for_delivery': return 'bg-blue-50 border-blue-100';
+      case 'completed': return 'bg-green-50 border-green-100';
+      default: return 'bg-gray-50 border-gray-100';
     }
   };
 
   const getStatusBadge = (status: string): string => {
     switch (status) {
-      case 'draft':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'out_for_delivery':
-        return 'bg-blue-100 text-blue-800';
-      case 'completed':
-        return 'bg-green-100 text-green-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
+      case 'draft': return 'bg-yellow-100 text-yellow-800';
+      case 'out_for_delivery': return 'bg-blue-100 text-blue-800';
+      case 'completed': return 'bg-green-100 text-green-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
   };
 
   const getStatusLabel = (status: string): string => {
     switch (status) {
-      case 'draft':
-        return 'Draft';
-      case 'out_for_delivery':
-        return 'Active';
-      case 'completed':
-        return 'Completed';
-      default:
-        return status;
+      case 'draft': return 'Draft';
+      case 'out_for_delivery': return 'Active';
+      case 'completed': return 'Completed';
+      default: return status;
     }
   };
+
+  const filteredTrips = useMemo(() => {
+    if (!searchQuery.trim()) return myTrips;
+    const lowerQ = searchQuery.toLowerCase();
+
+    return myTrips.filter(t => {
+      // Search in trip ID
+      if (t.trip.id.toLowerCase().includes(lowerQ)) return true;
+
+      // Search in orders (customer or ID)
+      const hasMatchingOrder = t.orders.some(o =>
+        o.customerName.toLowerCase().includes(lowerQ) ||
+        o.id.toLowerCase().includes(lowerQ)
+      );
+      return hasMatchingOrder;
+    });
+  }, [myTrips, searchQuery]);
 
   if (loading) return <div className="p-8 text-center">Loading dashboard...</div>;
 
   return (
     <div className="space-y-6 pb-20">
       {/* Header with View Toggle */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
         <h2 className="text-2xl font-bold text-gray-800">
           My Delivery Trips
         </h2>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsAllTripsModalOpen(true)}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition"
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition whitespace-nowrap"
           >
             All Trips
           </button>
         </div>
+      </div>
+
+      {/* Search Bar */}
+      <div className="relative">
+        <Search className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" />
+        <input
+          type="text"
+          placeholder="Search invoice number or customer name..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full pl-10 pr-4 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+        />
       </div>
 
       {/* Stats Grid */}
@@ -285,15 +327,17 @@ export const DeliveryDashboard: React.FC = () => {
       </div>
 
       {/* MY TRIPS VIEW */}
-      {myTrips.length === 0 ? (
+      {filteredTrips.length === 0 ? (
         <Card className="p-8 text-center bg-gray-50">
           <Truck className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-          <h3 className="text-lg font-medium text-gray-900">No Trips Assigned</h3>
-          <p className="text-gray-500">You don't have any delivery trips assigned yet.</p>
+          <h3 className="text-lg font-medium text-gray-900">No Trips Found</h3>
+          <p className="text-gray-500">
+            {searchQuery ? 'No trips match your search.' : "You don't have any delivery trips assigned."}
+          </p>
         </Card>
       ) : (
         <div className="space-y-3">
-          {myTrips.map((tripData) => (
+          {filteredTrips.map((tripData) => (
             <Card key={tripData.trip.id} className={`overflow-hidden transition ${getStatusColor(tripData.trip.status)}`}>
               <button
                 onClick={() => setExpandedTripId(expandedTripId === tripData.trip.id ? null : tripData.trip.id)}
@@ -336,15 +380,23 @@ export const DeliveryDashboard: React.FC = () => {
                 </div>
               </div>
 
+              {/* Packing Status Alert */}
+              {expandedTripId === tripData.trip.id && !tripData.isPackingComplete && tripData.orders.length > 0 && (
+                <div className="mx-4 mb-2 p-2 bg-amber-100 border border-amber-200 rounded text-xs text-amber-800 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4" />
+                  <span>Packing Incomplete ({tripData.packedItems}/{tripData.totalItems} items). Please pack all items before delivering.</span>
+                </div>
+              )}
+
               {/* Packing List Button */}
               {expandedTripId === tripData.trip.id && (
                 <div className="px-4 py-2 bg-white bg-opacity-50 border-t border-opacity-20 border-current flex gap-2">
                   <Button
                     size="sm"
-                    className="flex-1"
+                    className={`flex-1 ${!tripData.isPackingComplete ? 'animate-pulse ring-2 ring-amber-400' : ''}`}
                     onClick={() => navigate(`/delivery/packing-list/${tripData.trip.id}`)}
                   >
-                    📦 Packing List
+                    📦 {tripData.isPackingComplete ? 'Packing List' : 'Start Packing'}
                   </Button>
                 </div>
               )}
@@ -380,8 +432,10 @@ export const DeliveryDashboard: React.FC = () => {
                               <Button
                                 size="sm"
                                 variant="outline"
+                                disabled={!tripData.isPackingComplete}
                                 onClick={() => navigate(`/delivery/invoice/${order.id}`)}
-                                className="mt-1 text-xs"
+                                className={`mt-1 text-xs ${!tripData.isPackingComplete ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                title={!tripData.isPackingComplete ? "Finish packing first" : ""}
                               >
                                 Deliver
                               </Button>
