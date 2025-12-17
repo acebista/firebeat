@@ -42,6 +42,7 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, subtitle, 
             <button 
               onClick={onClose} 
               className="ml-4 p-2 rounded-lg hover:bg-slate-200 transition-colors duration-200 text-slate-500 hover:text-slate-700"
+              aria-label="Close modal"
             >
               <X className="h-5 w-5" />
             </button>
