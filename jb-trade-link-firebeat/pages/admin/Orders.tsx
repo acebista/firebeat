@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, Button, Select, Badge, Input } from '../../components/ui/Elements';
 import { Modal } from '../../components/ui/Modal';
 import { Eye, CheckCircle, XCircle, Search, Truck, Calendar, Plus } from 'lucide-react';
@@ -10,7 +10,6 @@ import toast from 'react-hot-toast';
 export const OrderManagement: React.FC = () => {
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
-  const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<User[]>([]); // For salesperson filter
 
@@ -68,6 +67,7 @@ export const OrderManagement: React.FC = () => {
         salespersonFilter
       );
       setOrders(data);
+      setSelectedOrderIds(new Set()); // Clear selection when data reloads
     } catch (error) {
       console.error('Failed to load orders:', error);
     } finally {
@@ -75,8 +75,9 @@ export const OrderManagement: React.FC = () => {
     }
   };
 
-  // Client-side Filter Logic (Search & Status)
-  useEffect(() => {
+  // Optimization: Memoize filtered orders to prevent unnecessary re-renders
+  // and remove state synchronization effect
+  const filteredOrders = useMemo(() => {
     let result = orders;
     if (statusFilter !== 'all') {
       result = result.filter(o => o.status === statusFilter);
@@ -89,9 +90,7 @@ export const OrderManagement: React.FC = () => {
         o.salespersonName.toLowerCase().includes(lower)
       );
     }
-    setFilteredOrders(result);
-    // Clear selection when filters change
-    setSelectedOrderIds(new Set());
+    return result;
   }, [orders, searchTerm, statusFilter]);
 
   // --- Actions ---
@@ -246,7 +245,10 @@ export const OrderManagement: React.FC = () => {
               placeholder="Search Order ID, Customer..."
               className="w-full pl-9 pr-3 py-2 rounded-md border border-gray-300 text-sm focus:ring-indigo-500 focus:border-indigo-500"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setSelectedOrderIds(new Set());
+              }}
             />
           </div>
 
@@ -273,7 +275,10 @@ export const OrderManagement: React.FC = () => {
               { label: 'Cancelled', value: 'cancelled' },
             ]}
             value={statusFilter}
-            onChange={(value) => setStatusFilter(value)}
+            onChange={(value) => {
+              setStatusFilter(value);
+              setSelectedOrderIds(new Set());
+            }}
           />
 
           <Select
