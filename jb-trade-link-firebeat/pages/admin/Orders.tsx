@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, Button, Select, Badge, Input } from '../../components/ui/Elements';
 import { Modal } from '../../components/ui/Modal';
 import { Eye, CheckCircle, XCircle, Search, Truck, Calendar, Plus } from 'lucide-react';
@@ -10,7 +10,7 @@ import toast from 'react-hot-toast';
 export const OrderManagement: React.FC = () => {
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
-  const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
+  // filteredOrders state replaced with useMemo below
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<User[]>([]); // For salesperson filter
 
@@ -75,8 +75,8 @@ export const OrderManagement: React.FC = () => {
     }
   };
 
-  // Client-side Filter Logic (Search & Status)
-  useEffect(() => {
+  // Client-side Filter Logic (Search & Status) - Memoized to prevent extra renders
+  const filteredOrders = useMemo(() => {
     let result = orders;
     if (statusFilter !== 'all') {
       result = result.filter(o => o.status === statusFilter);
@@ -89,10 +89,13 @@ export const OrderManagement: React.FC = () => {
         o.salespersonName.toLowerCase().includes(lower)
       );
     }
-    setFilteredOrders(result);
-    // Clear selection when filters change
-    setSelectedOrderIds(new Set());
+    return result;
   }, [orders, searchTerm, statusFilter]);
+
+  // Clear selection when filters change (using useEffect to sync side effect)
+  useEffect(() => {
+    setSelectedOrderIds(new Set());
+  }, [searchTerm, statusFilter, orders]);
 
   // --- Actions ---
 
