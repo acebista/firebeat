@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Card, Button } from '../../components/ui/Elements';
 import { AllTripsModal } from '../../components/delivery/AllTripsModal';
-import { MapPin, CheckCircle, Clock, Navigation, Truck, ChevronDown, ChevronUp, TrendingUp, Users, Zap, Search, Package, AlertCircle } from 'lucide-react';
+import { MapPin, CheckCircle, Clock, Navigation, Truck, ChevronDown, ChevronUp, TrendingUp, Users, Zap, Search, Package, AlertCircle, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../services/auth';
 import { TripService, OrderService, UserService } from '../../services/db';
@@ -37,6 +37,7 @@ export const DeliveryDashboard: React.FC = () => {
   const [allUsersTrips, setAllUsersTrips] = useState<UserTripsData[]>([]);
   const [expandedTripId, setExpandedTripId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [tripSearchQuery, setTripSearchQuery] = useState(''); // Search within expanded trip
 
   const [myStats, setMyStats] = useState({
     totalTrips: 0,
@@ -404,16 +405,49 @@ export const DeliveryDashboard: React.FC = () => {
               {/* Trip Details */}
               {expandedTripId === tripData.trip.id && (
                 <div className="px-4 pb-4 border-t border-opacity-20 border-current">
-                  <div className="space-y-2 mt-3">
+                  {/* Search within trip */}
+                  <div className="mt-3 mb-3">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Search stops by customer or invoice..."
+                        value={tripSearchQuery}
+                        onChange={(e) => setTripSearchQuery(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                      {tripSearchQuery && (
+                        <button
+                          onClick={() => setTripSearchQuery('')}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                    {tripSearchQuery && (
+                      <p className="text-xs text-gray-500 mt-1 ml-1">
+                        {(() => {
+                          const matchCount = tripData.orders.filter(o =>
+                            o.customerName.toLowerCase().includes(tripSearchQuery.toLowerCase()) ||
+                            o.id.toLowerCase().includes(tripSearchQuery.toLowerCase())
+                          ).length;
+                          return `${matchCount} of ${tripData.orders.length} stops match`;
+                        })()}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
                     {(() => {
                       // Filter and sort orders: matching orders first, then others
-                      const lowerQ = searchQuery.toLowerCase();
+                      const lowerQ = tripSearchQuery.toLowerCase();
                       const matchingOrders: typeof tripData.orders = [];
                       const nonMatchingOrders: typeof tripData.orders = [];
 
                       tripData.orders.forEach((order, idx) => {
                         const orderWithIndex = { ...order, originalIndex: idx };
-                        const matches = searchQuery.trim() && (
+                        const matches = tripSearchQuery.trim() && (
                           order.customerName.toLowerCase().includes(lowerQ) ||
                           order.id.toLowerCase().includes(lowerQ)
                         );
@@ -425,12 +459,12 @@ export const DeliveryDashboard: React.FC = () => {
                         }
                       });
 
-                      const orderedList = searchQuery.trim()
+                      const orderedList = tripSearchQuery.trim()
                         ? [...matchingOrders, ...nonMatchingOrders]
                         : tripData.orders.map((o, idx) => ({ ...o, originalIndex: idx }));
 
                       return orderedList.map((order: any) => {
-                        const isMatch = searchQuery.trim() && (
+                        const isMatch = tripSearchQuery.trim() && (
                           order.customerName.toLowerCase().includes(lowerQ) ||
                           order.id.toLowerCase().includes(lowerQ)
                         );
@@ -439,10 +473,10 @@ export const DeliveryDashboard: React.FC = () => {
                           <div
                             key={order.id}
                             className={`p-3 rounded-lg text-sm transition-all ${order.status === 'delivered'
-                                ? 'bg-white bg-opacity-40'
-                                : isMatch
-                                  ? 'bg-yellow-50 border-2 border-yellow-400 shadow-md'
-                                  : 'bg-white'
+                              ? 'bg-white bg-opacity-40'
+                              : isMatch
+                                ? 'bg-yellow-50 border-2 border-yellow-400 shadow-md'
+                                : 'bg-white'
                               }`}
                           >
                             <div className="flex items-start justify-between gap-2">
