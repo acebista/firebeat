@@ -42,8 +42,11 @@ export const DispatchPlanner: React.FC = () => {
     const loadData = async () => {
       setLoading(true);
       try {
-        const pendingOrders = await OrderService.getPendingDispatch();
+        // Pass date to backend if filtering by date
+        const dateParam = filterByDate ? selectedDate : undefined;
+        const pendingOrders = await OrderService.getPendingDispatch(dateParam);
         console.log('🔍 DEBUG: Total pending orders fetched:', pendingOrders.length);
+        console.log('🔍 DEBUG: Date filter enabled:', filterByDate, 'Selected date:', selectedDate);
 
         // Debug: Log unique dates to see the format
         const uniqueDates = Array.from(new Set(pendingOrders.map(o => o.date)));
@@ -72,7 +75,7 @@ export const DispatchPlanner: React.FC = () => {
       finally { setLoading(false); }
     };
     loadData();
-  }, [refreshKey]);
+  }, [refreshKey, filterByDate, selectedDate]);
 
   const getOrderAssignmentDetails = (orderId: string) => {
     const trip = trips.find(t => t.orderIds.includes(orderId));

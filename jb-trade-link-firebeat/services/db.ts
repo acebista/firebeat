@@ -396,8 +396,16 @@ export const OrderService = {
       .eq('id', orderId);
     if (error) throw error;
   },
-  getPendingDispatch: async () => {
-    const { data, error } = await supabase.from(COLS.ORDERS).select('*').eq('status', 'approved');
+  getPendingDispatch: async (date?: string) => {
+    let query = supabase.from(COLS.ORDERS).select('*').eq('status', 'approved');
+
+    // If date is provided, filter at database level
+    if (date) {
+      // Check both exact match and timestamp match (YYYY-MM-DD vs YYYY-MM-DDTHH:MM:SS)
+      query = query.or(`date.eq.${date},date.like.${date}T%`);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
     return data as Order[];
   },
