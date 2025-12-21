@@ -102,7 +102,7 @@ const levelBands: CommissionRate[] = [
 describe('Commission Calculator - Slab Mode', () => {
   test('Should calculate commission for sales in first band', () => {
     const result = calculateCommission(5000, slabBands, 'slab');
-    
+
     expect(result.totalCommission).toBe(250); // 5000 * 5% = 250
     expect(result.breakdown.length).toBe(1);
     expect(result.breakdown[0].sales_in_slab).toBe(5000);
@@ -117,7 +117,7 @@ describe('Commission Calculator - Slab Mode', () => {
     // - 10-50k: 35,000 * 7% = 2,450
     // Total: 2,950
     const result = calculateCommission(45000, slabBands, 'slab');
-    
+
     expect(result.totalCommission).toBe(2950);
     expect(result.breakdown.length).toBe(2);
     expect(result.breakdown[0].sales_in_slab).toBe(10000);
@@ -132,7 +132,7 @@ describe('Commission Calculator - Slab Mode', () => {
     // - 50k+: 50,000 * 10% = 5,000
     // Total: 8,300
     const result = calculateCommission(100000, slabBands, 'slab');
-    
+
     expect(result.totalCommission).toBe(8300);
     expect(result.breakdown.length).toBe(3);
     expect(result.breakdown[0].commission_from_slab).toBe(500);
@@ -142,14 +142,14 @@ describe('Commission Calculator - Slab Mode', () => {
 
   test('Should handle zero sales', () => {
     const result = calculateCommission(0, slabBands, 'slab');
-    
+
     expect(result.totalCommission).toBe(0);
     expect(result.breakdown.length).toBe(0);
   });
 
   test('Should handle negative sales as zero', () => {
     const result = calculateCommission(-1000, slabBands, 'slab');
-    
+
     expect(result.totalCommission).toBe(0);
     expect(result.breakdown.length).toBe(0);
   });
@@ -162,21 +162,21 @@ describe('Commission Calculator - Slab Mode', () => {
     ];
 
     const result = calculateCommission(45000, inactiveBands, 'slab');
-    
+
     // Should skip the inactive band
     expect(result.breakdown.length).toBe(2);
   });
 
   test('Should handle empty band array', () => {
     const result = calculateCommission(45000, [], 'slab');
-    
+
     expect(result.totalCommission).toBe(0);
     expect(result.breakdown.length).toBe(0);
   });
 
   test('Should round to 2 decimal places', () => {
     const result = calculateCommission(12345, slabBands, 'slab');
-    
+
     // 10,000 * 5% + 2,345 * 7% = 500 + 164.15 = 664.15
     expect(result.totalCommission).toBe(664.15);
   });
@@ -191,7 +191,7 @@ describe('Commission Calculator - Level Mode', () => {
     // Sales: 5,000 falls in 0-10k band (5%)
     // Commission: 5,000 * 5% = 250
     const result = calculateCommission(5000, levelBands, 'level');
-    
+
     expect(result.totalCommission).toBe(250);
     expect(result.breakdown.length).toBe(1);
     expect(result.breakdown[0].sales_in_slab).toBe(5000); // Entire amount
@@ -202,7 +202,7 @@ describe('Commission Calculator - Level Mode', () => {
     // Sales: 45,000 falls in 10-50k band (7%)
     // Commission: 45,000 * 7% = 3,150
     const result = calculateCommission(45000, levelBands, 'level');
-    
+
     expect(result.totalCommission).toBe(3150);
     expect(result.breakdown.length).toBe(1);
     expect(result.breakdown[0].sales_in_slab).toBe(45000); // Entire amount
@@ -213,7 +213,7 @@ describe('Commission Calculator - Level Mode', () => {
     // Sales: 100,000 falls in 50k+ band (10%)
     // Commission: 100,000 * 10% = 10,000
     const result = calculateCommission(100000, levelBands, 'level');
-    
+
     expect(result.totalCommission).toBe(10000);
     expect(result.breakdown.length).toBe(1);
     expect(result.breakdown[0].rate_pct).toBe(10);
@@ -222,7 +222,7 @@ describe('Commission Calculator - Level Mode', () => {
   test('Should handle edge case: sales exactly at band boundary', () => {
     // Sales: exactly 10,000 should fall in second band (10-50k)
     const result = calculateCommission(10000, levelBands, 'level');
-    
+
     expect(result.totalCommission).toBe(700); // 10,000 * 7%
     expect(result.breakdown[0].rate_pct).toBe(7);
   });
@@ -230,14 +230,14 @@ describe('Commission Calculator - Level Mode', () => {
   test('Should handle edge case: sales exactly at upper boundary', () => {
     // Sales: exactly 50,000 should fall in third band (50k+)
     const result = calculateCommission(50000, levelBands, 'level');
-    
+
     expect(result.totalCommission).toBe(5000); // 50,000 * 10%
     expect(result.breakdown[0].rate_pct).toBe(10);
   });
 
   test('Should return 0 for sales below minimum', () => {
     const result = calculateCommission(0, levelBands, 'level');
-    
+
     expect(result.totalCommission).toBe(0);
     expect(result.breakdown.length).toBe(0);
   });
@@ -250,7 +250,7 @@ describe('Commission Calculator - Level Mode', () => {
     ];
 
     const result = calculateCommission(45000, inactiveBands, 'level');
-    
+
     // Should find band 2 (10-50k) even though band 1 is inactive
     expect(result.totalCommission).toBe(3150);
   });
@@ -264,7 +264,7 @@ describe('Slab vs Level Mode Comparison', () => {
   test('Should show difference between slab and level at 45k', () => {
     const slabResult = calculateCommission(45000, slabBands, 'slab');
     const levelResult = calculateCommission(45000, levelBands, 'level');
-    
+
     // Slab: (10k * 5%) + (35k * 7%) = 2,950
     // Level: 45k * 7% = 3,150
     expect(slabResult.totalCommission).toBe(2950);
@@ -276,10 +276,10 @@ describe('Slab vs Level Mode Comparison', () => {
     const sales = 45000;
     const slabResult = calculateCommission(sales, slabBands, 'slab');
     const levelResult = calculateCommission(sales, levelBands, 'level');
-    
+
     const slabEffectiveRate = (slabResult.totalCommission / sales) * 100;
     const levelEffectiveRate = (levelResult.totalCommission / sales) * 100;
-    
+
     expect(slabEffectiveRate).toBeCloseTo(6.56, 1);
     expect(levelEffectiveRate).toBeCloseTo(7, 1);
   });
@@ -298,7 +298,7 @@ describe('Commission with Returns (Net Sales)', () => {
       slabBands,
       'slab'
     );
-    
+
     expect(result.grossSales).toBe(50000);
     expect(result.returns).toBe(5000);
     expect(result.netSales).toBe(45000);
@@ -314,14 +314,14 @@ describe('Commission with Returns (Net Sales)', () => {
       slabBands,
       'slab'
     );
-    
+
     expect(result.netSales).toBe(0);
     expect(result.totalCommission).toBe(0);
   });
 
   test('Should handle zero returns', () => {
     const result = calculateCommissionWithReturns(50000, 0, slabBands, 'slab');
-    
+
     expect(result.netSales).toBe(50000);
     // Commission: (10k * 5%) + (40k * 7%) = 500 + 2800 = 3300
     expect(result.totalCommission).toBe(3300);
@@ -334,7 +334,7 @@ describe('Commission with Returns (Net Sales)', () => {
       slabBands,
       'slab'
     );
-    
+
     expect(result.returns).toBe(0);
     expect(result.netSales).toBe(50000);
   });
@@ -348,7 +348,7 @@ describe('Commission with Returns (Net Sales)', () => {
       levelBands,
       'level'
     );
-    
+
     expect(result.netSales).toBe(80000);
     expect(result.totalCommission).toBe(8000); // 80,000 * 10%
   });
@@ -485,27 +485,27 @@ describe('Individual Band Validation', () => {
 describe('findApplicableLevelBand', () => {
   test('Should find correct band for sales amount', () => {
     const band = findApplicableLevelBand(45000, levelBands);
-    
+
     expect(band).not.toBeNull();
     expect(band!.rate_pct).toBe(7);
   });
 
   test('Should return null for sales outside bands', () => {
     const band = findApplicableLevelBand(-5000, levelBands);
-    
+
     expect(band).toBeNull();
   });
 
   test('Should handle first band', () => {
     const band = findApplicableLevelBand(5000, levelBands);
-    
+
     expect(band).not.toBeNull();
     expect(band!.rate_pct).toBe(5);
   });
 
   test('Should handle last band (unbounded)', () => {
     const band = findApplicableLevelBand(500000, levelBands);
-    
+
     expect(band).not.toBeNull();
     expect(band!.rate_pct).toBe(10);
   });
@@ -519,7 +519,7 @@ describe('validateModeSwitch', () => {
 
   test('Should warn for different modes', () => {
     const warning = validateModeSwitch('slab', 'level', 3);
-    
+
     expect(warning).not.toBeNull();
     expect(warning).toContain('Switching');
     expect(warning).toContain('reinterpreted');
@@ -530,7 +530,7 @@ describe('generateCommissionPreview', () => {
   test('Should generate preview for sample amounts', () => {
     const samples = [10000, 50000, 100000];
     const preview = generateCommissionPreview(samples, slabBands, 'slab');
-    
+
     expect(preview.length).toBe(3);
     expect(preview[0].sales).toBe(10000);
     expect(preview[1].sales).toBe(50000);
@@ -539,14 +539,14 @@ describe('generateCommissionPreview', () => {
 
   test('Preview should include effective rate', () => {
     const preview = generateCommissionPreview([45000], slabBands, 'slab');
-    
+
     expect(preview[0].commission).toBe(2950);
     expect(preview[0].effectiveRate).toBeCloseTo(6.56, 1);
   });
 
   test('Preview with zero sales should have 0% effective rate', () => {
     const preview = generateCommissionPreview([0], slabBands, 'slab');
-    
+
     expect(preview[0].effectiveRate).toBe(0);
   });
 });
@@ -555,7 +555,7 @@ describe('formatCommissionBreakdown', () => {
   test('Should format slab breakdown', () => {
     const result = calculateCommission(45000, slabBands, 'slab');
     const formatted = formatCommissionBreakdown(result.breakdown, 'slab');
-    
+
     expect(formatted).toContain('₹');
     expect(formatted).toContain('%');
     expect(formatted).toContain('+');
@@ -564,14 +564,14 @@ describe('formatCommissionBreakdown', () => {
   test('Should format level breakdown', () => {
     const result = calculateCommission(45000, levelBands, 'level');
     const formatted = formatCommissionBreakdown(result.breakdown, 'level');
-    
+
     expect(formatted).toContain('₹');
     expect(formatted).toContain('%');
   });
 
   test('Should handle empty breakdown', () => {
     const formatted = formatCommissionBreakdown([], 'slab');
-    
+
     expect(formatted).toContain('No commission');
   });
 });
@@ -584,7 +584,7 @@ describe('Edge Cases', () => {
   test('Should handle very large sales amounts', () => {
     const largeSales = 1000000000; // 1 billion
     const result = calculateCommission(largeSales, slabBands, 'slab');
-    
+
     expect(result.totalCommission).toBeGreaterThan(0);
     expect(result.totalCommission).toBeLessThan(largeSales);
   });
@@ -592,14 +592,14 @@ describe('Edge Cases', () => {
   test('Should handle very small sales amounts', () => {
     const smallSales = 0.01;
     const result = calculateCommission(smallSales, slabBands, 'slab');
-    
+
     expect(result.totalCommission).toBeGreaterThanOrEqual(0);
   });
 
   test('Should maintain precision with decimal values', () => {
     const sales = 12345.67;
     const result = calculateCommission(sales, slabBands, 'slab');
-    
+
     // 10,000 * 5% + 2,345.67 * 7% = 500 + 164.1969 = 664.1969 ≈ 664.20
     expect(result.totalCommission).toBeCloseTo(664.20, 2);
   });
@@ -613,7 +613,7 @@ describe('Edge Cases', () => {
     ];
 
     const result = calculateCommission(50000, singleBand, 'slab');
-    
+
     expect(result.totalCommission).toBe(2500); // 50,000 * 5%
   });
 });
@@ -627,9 +627,9 @@ describe('Real-World Scenarios', () => {
     // Salesman sold products worth 75,000
     // Customer returned goods worth 8,500
     // Net sales: 66,500
-    
+
     const result = calculateCommissionWithReturns(75000, 8500, slabBands, 'slab');
-    
+
     // 10k * 5% + 50k * 7% + 6.5k * 10%
     // = 500 + 3500 + 650 = 4650
     expect(result.totalCommission).toBe(4650);
