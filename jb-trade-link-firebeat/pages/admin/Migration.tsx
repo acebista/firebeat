@@ -208,7 +208,7 @@ export const Migration: React.FC = () => {
     const [migrationData, setMigrationData] = useState<any>(null);
     const [csvText, setCsvText] = useState<string>('');
     const [showPasteArea, setShowPasteArea] = useState<boolean>(false);
-    const [migrationMode, setMigrationMode] = useState<'clean-slate' | 'upsert'>('clean-slate');
+    const [migrationMode, setMigrationMode] = useState<'clean-slate' | 'upsert'>('upsert');
     const fileInputRef = useRef<HTMLInputElement>(null);
     const logsEndRef = useRef<HTMLDivElement>(null);
 
@@ -1177,6 +1177,109 @@ export const Migration: React.FC = () => {
                         <div className="font-bold text-xs text-gray-700 mt-1">→ {migrationData.stats.dateRange.latest}</div>
                     </div>
                 </div>
+            )}
+
+            {migrationData && (
+                <Card className="p-6 border-2 border-indigo-200 bg-gradient-to-br from-indigo-50 to-purple-50">
+                    <h3 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
+                        <span>⚙️</span>
+                        <span>Migration Mode</span>
+                    </h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                        Choose how to handle existing data in the database:
+                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Incremental Upsert Option */}
+                        <button
+                            onClick={() => setMigrationMode('upsert')}
+                            className={`
+                                p-5 rounded-lg border-2 text-left transition-all duration-200
+                                hover:shadow-md
+                                ${migrationMode === 'upsert'
+                                    ? 'border-green-500 bg-green-50 shadow-sm'
+                                    : 'border-gray-300 bg-white hover:border-green-300'
+                                }
+                            `}
+                        >
+                            <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-2xl">📥</span>
+                                    <h4 className="font-bold text-gray-800">
+                                        Incremental Upsert
+                                    </h4>
+                                </div>
+                                {migrationMode === 'upsert' && (
+                                    <span className="text-green-600 text-xl">✓</span>
+                                )}
+                            </div>
+                            <p className="text-sm text-gray-600 mb-2">
+                                <strong className="text-green-700">Recommended:</strong> Upload only missing data
+                            </p>
+                            <ul className="text-xs text-gray-600 space-y-1">
+                                <li>• Updates existing orders if found</li>
+                                <li>• Adds new orders that don't exist</li>
+                                <li>• Preserves other existing data</li>
+                                <li>• Safe for partial data updates</li>
+                            </ul>
+                        </button>
+
+                        {/* Clean Slate Option */}
+                        <button
+                            onClick={() => setMigrationMode('clean-slate')}
+                            className={`
+                                p-5 rounded-lg border-2 text-left transition-all duration-200
+                                hover:shadow-md
+                                ${migrationMode === 'clean-slate'
+                                    ? 'border-red-500 bg-red-50 shadow-sm'
+                                    : 'border-gray-300 bg-white hover:border-red-300'
+                                }
+                            `}
+                        >
+                            <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-2xl">🗑️</span>
+                                    <h4 className="font-bold text-gray-800">
+                                        Clean Slate
+                                    </h4>
+                                </div>
+                                {migrationMode === 'clean-slate' && (
+                                    <span className="text-red-600 text-xl">✓</span>
+                                )}
+                            </div>
+                            <p className="text-sm text-gray-600 mb-2">
+                                <strong className="text-red-700">Caution:</strong> Delete and rebuild all orders
+                            </p>
+                            <ul className="text-xs text-gray-600 space-y-1">
+                                <li>• Deletes ALL existing orders first</li>
+                                <li>• Rebuilds from CSV only</li>
+                                <li>• CSV becomes single source of truth</li>
+                                <li>• Use for complete data refresh</li>
+                            </ul>
+                        </button>
+                    </div>
+
+                    {/* Mode-specific warning message */}
+                    <div className={`
+                        mt-4 p-3 rounded-md text-sm
+                        ${migrationMode === 'upsert'
+                            ? 'bg-green-100 text-green-800 border border-green-300'
+                            : 'bg-red-100 text-red-800 border border-red-300'
+                        }
+                    `}>
+                        {migrationMode === 'upsert' ? (
+                            <p>
+                                <strong>✓ Safe Mode:</strong> Your existing data will be preserved.
+                                Only orders from the CSV will be added or updated based on their invoice IDs.
+                            </p>
+                        ) : (
+                            <p>
+                                <strong>⚠️ Warning:</strong> This will permanently delete all existing orders before importing from CSV.
+                                Make sure you have a backup if needed.
+                            </p>
+                        )}
+                    </div>
+                </Card>
             )}
 
             {migrationData && (
