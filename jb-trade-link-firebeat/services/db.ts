@@ -401,8 +401,8 @@ export const OrderService = {
 
     // If date is provided, filter at database level
     if (date) {
-      // Check both exact match and timestamp match (YYYY-MM-DD vs YYYY-MM-DDTHH:MM:SS)
-      query = query.or(`date.eq.${date},date.like.${date}T%`);
+      // Column is type 'date', so we use strict equality
+      query = query.eq('date', date);
     }
 
     const { data, error } = await query;
