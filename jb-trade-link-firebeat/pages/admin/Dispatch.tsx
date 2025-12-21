@@ -43,6 +43,24 @@ export const DispatchPlanner: React.FC = () => {
       setLoading(true);
       try {
         const pendingOrders = await OrderService.getPendingDispatch();
+        console.log('🔍 DEBUG: Total pending orders fetched:', pendingOrders.length);
+
+        // Debug: Log unique dates to see the format
+        const uniqueDates = Array.from(new Set(pendingOrders.map(o => o.date)));
+        console.log('🔍 DEBUG: Unique order dates found:', uniqueDates);
+        console.log('🔍 DEBUG: Selected date for comparison:', selectedDate);
+
+        // Debug: Log a few sample orders
+        if (pendingOrders.length > 0) {
+          console.log('🔍 DEBUG: Sample order:', {
+            id: pendingOrders[0].id,
+            date: pendingOrders[0].date,
+            dateType: typeof pendingOrders[0].date,
+            time: pendingOrders[0].time,
+            customerName: pendingOrders[0].customerName
+          });
+        }
+
         setOrders(pendingOrders);
         const allTrips = await TripService.getAll();
         setTrips(allTrips.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
@@ -62,10 +80,35 @@ export const DispatchPlanner: React.FC = () => {
     return { tripId: trip.id, deliveryPersonName: trip.deliveryPersonName, vehicleName: trip.vehicleName, deliveryDate: trip.deliveryDate };
   };
 
+  // Helper function to normalize dates to YYYY-MM-DD format
+  const normalizeDateToYYYYMMDD = (dateStr: string | undefined): string => {
+    if (!dateStr) return '';
+    // If it's already in YYYY-MM-DD format, return as is
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+    // If it's a full ISO timestamp, extract the date part
+    if (dateStr.includes('T')) return dateStr.split('T')[0];
+    // Try to parse and format
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return dateStr; // Invalid date, return as is
+      return date.toISOString().split('T')[0];
+    } catch {
+      return dateStr;
+    }
+  };
+
   const filteredOrders = orders.filter(o => {
     const matchesSearch = o.customerName.toLowerCase().includes(searchQuery.toLowerCase()) || o.id.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesDate = !filterByDate || o.date === selectedDate;
+    // Normalize both dates before comparing
+    const orderDate = normalizeDateToYYYYMMDD(o.date);
+    const matchesDate = !filterByDate || orderDate === selectedDate;
     const matchesSalesperson = selectedSalespersons.size === 0 || selectedSalespersons.has(o.salespersonId);
+
+    // Debug logging for first few orders
+    if (orders.indexOf(o) < 3) {
+      console.log(`🔍 Order ${o.id}: original date="${o.date}", normalized="${orderDate}", selected="${selectedDate}", matches=${matchesDate}`);
+    }
+
     return matchesSearch && matchesDate && matchesSalesperson;
   });
 
@@ -250,7 +293,8 @@ export const DispatchPlanner: React.FC = () => {
                     <div className="mt-3 pt-3 border-t border-blue-200">
                       <p className="font-semibold text-blue-900 mb-1">Available order dates:</p>
                       <div className="text-xs text-blue-700">
-                        {Array.from(new Set(orders.map(o => o.date)))
+                        {Array.from(new Set(orders.map(o => normalizeDateToYYYYMMDD(o.date))))
+                          .filter(d => d) // Remove empty dates
                           .sort()
                           .slice(0, 5)
                           .map(date => (
