@@ -438,36 +438,23 @@ export const DeliveryDashboard: React.FC = () => {
                     )}
                   </div>
 
+
                   <div className="space-y-2">
                     {(() => {
-                      // Filter and sort orders: matching orders first, then others
+                      // Show only matching orders when searching, all orders when not
                       const lowerQ = tripSearchQuery.toLowerCase();
-                      const matchingOrders: typeof tripData.orders = [];
-                      const nonMatchingOrders: typeof tripData.orders = [];
 
-                      tripData.orders.forEach((order, idx) => {
-                        const orderWithIndex = { ...order, originalIndex: idx };
-                        const matches = tripSearchQuery.trim() && (
-                          order.customerName.toLowerCase().includes(lowerQ) ||
-                          order.id.toLowerCase().includes(lowerQ)
-                        );
-
-                        if (matches) {
-                          matchingOrders.push(orderWithIndex as any);
-                        } else {
-                          nonMatchingOrders.push(orderWithIndex as any);
-                        }
-                      });
-
-                      const orderedList = tripSearchQuery.trim()
-                        ? [...matchingOrders, ...nonMatchingOrders]
+                      const filteredOrders = tripSearchQuery.trim()
+                        ? tripData.orders
+                          .map((order, idx) => ({ ...order, originalIndex: idx }))
+                          .filter((order) =>
+                            order.customerName.toLowerCase().includes(lowerQ) ||
+                            order.id.toLowerCase().includes(lowerQ)
+                          )
                         : tripData.orders.map((o, idx) => ({ ...o, originalIndex: idx }));
 
-                      return orderedList.map((order: any) => {
-                        const isMatch = tripSearchQuery.trim() && (
-                          order.customerName.toLowerCase().includes(lowerQ) ||
-                          order.id.toLowerCase().includes(lowerQ)
-                        );
+                      return filteredOrders.map((order: any) => {
+                        const isMatch = tripSearchQuery.trim();
 
                         return (
                           <div
