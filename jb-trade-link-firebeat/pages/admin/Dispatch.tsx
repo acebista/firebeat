@@ -67,9 +67,22 @@ export const DispatchPlanner: React.FC = () => {
         setOrders(pendingOrders);
         const allTrips = await TripService.getAll();
         setTrips(allTrips.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
-        const users = await UserService.getAll();
-        setSalesUsers(users.filter(u => u.role === 'sales'));
-        setDeliveryUsers(users.filter(u => u.role === 'delivery'));
+
+        try {
+          const users = await UserService.getAll();
+          const salesPeople = users.filter(u => u.role === 'sales');
+          const deliveryPeople = users.filter(u => u.role === 'delivery');
+          console.log('🔍 DEBUG: Users loaded:', users.length);
+          console.log('🔍 DEBUG: Sales users:', salesPeople.length, salesPeople.map(u => u.name));
+          console.log('🔍 DEBUG: Delivery users:', deliveryPeople.length);
+          setSalesUsers(salesPeople);
+          setDeliveryUsers(deliveryPeople);
+        } catch (userErr) {
+          console.error('Failed to load users:', userErr);
+          setSalesUsers([]);
+          setDeliveryUsers([]);
+        }
+
         try { const vehs = await VehicleService.getAll(); setVehicles(vehs); } catch (vehErr) { console.error('Failed to load vehicles', vehErr); setVehicles([]); }
       } catch (e) { console.error("Error loading dispatch data", e); }
       finally { setLoading(false); }
