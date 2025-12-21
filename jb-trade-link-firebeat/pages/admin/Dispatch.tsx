@@ -27,6 +27,7 @@ export const DispatchPlanner: React.FC = () => {
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [filterByDate, setFilterByDate] = useState(true);
   const [selectedSalespersons, setSelectedSalespersons] = useState<Set<string>>(new Set());
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [isCreateTripModalOpen, setCreateTripModalOpen] = useState(false);
@@ -63,7 +64,7 @@ export const DispatchPlanner: React.FC = () => {
 
   const filteredOrders = orders.filter(o => {
     const matchesSearch = o.customerName.toLowerCase().includes(searchQuery.toLowerCase()) || o.id.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesDate = o.date === selectedDate;
+    const matchesDate = !filterByDate || o.date === selectedDate;
     const matchesSalesperson = selectedSalespersons.size === 0 || selectedSalespersons.has(o.salespersonId);
     return matchesSearch && matchesDate && matchesSalesperson;
   });
@@ -138,14 +139,27 @@ export const DispatchPlanner: React.FC = () => {
         <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
           <div className="flex-1 min-w-[200px]">
             <label className="block text-sm font-medium text-gray-700 mb-1">Delivery Date</label>
-            <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 rounded-md border border-gray-300 text-sm focus:ring-indigo-500 focus:border-indigo-500"
-              />
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  disabled={!filterByDate}
+                  className="w-full pl-9 pr-3 py-2 rounded-md border border-gray-300 text-sm focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 disabled:text-gray-500"
+                />
+              </div>
+              <button
+                onClick={() => setFilterByDate(!filterByDate)}
+                className={`px-3 py-2 rounded-md text-xs font-medium border transition-colors whitespace-nowrap ${filterByDate
+                  ? 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700'
+                  : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
+                  }`}
+                title={filterByDate ? 'Date filter enabled - Click to show all dates' : 'Date filter disabled - Click to filter by date'}
+              >
+                {filterByDate ? '✓ Filter' : 'All Dates'}
+              </button>
             </div>
           </div>
 
@@ -155,8 +169,8 @@ export const DispatchPlanner: React.FC = () => {
               <button
                 onClick={() => setSelectedSalespersons(new Set())}
                 className={`px-3 py-1 text-xs rounded-full border font-medium transition-colors whitespace-nowrap ${selectedSalespersons.size === 0
-                    ? 'bg-indigo-600 text-white border-indigo-600'
-                    : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
                   }`}
               >
                 All Sales
@@ -174,8 +188,8 @@ export const DispatchPlanner: React.FC = () => {
                     setSelectedSalespersons(newSet);
                   }}
                   className={`px-3 py-1 text-xs rounded-full border font-medium transition-colors whitespace-nowrap ${selectedSalespersons.has(sp.id)
-                      ? 'bg-indigo-100 text-indigo-800 border-indigo-200'
-                      : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
+                    ? 'bg-indigo-100 text-indigo-800 border-indigo-200'
+                    : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
                     }`}
                 >
                   {sp.name}
@@ -219,9 +233,45 @@ export const DispatchPlanner: React.FC = () => {
             {loading ? (
               <div className="p-10 text-center text-gray-500">Loading...</div>
             ) : Object.keys(groupedOrders).length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-gray-500 opacity-60">
-                <Package className="h-16 w-16 mb-2" />
-                <p className="font-medium">No orders</p>
+              <div className="h-full flex flex-col items-center justify-center text-gray-500 p-6">
+                <Package className="h-16 w-16 mb-4 opacity-40" />
+                <p className="font-bold text-lg mb-2">No orders match your filters</p>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4 max-w-md text-sm text-left">
+                  <p className="font-semibold text-blue-900 mb-2">📊 Diagnostic Information:</p>
+                  <ul className="space-y-1 text-blue-800">
+                    <li>• <strong>Total pending orders:</strong> {orders.length}</li>
+                    <li>• <strong>Date filter:</strong> {filterByDate ? `ON (${selectedDate})` : 'OFF (all dates)'}</li>
+                    <li>• <strong>Salesperson filter:</strong> {selectedSalespersons.size === 0 ? 'All' : `${selectedSalespersons.size} selected`}</li>
+                    <li>• <strong>Search query:</strong> {searchQuery || 'None'}</li>
+                  </ul>
+
+                  {orders.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-blue-200">
+                      <p className="font-semibold text-blue-900 mb-1">Available order dates:</p>
+                      <div className="text-xs text-blue-700">
+                        {Array.from(new Set(orders.map(o => o.date)))
+                          .sort()
+                          .slice(0, 5)
+                          .map(date => (
+                            <span key={date} className="inline-block bg-blue-100 px-2 py-0.5 rounded mr-1 mb-1">
+                              {date}
+                            </span>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mt-3 pt-3 border-t border-blue-200">
+                    <p className="font-semibold text-blue-900 mb-1">💡 Suggestions:</p>
+                    <ul className="text-xs text-blue-700 space-y-0.5">
+                      {filterByDate && <li>• Try clicking "All Dates" button to see all orders</li>}
+                      {selectedSalespersons.size > 0 && <li>• Clear salesperson filters</li>}
+                      {searchQuery && <li>• Clear search query</li>}
+                      {orders.length === 0 && <li>• No approved orders in system - check order statuses</li>}
+                    </ul>
+                  </div>
+                </div>
               </div>
             ) : (
               <>
@@ -258,8 +308,8 @@ export const DispatchPlanner: React.FC = () => {
                             <div
                               key={order.id}
                               className={`px-4 py-2 flex items-start gap-3 cursor-pointer text-xs transition-colors ${order.assignedTripId
-                                  ? 'bg-blue-50 opacity-75'
-                                  : 'hover:bg-indigo-50'
+                                ? 'bg-blue-50 opacity-75'
+                                : 'hover:bg-indigo-50'
                                 }`}
                               onClick={() => {
                                 if (!order.assignedTripId) {
