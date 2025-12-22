@@ -1,0 +1,7 @@
+## 2025-05-24 - Large Bundle Size & Code Splitting
+**Learning:** The application bundle size was extremely large (~2MB), causing slow initial load times. This was due to all page components being imported statically in `App.tsx`.
+**Action:** Implemented Route-Based Code Splitting using `React.lazy` and `Suspense`. This significantly reduced the main bundle size (from ~2MB to ~389kB).
+
+## 2025-05-24 - React Testing Library and React 18 Suspense
+**Learning:** When using `React.lazy` and `Suspense`, tests that render these components must wait for the lazy component to load. Standard `render` calls might fail if the test expects the content immediately. However, the failures in `ProtectedRouteV2` tests were unrelated to `lazy` (since `ProtectedRouteV2` was not modified to use lazy loading itself, but `App.tsx` was). The failures in `protected-route.test.tsx` seem to be due to `allowedRoles` being undefined or `user` being null when it shouldn't be, possibly due to mock store state issues or race conditions in the test environment when combined with the complex `ProtectedRouteV2` logic.
+**Action:** When testing components that depend on global store state (like Zustand), ensure the store is reset correctly between tests. Also, when testing routing components, ensure the `HashRouter` or `MemoryRouter` is correctly set up. In this specific case, the `allowedRoles` prop seems to be passed correctly in the test, so the issue might be deeper in how `ProtectedRouteV2` handles updates or state changes.
