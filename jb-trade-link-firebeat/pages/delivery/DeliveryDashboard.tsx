@@ -68,7 +68,9 @@ export const DeliveryDashboard: React.FC = () => {
     setLoading(true);
     try {
       const trips = await TripService.getByDeliveryPerson(user.id);
-      const tripsWithStats = await processTrips(trips);
+      // Filter out completed trips - only show active/in-progress trips
+      const activeTrips = trips.filter(t => t.status !== 'completed');
+      const tripsWithStats = await processTrips(activeTrips);
 
       setMyTrips(tripsWithStats);
       calculateMyStats(tripsWithStats);
@@ -101,7 +103,9 @@ export const DeliveryDashboard: React.FC = () => {
       for (const deliveryUser of deliveryUsers) {
         try {
           const trips = await TripService.getByDeliveryPerson(deliveryUser.id);
-          const tripsWithStats = await processTrips(trips);
+          // Filter out completed trips - only show active/in-progress trips
+          const activeTrips = trips.filter(t => t.status !== 'completed');
+          const tripsWithStats = await processTrips(activeTrips);
 
           let userAssigned = 0;
           let userCompleted = 0;

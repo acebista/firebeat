@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button } from '../../components/ui/Elements';
 import { Modal } from '../../components/ui/Modal';
-import { MapPin, CheckCircle, Clock, Navigation, Truck, ChevronDown, ChevronUp, TrendingUp, Users, Zap, Search } from 'lucide-react';
+import { MapPin, CheckCircle, Clock, Navigation, Truck, ChevronDown, ChevronUp, TrendingUp, Users, Zap, Search, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { DispatchTrip, Order, User } from '../../types';
 
@@ -46,6 +46,7 @@ export const AllTripsModal: React.FC<AllTripsModalProps> = ({
   const [expandedTripId, setExpandedTripId] = useState<string | null>(null);
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [tripSearchQuery, setTripSearchQuery] = useState(''); // Search within expanded trip
 
   useEffect(() => {
     if (isOpen && allUsersTrips.length > 0) {
@@ -146,7 +147,7 @@ export const AllTripsModal: React.FC<AllTripsModalProps> = ({
           </Card>
           <Card className="p-3 bg-purple-50 border-purple-100 col-span-2 md:col-span-1">
             <p className="text-xs text-purple-600 font-medium">Total Value</p>
-            <h3 className="text-lg font-bold text-purple-900">₹{allStats.totalValue.toLocaleString('en-IN', {maximumFractionDigits: 0})}</h3>
+            <h3 className="text-lg font-bold text-purple-900">₹{allStats.totalValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</h3>
           </Card>
         </div>
 
@@ -194,7 +195,7 @@ export const AllTripsModal: React.FC<AllTripsModalProps> = ({
                     <div className="flex-1 min-w-0">
                       <h4 className="font-bold text-gray-900">{userData.user.name}</h4>
                       <p className="text-sm text-gray-600">
-                        {userData.trips.length} trip{userData.trips.length !== 1 ? 's' : ''} • {userData.totalAssigned} order{userData.totalAssigned !== 1 ? 's' : ''} • ₹{userData.totalValue.toLocaleString('en-IN', {maximumFractionDigits: 0})}
+                        {userData.trips.length} trip{userData.trips.length !== 1 ? 's' : ''} • {userData.totalAssigned} order{userData.totalAssigned !== 1 ? 's' : ''} • ₹{userData.totalValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                       </p>
                     </div>
                   </div>
@@ -231,7 +232,7 @@ export const AllTripsModal: React.FC<AllTripsModalProps> = ({
                                   </span>
                                 </div>
                                 <p className="text-sm text-gray-600">
-                                  {tripData.trip.deliveryDate} • {tripData.orders.length} order{tripData.orders.length !== 1 ? 's' : ''} • ₹{tripData.totalValue.toLocaleString('en-IN', {maximumFractionDigits: 0})}
+                                  {tripData.trip.deliveryDate} • {tripData.orders.length} order{tripData.orders.length !== 1 ? 's' : ''} • ₹{tripData.totalValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                                 </p>
                               </div>
                             </div>
@@ -261,45 +262,105 @@ export const AllTripsModal: React.FC<AllTripsModalProps> = ({
                           {/* Trip Details */}
                           {expandedTripId === tripData.trip.id && (
                             <div className="px-4 pb-4 border-t border-opacity-20 border-current">
-                              <div className="space-y-2 mt-3">
-                                {tripData.orders.map((order, idx) => (
-                                  <div
-                                    key={order.id}
-                                    className={`p-3 rounded-lg text-sm ${
-                                      order.status === 'delivered' ? 'bg-white bg-opacity-40' : 'bg-white'
-                                    }`}
-                                  >
-                                    <div className="flex items-start justify-between gap-2">
-                                      <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 mb-1">
-                                          <span className="font-medium text-xs bg-gray-200 px-2 py-0.5 rounded">
-                                            Stop #{idx + 1}
-                                          </span>
-                                          {order.status === 'delivered' && (
-                                            <CheckCircle size={14} className="text-green-600 flex-shrink-0" />
-                                          )}
+                              {/* Search within trip */}
+                              <div className="mt-3 mb-3">
+                                <div className="relative">
+                                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                  <input
+                                    type="text"
+                                    placeholder="Search stops by customer or invoice..."
+                                    value={tripSearchQuery}
+                                    onChange={(e) => setTripSearchQuery(e.target.value)}
+                                    className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                  />
+                                  {tripSearchQuery && (
+                                    <button
+                                      onClick={() => setTripSearchQuery('')}
+                                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </button>
+                                  )}
+                                </div>
+                                {tripSearchQuery && (
+                                  <p className="text-xs text-gray-500 mt-1 ml-1">
+                                    {(() => {
+                                      const matchCount = tripData.orders.filter(o =>
+                                        o.customerName.toLowerCase().includes(tripSearchQuery.toLowerCase()) ||
+                                        o.id.toLowerCase().includes(tripSearchQuery.toLowerCase())
+                                      ).length;
+                                      return `${matchCount} of ${tripData.orders.length} stops match`;
+                                    })()}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="space-y-2">
+                                {(() => {
+                                  // Show only matching orders when searching, all orders when not
+                                  const lowerQ = tripSearchQuery.toLowerCase();
+
+                                  const filteredOrders = tripSearchQuery.trim()
+                                    ? tripData.orders
+                                      .map((order, idx) => ({ ...order, originalIndex: idx }))
+                                      .filter((order) =>
+                                        order.customerName.toLowerCase().includes(lowerQ) ||
+                                        order.id.toLowerCase().includes(lowerQ)
+                                      )
+                                    : tripData.orders.map((o, idx) => ({ ...o, originalIndex: idx }));
+
+                                  return filteredOrders.map((order: any) => {
+                                    const isMatch = tripSearchQuery.trim();
+
+                                    return (
+                                      <div
+                                        key={order.id}
+                                        className={`p-3 rounded-lg text-sm transition-all ${order.status === 'delivered'
+                                            ? 'bg-white bg-opacity-40'
+                                            : isMatch
+                                              ? 'bg-yellow-50 border-2 border-yellow-400 shadow-md'
+                                              : 'bg-white'
+                                          }`}
+                                      >
+                                        <div className="flex items-start justify-between gap-2">
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 mb-1">
+                                              <span className={`font-medium text-xs px-2 py-0.5 rounded ${isMatch ? 'bg-yellow-200 text-yellow-900' : 'bg-gray-200 text-gray-700'
+                                                }`}>
+                                                Stop #{order.originalIndex + 1}
+                                              </span>
+                                              {order.status === 'delivered' && (
+                                                <CheckCircle size={14} className="text-green-600 flex-shrink-0" />
+                                              )}
+                                              {isMatch && (
+                                                <span className="text-xs font-semibold text-yellow-700 bg-yellow-100 px-2 py-0.5 rounded">
+                                                  Match
+                                                </span>
+                                              )}
+                                            </div>
+                                            <h5 className="font-semibold text-gray-900 truncate">{order.customerName}</h5>
+                                            <p className="text-xs text-gray-500 mt-0.5">Order: {order.id.slice(0, 12)}</p>
+                                          </div>
+                                          <div className="text-right flex-shrink-0">
+                                            <p className="font-bold text-indigo-600">₹{order.totalAmount.toFixed(0)}</p>
+                                            {order.status === 'delivered' ? (
+                                              <p className="text-xs text-green-600 font-medium mt-0.5">Delivered</p>
+                                            ) : (
+                                              <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => navigate(`/delivery/invoice/${order.id}`)}
+                                                className="mt-1 text-xs"
+                                              >
+                                                Deliver
+                                              </Button>
+                                            )}
+                                          </div>
                                         </div>
-                                        <h5 className="font-semibold text-gray-900 truncate">{order.customerName}</h5>
-                                        <p className="text-xs text-gray-500 mt-0.5">Order: {order.id.slice(0, 12)}</p>
                                       </div>
-                                      <div className="text-right flex-shrink-0">
-                                        <p className="font-bold text-indigo-600">₹{order.totalAmount.toFixed(0)}</p>
-                                        {order.status === 'delivered' ? (
-                                          <p className="text-xs text-green-600 font-medium mt-0.5">Delivered</p>
-                                        ) : (
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => navigate(`/delivery/invoice/${order.id}`)}
-                                            className="mt-1 text-xs"
-                                          >
-                                            Deliver
-                                          </Button>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
+                                    );
+                                  });
+                                })()}
                               </div>
                             </div>
                           )}

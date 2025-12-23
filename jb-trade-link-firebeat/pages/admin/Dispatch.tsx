@@ -66,7 +66,9 @@ export const DispatchPlanner: React.FC = () => {
 
         setOrders(pendingOrders);
         const allTrips = await TripService.getAll();
-        setTrips(allTrips.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+        // Filter out completed trips - only show active/in-progress trips in dispatch planner
+        const activeTrips = allTrips.filter(t => t.status !== 'completed');
+        setTrips(activeTrips.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
 
         try {
           const users = await UserService.getAll();

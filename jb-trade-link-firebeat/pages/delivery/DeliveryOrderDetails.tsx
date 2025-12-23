@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Button, Input } from '../../components/ui/Elements';
 import { MapPin, Phone, CheckCircle, XCircle, ArrowLeft, Banknote, CreditCard, Clock, Package, Trash2, Plus, Minus, X, AlertCircle } from 'lucide-react';
-import { OrderService, CustomerService, ProductService } from '../../services/db';
+import { OrderService, CustomerService, ProductService, TripService } from '../../services/db';
 import { PaymentsService } from '../../services/ledger';
-import { Order, Customer } from '../../types';
+import { Order, Customer, DispatchTrip } from '../../types';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 
@@ -180,6 +180,33 @@ export const DeliveryOrderDetails: React.FC = () => {
                 } catch (paymentError) {
                     console.error('Failed to create payment record', paymentError);
                     // Don't fail delivery if payment record fails - the order is still delivered
+                }
+            }
+
+            // Check if all orders in the trip are now delivered, and if so mark trip as completed
+            if (order.assignedTripId) {
+                try {
+                    const trip = await TripService.getById(order.assignedTripId);
+                    if (trip && trip.orderIds && trip.orderIds.length > 0) {
+                        // Fetch all orders in this trip
+                        const tripOrders = await OrderService.getOrdersByIds(trip.orderIds);
+
+                        // Count delivered orders (including this one which we just updated)
+                        const deliveredCount = tripOrders.filter(o => {
+                            // This order is now delivered (we just updated it above)
+                            if (o.id === order.id) return true;
+                            return o.status === 'delivered';
+                        }).length;
+
+                        // If all orders are delivered, mark trip as completed
+                        if (deliveredCount >= trip.orderIds.length) {
+                            await TripService.update(trip.id, { status: 'completed' });
+                            console.log(`✅ Trip ${trip.id} marked as completed - all ${tripOrders.length} orders delivered`);
+                        }
+                    }
+                } catch (tripError) {
+                    console.error('Failed to check/update trip completion status', tripError);
+                    // Don't fail the delivery - trip status update is supplementary
                 }
             }
 
