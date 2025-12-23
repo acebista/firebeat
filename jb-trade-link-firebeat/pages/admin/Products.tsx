@@ -579,6 +579,26 @@ export const ProductManagement: React.FC = () => {
               <Input label="Pieces / Packet" type="number" min={1} value={formData.piecesPerPacket ?? 1} onChange={e => setFormData({ ...formData, piecesPerPacket: Number(e.target.value) })} error={validationErrors.piecesPerPacket} />
 
               <div className="col-span-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <input
+                    type="checkbox"
+                    id="enableCommissionOverride"
+                    checked={formData.commission_rate !== undefined && formData.commission_rate !== null}
+                    onChange={e => {
+                      if (e.target.checked) {
+                        // Enable override - set to 0 as starting value
+                        setFormData({ ...formData, commission_rate: 0 });
+                      } else {
+                        // Disable override - clear the value
+                        setFormData({ ...formData, commission_rate: undefined });
+                      }
+                    }}
+                    className="rounded text-indigo-600 h-4 w-4"
+                  />
+                  <label htmlFor="enableCommissionOverride" className="text-xs font-medium text-gray-700 cursor-pointer">
+                    Enable Commission Override
+                  </label>
+                </div>
                 <Input
                   label="Comm. Override (%)"
                   type="number"
@@ -589,8 +609,13 @@ export const ProductManagement: React.FC = () => {
                   value={formData.commission_rate ?? ''}
                   onChange={e => setFormData({ ...formData, commission_rate: e.target.value ? Number(e.target.value) : undefined })}
                   error={validationErrors.commission_rate}
+                  disabled={formData.commission_rate === undefined || formData.commission_rate === null}
                 />
-                <p className="text-[10px] text-gray-500 mt-0.5">Overrides company default</p>
+                <p className="text-[10px] text-gray-500 mt-0.5">
+                  {formData.commission_rate !== undefined && formData.commission_rate !== null
+                    ? 'Overrides company default'
+                    : 'Using company default rate'}
+                </p>
               </div>
 
               <div className="col-span-3 mt-2">
