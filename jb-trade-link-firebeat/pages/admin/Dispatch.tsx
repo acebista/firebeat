@@ -37,6 +37,7 @@ export const DispatchPlanner: React.FC = () => {
   const [isVehicleModalOpen, setVehicleModalOpen] = useState(false);
   const [newVehicle, setNewVehicle] = useState<Partial<Vehicle>>({ name: '', registrationNo: '', capacityCases: undefined });
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [isAssigning, setIsAssigning] = useState(false); // Prevent double-click on assign
 
   useEffect(() => {
     const loadData = async () => {
@@ -147,7 +148,38 @@ export const DispatchPlanner: React.FC = () => {
 
   const handleCreateTrip = async () => { try { if (isCreatingTrip) return; const validatedData = tripSchema.parse(newTripData); setValidationErrors({}); setIsCreatingTrip(true); const dp = deliveryUsers.find(d => d.id === validatedData.deliveryPersonId); const veh = vehicles.find((v: Vehicle) => v.id === validatedData.vehicleId); const newTrip: Omit<DispatchTrip, 'id'> = { deliveryDate: newTripData.deliveryDate, deliveryPersonId: dp!.id, deliveryPersonName: dp!.name, vehicleId: veh?.id, vehicleName: veh?.name, routeIds: [], routeNames: [], orderIds: [], totalOrders: 0, totalAmount: 0, status: 'draft', createdAt: new Date().toISOString() }; const createdTrip = await TripService.add(newTrip); if (selectedOrderIds.size > 0) { const selectedOrdersList = orders.filter(o => selectedOrderIds.has(o.id)); await TripService.assignOrders(createdTrip.id, Array.from(selectedOrderIds), createdTrip as DispatchTrip, selectedOrdersList); setSelectedOrderIds(new Set()); } setCreateTripModalOpen(false); setNewTripData({ deliveryPersonId: '', vehicleId: '', deliveryDate: new Date().toISOString().split('T')[0] }); setRefreshKey(k => k + 1); toast.success('Trip created successfully'); } catch (e: any) { if (e instanceof z.ZodError) { const errors: Record<string, string> = {}; (e as any).errors.forEach((err: any) => { if (err.path[0]) { errors[err.path[0] as string] = err.message; } }); setValidationErrors(errors); } else { console.error(e); toast.error("Failed to create trip"); } } finally { setIsCreatingTrip(false); } };
 
-  const handleAssignToTrip = async (tripId: string) => { if (selectedOrderIds.size === 0) return; const trip = trips.find(t => t.id === tripId); if (!trip) return; const selectedOrdersList = orders.filter(o => selectedOrderIds.has(o.id)); try { await TripService.assignOrders(tripId, Array.from(selectedOrderIds), trip, selectedOrdersList); setSelectedOrderIds(new Set()); setRefreshKey(k => k + 1); } catch (e) { console.error(e); toast.error("Failed to assign orders"); } };
+  const handleAssignToTrip = async (tripId: string) => {
+    // Guard against double-clicks and empty selection
+    if (isAssigning || selectedOrderIds.size === 0) return;
+
+    setIsAssigning(true);
+    const toastId = toast.loading(`Assigning ${selectedOrderIds.size} orders...`);
+
+    try {
+      // Fetch fresh trip data from database to avoid stale state issues
+      const freshTrip = await TripService.getById(tripId);
+      if (!freshTrip) {
+        toast.error('Trip not found', { id: toastId });
+        return;
+      }
+
+      const selectedOrdersList = orders.filter(o => selectedOrderIds.has(o.id));
+
+      // Use fresh trip data for assignment
+      await TripService.assignOrders(tripId, Array.from(selectedOrderIds), freshTrip, selectedOrdersList);
+
+      // Clear selection and refresh
+      setSelectedOrderIds(new Set());
+      setRefreshKey(k => k + 1);
+
+      toast.success(`${selectedOrdersList.length} orders assigned successfully!`, { id: toastId });
+    } catch (e) {
+      console.error('Failed to assign orders:', e);
+      toast.error('Failed to assign orders. Please try again.', { id: toastId });
+    } finally {
+      setIsAssigning(false);
+    }
+  };
 
   const handleCreateVehicle = async () => {
     try {
@@ -456,11 +488,12 @@ export const DispatchPlanner: React.FC = () => {
 
                     {selectedOrderIds.size > 0 && trip.status === 'draft' ? (
                       <Button
-                        className="w-full animate-pulse bg-indigo-600 hover:bg-indigo-700 text-white"
+                        className={`w-full ${isAssigning ? 'opacity-50 cursor-not-allowed' : 'animate-pulse'} bg-indigo-600 hover:bg-indigo-700 text-white`}
                         onClick={() => handleAssignToTrip(trip.id)}
+                        disabled={isAssigning}
                       >
                         <ArrowRight size={16} className="mr-2" />
-                        Assign {selectedOrderIds.size}
+                        {isAssigning ? 'Assigning...' : `Assign ${selectedOrderIds.size}`}
                       </Button>
                     ) : (
                       <div className="h-px bg-gray-200"></div>
