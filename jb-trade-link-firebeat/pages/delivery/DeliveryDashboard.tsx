@@ -7,6 +7,7 @@ import { useAuth } from '../../services/auth';
 import { TripService, OrderService, UserService } from '../../services/db';
 import { getPackingProgress } from '../../services/packing/packingService';
 import { DispatchTrip, Order, User } from '../../types';
+import toast from 'react-hot-toast';
 
 interface TripWithStats {
   trip: DispatchTrip;
@@ -38,6 +39,8 @@ export const DeliveryDashboard: React.FC = () => {
   const [expandedTripId, setExpandedTripId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [tripSearchQuery, setTripSearchQuery] = useState(''); // Search within expanded trip
+  const [finishingTrip, setFinishingTrip] = useState<TripWithStats | null>(null); // Trip being finished
+  const [isFinishing, setIsFinishing] = useState(false); // Processing state
 
   const [myStats, setMyStats] = useState({
     totalTrips: 0,
@@ -259,6 +262,82 @@ export const DeliveryDashboard: React.FC = () => {
     }
   };
 
+  // Handle finish trip button click
+  const handleFinishTripClick = (tripData: TripWithStats) => {
+    if (tripData.pendingCount > 0) {
+      // Has pending orders - show modal for user choice
+      setFinishingTrip(tripData);
+    } else {
+      // All orders delivered - just complete the trip
+      completeTrip(tripData, 'direct');
+    }
+  };
+
+  // Complete trip with specified action for pending orders
+  const completeTrip = async (tripData: TripWithStats, action: 'direct' | 'sr' | 'reschedule') => {
+    setIsFinishing(true);
+    const toastId = toast.loading('Finishing trip...');
+
+    try {
+      const pendingOrders = tripData.orders.filter(o => o.status !== 'delivered');
+
+      if (action === 'sr') {
+        // Mark pending orders as cancelled (Sales Return)
+        for (const order of pendingOrders) {
+          await OrderService.update(order.id, {
+            status: 'cancelled',
+            remarks: `Sales Return - Trip finished with order pending. ${order.remarks || ''}`
+          });
+        }
+        toast.success(`${pendingOrders.length} orders marked as Sales Return`, { id: toastId });
+      } else if (action === 'reschedule') {
+        // Reschedule for tomorrow - remove from trip and set to approved
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+        for (const order of pendingOrders) {
+          await OrderService.update(order.id, {
+            status: 'approved',
+            assignedTripId: undefined,
+            date: tomorrowStr,
+            remarks: `Rescheduled to ${tomorrowStr}. ${order.remarks || ''}`
+          } as any);
+        }
+
+        // Update trip to remove rescheduled orders
+        const remainingOrderIds = tripData.trip.orderIds.filter(
+          id => !pendingOrders.some(o => o.id === id)
+        );
+        const deliveredOrders = tripData.orders.filter(o => o.status === 'delivered');
+        await TripService.update(tripData.trip.id, {
+          orderIds: remainingOrderIds,
+          totalOrders: remainingOrderIds.length,
+          totalAmount: deliveredOrders.reduce((sum, o) => sum + o.totalAmount, 0)
+        });
+
+        toast.success(`${pendingOrders.length} orders rescheduled for tomorrow`, { id: toastId });
+      }
+
+      // Mark trip as completed
+      await TripService.update(tripData.trip.id, { status: 'completed' });
+
+      // Refresh data
+      await loadMyTrips();
+      await loadAllUsersTrips();
+      setFinishingTrip(null);
+
+      if (action === 'direct') {
+        toast.success('Trip completed successfully!', { id: toastId });
+      }
+    } catch (e) {
+      console.error('Failed to finish trip:', e);
+      toast.error('Failed to finish trip. Please try again.', { id: toastId });
+    } finally {
+      setIsFinishing(false);
+    }
+  };
+
   const filteredTrips = useMemo(() => {
     if (!searchQuery.trim()) return myTrips;
     const lowerQ = searchQuery.toLowerCase();
@@ -393,7 +472,7 @@ export const DeliveryDashboard: React.FC = () => {
                 </div>
               )}
 
-              {/* Packing List Button */}
+              {/* Packing List Button & Finish Trip Button */}
               {expandedTripId === tripData.trip.id && (
                 <div className="px-4 py-2 bg-white bg-opacity-50 border-t border-opacity-20 border-current flex gap-2">
                   <Button
@@ -403,6 +482,16 @@ export const DeliveryDashboard: React.FC = () => {
                   >
                     📦 {tripData.isPackingComplete ? 'Packing List' : 'Start Packing'}
                   </Button>
+                  {tripData.trip.status === 'out_for_delivery' && tripData.isPackingComplete && (
+                    <Button
+                      size="sm"
+                      className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                      onClick={() => handleFinishTripClick(tripData)}
+                      disabled={isFinishing}
+                    >
+                      ✓ Finish Trip
+                    </Button>
+                  )}
                 </div>
               )}
 
@@ -526,6 +615,53 @@ export const DeliveryDashboard: React.FC = () => {
         allUsersTrips={allUsersTrips}
         allStats={allStats}
       />
+
+      {/* Finish Trip Modal - when there are pending orders */}
+      {finishingTrip && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Finish Trip?</h3>
+            <p className="text-gray-600 mb-4">
+              This trip has <span className="font-bold text-amber-600">{finishingTrip.pendingCount} pending orders</span> out of {finishingTrip.orders.length} total.
+            </p>
+            <p className="text-sm text-gray-500 mb-6">
+              What would you like to do with the remaining orders?
+            </p>
+
+            <div className="space-y-3">
+              <button
+                onClick={() => completeTrip(finishingTrip, 'sr')}
+                disabled={isFinishing}
+                className="w-full p-4 bg-red-50 border-2 border-red-200 rounded-lg text-left hover:bg-red-100 transition disabled:opacity-50"
+              >
+                <div className="font-bold text-red-800 mb-1">📋 Mark as Sales Return (SR)</div>
+                <div className="text-sm text-red-600">
+                  Orders will be cancelled and marked as sales returns
+                </div>
+              </button>
+
+              <button
+                onClick={() => completeTrip(finishingTrip, 'reschedule')}
+                disabled={isFinishing}
+                className="w-full p-4 bg-blue-50 border-2 border-blue-200 rounded-lg text-left hover:bg-blue-100 transition disabled:opacity-50"
+              >
+                <div className="font-bold text-blue-800 mb-1">📅 Reschedule for Tomorrow</div>
+                <div className="text-sm text-blue-600">
+                  Orders will be returned to dispatch pool for tomorrow
+                </div>
+              </button>
+
+              <button
+                onClick={() => setFinishingTrip(null)}
+                disabled={isFinishing}
+                className="w-full p-3 bg-gray-100 rounded-lg text-gray-700 font-medium hover:bg-gray-200 transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
