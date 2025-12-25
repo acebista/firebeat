@@ -305,14 +305,16 @@ export const DeliveryOrderDetails: React.FC = () => {
         setProcessing(true);
         try {
             const currentTripId = order.assignedTripId;
+            const originalDate = order.rescheduled_from || order.date; // Keep original if already rescheduled
 
-            // Update order: change status, date, and clear trip assignment
+            // Update order: change status, date, track original date, and clear trip assignment
             await OrderService.update(order.id, {
                 status: 'approved',
                 date: newDate, // CRITICAL: Move order to the new date
+                rescheduled_from: originalDate, // Track original date for reports
                 assignedTripId: undefined,
-                remarks: `Rescheduled to ${newDate}${remarks ? ` | ${remarks}` : ''}`
-            });
+                remarks: `Rescheduled from ${originalDate} to ${newDate}${remarks ? ` | ${remarks}` : ''}`
+            } as any);
 
             // CRITICAL: Remove order from trip's orderIds array
             if (currentTripId) {

@@ -117,6 +117,8 @@ export interface Order {
   delivered_by?: string;
   payment_collected?: number;
   payment_method_at_delivery?: string;
+  // Rescheduling tracking
+  rescheduled_from?: string; // Original date if order was rescheduled
 }
 
 

@@ -134,7 +134,19 @@ export const DispatchPlanner: React.FC = () => {
   const unassignedOrders = filteredOrders.filter(o => !o.assignedTripId);
   const assignedOrders = filteredOrders.filter(o => o.assignedTripId);
 
-  const groupedOrders = filteredOrders.reduce((acc, order) => {
+  // Separate rescheduled orders from regular orders
+  const regularOrders = filteredOrders.filter(o => !o.rescheduled_from);
+  const rescheduledOrders = filteredOrders.filter(o => !!o.rescheduled_from);
+
+  const groupedOrders = regularOrders.reduce((acc, order) => {
+    const key = order.salespersonId;
+    if (!acc[key]) { acc[key] = { id: key, name: order.salespersonName, orders: [], totalAmount: 0 }; }
+    acc[key].orders.push(order);
+    acc[key].totalAmount += order.totalAmount;
+    return acc;
+  }, {} as Record<string, OrderGroup>);
+
+  const groupedRescheduledOrders = rescheduledOrders.reduce((acc, order) => {
     const key = order.salespersonId;
     if (!acc[key]) { acc[key] = { id: key, name: order.salespersonName, orders: [], totalAmount: 0 }; }
     acc[key].orders.push(order);
@@ -446,6 +458,86 @@ export const DispatchPlanner: React.FC = () => {
                     </div>
                   );
                 })}
+
+                {/* Rescheduled Orders Section */}
+                {Object.keys(groupedRescheduledOrders).length > 0 && (
+                  <div className="mt-6 border-t-2 border-amber-300 pt-4">
+                    <div className="flex items-center gap-2 mb-3 bg-amber-50 p-3 rounded-lg border border-amber-200">
+                      <span className="text-lg">📅</span>
+                      <h3 className="font-bold text-amber-800">Rescheduled Orders ({rescheduledOrders.length})</h3>
+                      <span className="text-sm text-amber-600 ml-auto">
+                        ₹{rescheduledOrders.reduce((s, o) => s + o.totalAmount, 0).toLocaleString()}
+                      </span>
+                    </div>
+
+                    {Object.values(groupedRescheduledOrders).map((group: any) => {
+                      const isExpanded = expandedGroups.has('resch_' + group.id);
+                      const unassignedCount = group.orders.filter((o: Order) => !o.assignedTripId).length;
+                      return (
+                        <div key={'resch_' + group.id} className="border border-amber-200 rounded-lg overflow-hidden bg-amber-50/30 shadow-sm mb-3">
+                          <div
+                            className="flex items-center bg-gradient-to-r from-amber-100 to-white px-4 py-3 hover:from-amber-200 transition-colors cursor-pointer"
+                            onClick={() => toggleGroup('resch_' + group.id)}
+                          >
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-gray-300 text-amber-600"
+                              onChange={() => toggleGroupSelection(group.orders)}
+                              onClick={e => e.stopPropagation()}
+                            />
+                            <button className="mr-2 text-gray-400">
+                              {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                            </button>
+                            <span className="font-semibold text-gray-800 flex-1">{group.name}</span>
+                            <span className="text-xs bg-amber-200 text-amber-800 px-2 py-0.5 rounded mr-2">
+                              {unassignedCount} pending
+                            </span>
+                            <span className="text-sm text-gray-600">₹{group.totalAmount.toLocaleString()}</span>
+                          </div>
+                          {isExpanded && (
+                            <div className="divide-y border-t border-amber-200">
+                              {group.orders.map((order: Order) => (
+                                <div
+                                  key={order.id}
+                                  className={`p-3 flex items-center gap-3 ${order.assignedTripId ? 'bg-blue-50/50' : 'bg-white'}`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    className="h-4 w-4 rounded border-gray-300 text-amber-600"
+                                    disabled={!!order.assignedTripId}
+                                    checked={selectedOrderIds.has(order.id)}
+                                    onChange={() => toggleOrderSelection(order.id)}
+                                  />
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <p className="font-medium text-gray-900">{order.customerName}</p>
+                                      <span className="text-xs text-gray-500">₹{order.totalAmount}</span>
+                                    </div>
+                                    <div className="text-xs">
+                                      <span className="bg-gray-200 px-1.5 py-0.5 rounded text-gray-600">{order.id}</span>
+                                      <span className="ml-2 bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
+                                        ↩ From: {order.rescheduled_from}
+                                      </span>
+                                    </div>
+                                    {order.assignedTripId && (() => {
+                                      const a = getOrderAssignmentDetails(order.id);
+                                      return a ? (
+                                        <div className="text-xs text-blue-800 bg-blue-100 px-2 py-1 rounded border border-blue-200 mt-1 inline-flex gap-1">
+                                          <strong>✓ Assigned:</strong> {a.deliveryPersonName}
+                                          {a.vehicleName && ` • ${a.vehicleName}`} {a.deliveryDate}
+                                        </div>
+                                      ) : null;
+                                    })()}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </>
             )}
           </div>
