@@ -147,7 +147,9 @@ export const DeliveryOrderDetails: React.FC = () => {
 
     const calculateOriginalTotal = () => {
         if (!order?.items) return 0;
-        return order.items.reduce((sum, item) => sum + (Number(item.total) || 0), 0);
+        // Always recalculate from items to ensure we have the true original total
+        // regardless of what might have been saved in order.totalAmount during previous partial updates
+        return order.items.reduce((sum, item) => sum + ((Number(item.total) || (Number(item.qty) * Number(item.rate))) || 0), 0);
     };
 
     const calculateDamageTotal = () => damages.reduce((sum, d) => sum + (d.rate * d.quantity), 0);
