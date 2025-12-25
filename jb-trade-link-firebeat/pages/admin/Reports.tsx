@@ -435,6 +435,8 @@ export const Reports: React.FC = () => {
           collectedAmount,
           returnAmount: salesReturn ? salesReturn.totalReturnAmount : undefined,
           returnQty: salesReturn ? (salesReturn as any).totalReturnQty : undefined,
+          // Parse returns from remarks if no salesReturn record
+          hasReturnsInRemarks: !salesReturn && (order.remarks || '').includes('Returns:'),
           date: order.date,
           order,
           salesReturn
@@ -455,7 +457,12 @@ export const Reports: React.FC = () => {
         totalInvoices: filteredRows.length,
         totalDelivered: filteredRows.filter(r => r.status.toLowerCase() === 'delivered' || r.status.toLowerCase() === 'completed').length,
         totalReturned: filteredRows.filter(r => r.status.toLowerCase() === 'returned' || r.status.toLowerCase() === 'cancelled').length,
-        totalPartiallyReturned: filteredRows.filter(r => r.status.toLowerCase() === 'partially_returned').length,
+        // Include both status-based and remarks-based partial returns
+        totalPartiallyReturned: filteredRows.filter(r =>
+          r.status.toLowerCase() === 'partially_returned' ||
+          (r as any).hasReturnsInRemarks === true ||
+          r.salesReturn !== undefined
+        ).length,
         totalAmount: filteredRows.reduce((sum, r) => sum + r.netAmount, 0),
         totalCollected: filteredRows.reduce((sum, r) => sum + r.collectedAmount, 0),
         paymentBreakdown: filteredRows.reduce((breakdown, row) => {

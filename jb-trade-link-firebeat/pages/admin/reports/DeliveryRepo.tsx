@@ -20,6 +20,7 @@ export interface DeliveryReportRow {
     collectedAmount: number;
     returnAmount?: number;
     returnQty?: number;
+    hasReturnsInRemarks?: boolean; // Returns detected from order remarks
     date: string;
     order: Order; // Full order for drill-down
     salesReturn?: SalesReturn; // Linked return if exists
@@ -230,10 +231,15 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
                                         </td>
                                         <td className="px-3 py-2 text-center">
                                             <Badge color={getStatusColor(row.status) as any}>
-                                                {row.status}
+                                                {capitalize(row.status)}
                                             </Badge>
                                             {row.returnAmount && row.returnAmount > 0 && (
                                                 <div className="text-xs text-red-600 mt-1">-₹{row.returnAmount.toFixed(2)}</div>
+                                            )}
+                                            {row.hasReturnsInRemarks && (
+                                                <div className="text-xs bg-amber-100 text-amber-700 px-1 py-0.5 rounded mt-1 inline-block">
+                                                    ↩ Return
+                                                </div>
                                             )}
                                         </td>
                                         <td className="px-3 py-2 text-right text-gray-900">₹{row.subtotal.toFixed(2)}</td>
