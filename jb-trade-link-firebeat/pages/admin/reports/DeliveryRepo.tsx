@@ -58,6 +58,7 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
             case 'qr': return 'blue';
             case 'cheque': return 'amber';
             case 'credit': return 'red';
+            case 'multiple': return 'purple';
             default: return 'slate';
         }
     };

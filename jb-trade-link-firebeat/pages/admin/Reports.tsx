@@ -315,7 +315,7 @@ export const Reports: React.FC = () => {
     setLoading(true);
     try {
       console.log('[Delivery] Starting data fetch...');
-      
+
       // Fetch orders for the date range with delivered/completed status
       let orders = await OrderService.getOrdersByDateRangePaged(
         deliveryFilters.startDate,
@@ -347,20 +347,18 @@ export const Reports: React.FC = () => {
         const salesReturn = returnsByInvoiceId.get(order.id);
         const returnAmount = salesReturn?.totalReturnAmount || 0;
 
-        // Try to get delivery user from order (if stored) or from assigned trip
-        // For now, we'll use a placeholder since delivery user might not be directly on order
-        const deliveryUserId = (order as any).deliveryUserId || '';
+        // Use the newly added AR/Reporting fields
+        const deliveryUserId = order.delivered_by || '';
         const deliveryUser = deliveryUserId ? userMap.get(deliveryUserId) : null;
         const deliveryUserName = deliveryUser?.name || '';
 
-        // Get payment method from order
-        const paymentMethod = (order as any).paymentMethod || order.paymentMode || 'cash';
+        // Get payment method from the delivery capture field
+        const paymentMethod = order.payment_method_at_delivery || order.paymentMode || 'cash';
 
-        // Calculate collected amount (net amount - return amount for credit, otherwise net amount)
-        let collectedAmount = order.totalAmount - returnAmount;
-        if (paymentMethod.toLowerCase() === 'credit') {
-          collectedAmount = 0; // Credit means not collected yet
-        }
+        // Use the actual collected amount recorded at delivery
+        const collectedAmount = (order.payment_collected !== undefined && order.payment_collected !== null)
+          ? Number(order.payment_collected)
+          : (order.status === 'delivered' || order.status === 'completed' ? order.totalAmount : 0);
 
         return {
           invoiceId: order.id,
@@ -393,12 +391,12 @@ export const Reports: React.FC = () => {
       const summary = {
         totalInvoices: filteredRows.length,
         totalDelivered: filteredRows.filter(r => r.status.toLowerCase() === 'delivered' || r.status.toLowerCase() === 'completed').length,
-        totalReturned: filteredRows.filter(r => r.status.toLowerCase() === 'returned').length,
+        totalReturned: filteredRows.filter(r => r.status.toLowerCase() === 'returned' || r.status.toLowerCase() === 'cancelled').length,
         totalPartiallyReturned: filteredRows.filter(r => r.status.toLowerCase() === 'partially_returned').length,
         totalAmount: filteredRows.reduce((sum, r) => sum + r.netAmount, 0),
         totalCollected: filteredRows.reduce((sum, r) => sum + r.collectedAmount, 0),
         paymentBreakdown: filteredRows.reduce((breakdown, row) => {
-          const method = row.paymentMethod.toString();
+          const method = (row.paymentMethod || 'cash').toString().toLowerCase();
           if (!breakdown[method]) {
             breakdown[method] = { count: 0, amount: 0 };
           }
@@ -408,11 +406,12 @@ export const Reports: React.FC = () => {
         }, {} as Record<string, { count: number; amount: number }>)
       };
 
-      console.log('[Delivery] Data fetched successfully:', {
+      console.log('[Delivery] Data processed successfully:', {
         ordersCount: filteredRows.length,
-        totalAmount: summary.totalAmount,
+        totalCollected: summary.totalCollected,
+        summary
       });
-      
+
       setDeliveryReportData({ rows: filteredRows, summary });
       setDeliveryReportError(null);
 
@@ -420,7 +419,7 @@ export const Reports: React.FC = () => {
       console.error('[Delivery] Error fetching data:', e);
       const errorMsg = e?.message || 'Failed to fetch delivery data';
       setDeliveryReportError(errorMsg);
-      
+
       // Set empty data instead of leaving stale data
       setDeliveryReportData({
         rows: [],
@@ -512,7 +511,7 @@ export const Reports: React.FC = () => {
               {deliveryReportError && (
                 <div className="mb-4 p-4 bg-red-50 border border-red-300 rounded-lg text-red-700">
                   <strong>Error loading delivery data:</strong> {deliveryReportError}
-                  <button 
+                  <button
                     onClick={() => fetchDeliveryData()}
                     className="ml-2 text-red-600 hover:text-red-800 font-semibold"
                   >

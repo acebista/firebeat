@@ -39,6 +39,7 @@ export const DeliveryDashboard: React.FC = () => {
   const [expandedTripId, setExpandedTripId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [tripSearchQuery, setTripSearchQuery] = useState(''); // Search within expanded trip
+  const [selectedSalesperson, setSelectedSalesperson] = useState<string>(''); // Salesperson filter
   const [finishingTrip, setFinishingTrip] = useState<TripWithStats | null>(null); // Trip being finished
   const [isFinishing, setIsFinishing] = useState(false); // Processing state
 
@@ -531,13 +532,38 @@ export const DeliveryDashboard: React.FC = () => {
                     )}
                   </div>
 
+                  {/* Salesperson Filter */}
+                  <div className="mb-3">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Filter by Salesperson</label>
+                    <select
+                      value={selectedSalesperson}
+                      onChange={(e) => setSelectedSalesperson(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="">All Salespersons</option>
+                      {(() => {
+                        // Get unique salespersons from trip orders
+                        const salespersons = new Map<string, string>();
+                        tripData.orders.forEach(o => {
+                          if (o.salespersonId && o.salespersonName) {
+                            salespersons.set(o.salespersonId, o.salespersonName);
+                          }
+                        });
+                        return Array.from(salespersons.entries())
+                          .sort((a, b) => a[1].localeCompare(b[1]))
+                          .map(([id, name]) => (
+                            <option key={id} value={id}>{name}</option>
+                          ));
+                      })()}
+                    </select>
+                  </div>
 
                   <div className="space-y-2">
                     {(() => {
                       // Show only matching orders when searching, all orders when not
                       const lowerQ = tripSearchQuery.toLowerCase();
 
-                      const filteredOrders = tripSearchQuery.trim()
+                      let filteredOrders = tripSearchQuery.trim()
                         ? tripData.orders
                           .map((order, idx) => ({ ...order, originalIndex: idx }))
                           .filter((order) =>
@@ -546,59 +572,103 @@ export const DeliveryDashboard: React.FC = () => {
                           )
                         : tripData.orders.map((o, idx) => ({ ...o, originalIndex: idx }));
 
-                      return filteredOrders.map((order: any) => {
-                        const isMatch = tripSearchQuery.trim();
-
-                        return (
-                          <div
-                            key={order.id}
-                            className={`p-3 rounded-lg text-sm transition-all ${order.status === 'delivered'
-                              ? 'bg-white bg-opacity-40'
-                              : isMatch
-                                ? 'bg-yellow-50 border-2 border-yellow-400 shadow-md'
-                                : 'bg-white'
-                              }`}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span className={`font-medium text-xs px-2 py-0.5 rounded ${isMatch ? 'bg-yellow-200 text-yellow-900' : 'bg-gray-200 text-gray-700'
-                                    }`}>
-                                    Stop #{order.originalIndex + 1}
-                                  </span>
-                                  {order.status === 'delivered' && (
-                                    <CheckCircle size={14} className="text-green-600 flex-shrink-0" />
-                                  )}
-                                  {isMatch && (
-                                    <span className="text-xs font-semibold text-yellow-700 bg-yellow-100 px-2 py-0.5 rounded">
-                                      Match
-                                    </span>
-                                  )}
-                                </div>
-                                <h5 className="font-semibold text-gray-900 truncate">{order.customerName}</h5>
-                                <p className="text-xs text-gray-500 mt-0.5">Order: {order.id.slice(0, 12)}</p>
-                              </div>
-                              <div className="text-right flex-shrink-0">
-                                <p className="font-bold text-indigo-600">₹{order.totalAmount.toFixed(0)}</p>
-                                {order.status === 'delivered' ? (
-                                  <p className="text-xs text-green-600 font-medium mt-0.5">Delivered</p>
-                                ) : (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={!tripData.isPackingComplete}
-                                    onClick={() => navigate(`/delivery/invoice/${order.id}`)}
-                                    className={`mt-1 text-xs ${!tripData.isPackingComplete ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                    title={!tripData.isPackingComplete ? "Finish packing first" : ""}
-                                  >
-                                    Deliver
-                                  </Button>
-                                )}
-                              </div>
-                            </div>
-                          </div>
+                      // Apply salesperson filter
+                      if (selectedSalesperson) {
+                        filteredOrders = filteredOrders.filter(
+                          (order: any) => order.salespersonId === selectedSalesperson
                         );
+                      }
+
+                      // Group orders by salesperson for organized display
+                      const groupedBySalesperson: Record<string, any[]> = {};
+                      filteredOrders.forEach((order: any) => {
+                        const spName = order.salespersonName || 'Unknown';
+                        if (!groupedBySalesperson[spName]) {
+                          groupedBySalesperson[spName] = [];
+                        }
+                        groupedBySalesperson[spName].push(order);
                       });
+
+                      // Sort each group by order ID for sequential processing
+                      Object.values(groupedBySalesperson).forEach(orders => {
+                        orders.sort((a, b) => a.id.localeCompare(b.id));
+                      });
+
+                      const salespersonNames = Object.keys(groupedBySalesperson).sort();
+
+                      return salespersonNames.map(spName => (
+                        <div key={spName} className="mb-4">
+                          {/* Salesperson Header */}
+                          <div className="flex items-center gap-2 mb-2 px-2 py-1 bg-indigo-100 rounded-lg">
+                            <span className="text-xs font-bold text-indigo-800">👤 {spName}</span>
+                            <span className="text-xs text-indigo-600">({groupedBySalesperson[spName].length} orders)</span>
+                          </div>
+
+                          {/* Orders for this salesperson */}
+                          <div className="space-y-2 pl-2 border-l-2 border-indigo-200">
+                            {groupedBySalesperson[spName].map((order: any, orderIdx: number) => {
+                              const isMatch = tripSearchQuery.trim();
+
+                              return (
+                                <div
+                                  key={order.id}
+                                  className={`p-3 rounded-lg text-sm transition-all ${order.status === 'delivered'
+                                    ? 'bg-white bg-opacity-40'
+                                    : isMatch
+                                      ? 'bg-yellow-50 border-2 border-yellow-400 shadow-md'
+                                      : 'bg-white'
+                                    }`}
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <span className={`font-medium text-xs px-2 py-0.5 rounded ${isMatch ? 'bg-yellow-200 text-yellow-900' : 'bg-gray-200 text-gray-700'
+                                          }`}>
+                                          Stop #{order.originalIndex + 1}
+                                        </span>
+                                        {order.status === 'delivered' && (
+                                          <CheckCircle size={14} className="text-green-600 flex-shrink-0" />
+                                        )}
+                                        {isMatch && (
+                                          <span className="text-xs font-semibold text-yellow-700 bg-yellow-100 px-2 py-0.5 rounded">
+                                            Match
+                                          </span>
+                                        )}
+                                      </div>
+                                      <h5 className="font-semibold text-gray-900 truncate">{order.customerName}</h5>
+                                      <p className="text-xs text-gray-500 mt-0.5">Order: {order.id.slice(0, 12)}</p>
+                                    </div>
+                                    <div className="text-right flex-shrink-0">
+                                      <p className="font-bold text-indigo-600">₹{order.totalAmount.toFixed(0)}</p>
+                                      {order.status === 'delivered' ? (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => navigate(`/delivery/invoice/${order.id}`)}
+                                          className="mt-1 text-xs border-amber-400 text-amber-700 hover:bg-amber-50"
+                                        >
+                                          ✏️ Edit
+                                        </Button>
+                                      ) : (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          disabled={!tripData.isPackingComplete}
+                                          onClick={() => navigate(`/delivery/invoice/${order.id}`)}
+                                          className={`mt-1 text-xs ${!tripData.isPackingComplete ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                          title={!tripData.isPackingComplete ? "Finish packing first" : ""}
+                                        >
+                                          Deliver
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ));
                     })()}
                   </div>
                 </div>

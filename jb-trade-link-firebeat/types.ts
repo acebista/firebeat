@@ -112,6 +112,11 @@ export interface Order {
   customerPhone?: string;
   customerPAN?: string;
   paymentMode?: string;
+  // Delivery and reporting fields
+  delivered_at?: string;
+  delivered_by?: string;
+  payment_collected?: number;
+  payment_method_at_delivery?: string;
 }
 
 

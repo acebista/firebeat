@@ -405,7 +405,7 @@ export const OrderService = {
       query = query.eq('date', date);
     }
 
-    const { data, error } = await query;
+    const { data, error } = await query.order('id', { ascending: true });
     if (error) throw error;
     return data as Order[];
   },
@@ -497,6 +497,11 @@ export const OrderService = {
       }
     }
     return allOrders;
+  },
+
+  delete: async (id: string) => {
+    const { error } = await supabase.from(COLS.ORDERS).delete().eq('id', id);
+    if (error) throw error;
   }
 };
 

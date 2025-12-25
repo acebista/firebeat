@@ -23,6 +23,12 @@ interface ReturnItem {
     rate: number;
 }
 
+interface PaymentEntry {
+    method: 'cash' | 'qr' | 'cheque' | 'credit';
+    amount: number;
+    reference?: string;
+}
+
 export const DeliveryOrderDetails: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
@@ -43,6 +49,8 @@ export const DeliveryOrderDetails: React.FC = () => {
     const [showQRModal, setShowQRModal] = useState(false);
     const [damages, setDamages] = useState<DamageItem[]>([]);
     const [returnItems, setReturnItems] = useState<ReturnItem[]>([]);
+    const [paymentEntries, setPaymentEntries] = useState<PaymentEntry[]>([]);
+    const [isEditing, setIsEditing] = useState(false); // For editing already delivered orders
 
     useEffect(() => {
         const loadData = async () => {
@@ -103,6 +111,22 @@ export const DeliveryOrderDetails: React.FC = () => {
                     setOrder(orderData);
                     setAmountCollected(orderData.totalAmount.toString());
 
+                    // Initialize payment entries based on order status
+                    const existingPaymentMethod = (orderData as any).payment_method_at_delivery || (orderData as any).paymentMode || 'cash';
+                    const existingPaymentAmount = (orderData as any).payment_collected !== undefined
+                        ? Number((orderData as any).payment_collected)
+                        : orderData.totalAmount;
+
+                    setPaymentEntries([{
+                        method: existingPaymentMethod as any,
+                        amount: existingPaymentAmount
+                    }]);
+
+                    // Initialize remarks from existing order remarks for edit mode
+                    if (orderData.remarks) {
+                        setRemarks(''); // Start fresh in edit, but show existing in display
+                    }
+
                     // Fetch customer details
                     if (orderData.customerId) {
                         const custData = await CustomerService.getById(orderData.customerId);
@@ -125,14 +149,33 @@ export const DeliveryOrderDetails: React.FC = () => {
 
     const calculateReturnTotal = () => returnItems.reduce((sum, r) => sum + (r.rate * r.returnQty), 0);
 
+    const addPaymentEntry = () => {
+        const remaining = (order?.totalAmount || 0) - calculateDamageTotal() - calculateReturnTotal() - paymentEntries.reduce((s, p) => s + p.amount, 0);
+        setPaymentEntries([...paymentEntries, { method: 'cash', amount: Math.max(0, remaining) }]);
+    };
+
+    const removePaymentEntry = (index: number) => {
+        setPaymentEntries(paymentEntries.filter((_, i) => i !== index));
+    };
+
+    const updatePaymentEntry = (index: number, field: keyof PaymentEntry, value: any) => {
+        const newEntries = [...paymentEntries];
+        newEntries[index] = { ...newEntries[index], [field]: value };
+        setPaymentEntries(newEntries);
+    };
+
     const handleMarkDelivered = async () => {
         if (!order) return;
-        if (!amountCollected || parseFloat(amountCollected) < 0) {
-            toast.error("Please enter a valid amount");
+
+        const totalCollected = paymentEntries.reduce((sum, p) => sum + (p.method !== 'credit' ? Number(p.amount) : 0), 0);
+        const netTotal = order.totalAmount - calculateDamageTotal() - calculateReturnTotal();
+
+        if (paymentEntries.some(p => p.amount < 0)) {
+            toast.error("Payment amounts cannot be negative");
             return;
         }
 
-        if (!window.confirm("Confirm delivery?")) return;
+        if (!window.confirm("Confirm delivery and payment recording?")) return;
 
         setProcessing(true);
         try {
@@ -140,8 +183,8 @@ export const DeliveryOrderDetails: React.FC = () => {
             const { data: { session } } = await supabase.auth.getSession();
             const userId = session?.user?.id;
 
-            let remarkText = `Payment: ${paymentMode.toUpperCase()}`;
-            if (paymentReference) remarkText += ` (${paymentReference})`;
+            // Build remarks
+            let remarkText = `Payments: ${paymentEntries.map(p => `${p.method.toUpperCase()}: ₹${p.amount}${p.reference ? ` (${p.reference})` : ''}`).join(', ')}`;
             if (remarks) remarkText += ` | ${remarks}`;
 
             if (damages.length > 0) {
@@ -151,62 +194,50 @@ export const DeliveryOrderDetails: React.FC = () => {
                 remarkText += ` | Returns: ${returnItems.map(r => `${r.productName}(${r.returnQty})`).join(', ')}`;
             }
 
-            const paymentAmount = parseFloat(amountCollected);
-            const finalAmount = paymentAmount - calculateDamageTotal() - calculateReturnTotal();
+            // Update order with delivery info
+            const mainPaymentMethod = paymentEntries.length === 1 ? paymentEntries[0].method : 'Multiple';
 
-            // Update order with delivery info for AR/Ledger system
             await OrderService.update(order.id, {
                 status: 'delivered',
                 remarks: remarkText,
-                totalAmount: Math.max(0, finalAmount),
-                // New AR fields
+                totalAmount: Math.max(0, netTotal),
                 delivered_at: new Date().toISOString(),
                 delivered_by: userId || null,
-                payment_collected: paymentAmount,
-                payment_method_at_delivery: paymentMode
+                payment_collected: totalCollected,
+                payment_method_at_delivery: mainPaymentMethod as any
             } as any);
 
-            // Create invoice payment record if payment > 0 (for proper ledger tracking)
-            if (paymentAmount > 0 && order.customerId) {
-                try {
-                    await PaymentsService.addPayment({
-                        invoiceId: order.id,
-                        customerId: order.customerId,
-                        amount: paymentAmount,
-                        method: paymentMode,
-                        reference: paymentReference || undefined,
-                        notes: `Payment at delivery`
-                    });
-                } catch (paymentError) {
-                    console.error('Failed to create payment record', paymentError);
-                    // Don't fail delivery if payment record fails - the order is still delivered
+            // Create individual payment records in ledger
+            for (const entry of paymentEntries) {
+                if (entry.amount > 0 && entry.method !== 'credit' && order.customerId) {
+                    try {
+                        await PaymentsService.addPayment({
+                            invoiceId: order.id,
+                            customerId: order.customerId,
+                            amount: entry.amount,
+                            method: entry.method,
+                            reference: entry.reference || undefined,
+                            notes: `Delivery payment (${entry.method})`
+                        });
+                    } catch (paymentError) {
+                        console.error('Failed to create payment record', paymentError);
+                    }
                 }
             }
 
-            // Check if all orders in the trip are now delivered, and if so mark trip as completed
+            // Trip completion logic
             if (order.assignedTripId) {
                 try {
                     const trip = await TripService.getById(order.assignedTripId);
-                    if (trip && trip.orderIds && trip.orderIds.length > 0) {
-                        // Fetch all orders in this trip
+                    if (trip && trip.orderIds) {
                         const tripOrders = await OrderService.getOrdersByIds(trip.orderIds);
-
-                        // Count delivered orders (including this one which we just updated)
-                        const deliveredCount = tripOrders.filter(o => {
-                            // This order is now delivered (we just updated it above)
-                            if (o.id === order.id) return true;
-                            return o.status === 'delivered';
-                        }).length;
-
-                        // If all orders are delivered, mark trip as completed
+                        const deliveredCount = tripOrders.filter(o => o.id === order.id || o.status === 'delivered').length;
                         if (deliveredCount >= trip.orderIds.length) {
                             await TripService.update(trip.id, { status: 'completed' });
-                            console.log(`✅ Trip ${trip.id} marked as completed - all ${tripOrders.length} orders delivered`);
                         }
                     }
                 } catch (tripError) {
-                    console.error('Failed to check/update trip completion status', tripError);
-                    // Don't fail the delivery - trip status update is supplementary
+                    console.error('Failed to update trip status', tripError);
                 }
             }
 
@@ -215,6 +246,51 @@ export const DeliveryOrderDetails: React.FC = () => {
         } catch (e) {
             console.error(e);
             toast.error("Failed to update status");
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    // Handler for updating already delivered orders
+    const handleUpdateDelivery = async () => {
+        if (!order) return;
+
+        const totalCollected = paymentEntries.reduce((sum, p) => sum + (p.method !== 'credit' ? Number(p.amount) : 0), 0);
+
+        if (!window.confirm("Are you sure you want to update this delivery record?")) return;
+
+        setProcessing(true);
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const userId = session?.user?.id;
+
+            // Build updated remarks
+            let remarkText = `[EDITED] Payments: ${paymentEntries.map(p => `${p.method.toUpperCase()}: ₹${p.amount}${p.reference ? ` (${p.reference})` : ''}`).join(', ')}`;
+            if (remarks) remarkText += ` | ${remarks}`;
+
+            const mainPaymentMethod = paymentEntries.length === 1 ? paymentEntries[0].method : 'Multiple';
+
+            // Update order record
+            await OrderService.update(order.id, {
+                remarks: remarkText,
+                payment_collected: totalCollected,
+                payment_method_at_delivery: mainPaymentMethod as any
+            } as any);
+
+            // Note: We don't create new payment records here to avoid duplicates
+            // Payment corrections should be handled through the admin ledger module
+
+            toast.success("Delivery record updated successfully!");
+            setIsEditing(false);
+
+            // Refresh order data
+            const updatedOrder = await OrderService.getById(order.id);
+            if (updatedOrder) {
+                setOrder(updatedOrder);
+            }
+        } catch (e) {
+            console.error(e);
+            toast.error("Failed to update delivery record");
         } finally {
             setProcessing(false);
         }
@@ -230,10 +306,11 @@ export const DeliveryOrderDetails: React.FC = () => {
         try {
             await OrderService.update(order.id, {
                 status: 'approved',
+                date: newDate, // CRITICAL: Move order to the new date
                 assignedTripId: undefined,
                 remarks: `Rescheduled to ${newDate}${remarks ? ` | ${remarks}` : ''}`
             });
-            toast.success("Delivery rescheduled and order returned to dispatch pool.");
+            toast.success(`Delivery rescheduled to ${newDate} and order returned to dispatch pool.`);
             navigate('/delivery/dashboard');
         } catch (e) {
             console.error(e);
@@ -343,147 +420,288 @@ export const DeliveryOrderDetails: React.FC = () => {
             {/* Delivery Actions Card */}
             {order.status !== 'delivered' && order.status !== 'cancelled' && (
                 <Card className="p-5 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-xl shadow-sm mb-4">
-                    <h3 className="font-bold text-gray-900 mb-5">Complete Delivery</h3>
+                    <h3 className="font-bold text-gray-900 mb-4 flex items-center justify-between">
+                        <span>Complete Delivery</span>
+                        <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded">₹{Math.max(0, order.totalAmount - calculateDamageTotal() - calculateReturnTotal()).toFixed(2)} Due</span>
+                    </h3>
 
-                    {/* Payment Mode */}
-                    <div className="mb-5">
-                        <label className="block text-sm font-semibold text-gray-900 mb-3">Payment Method</label>
-                        <div className="grid grid-cols-2 gap-2">
-                            {[
-                                { value: 'cash', label: '💵 Cash', icon: Banknote },
-                                { value: 'qr', label: '📱 QR Code', icon: CreditCard },
-                                { value: 'cheque', label: '📄 Cheque', icon: CreditCard },
-                                { value: 'credit', label: '💳 Credit', icon: CreditCard }
-                            ].map(method => (
-                                <button
-                                    key={method.value}
-                                    onClick={() => {
-                                        setPaymentMode(method.value as any);
-                                        if (method.value === 'qr') {
-                                            setShowQRModal(true);
-                                        }
-                                    }}
-                                    className={`p-3 rounded-lg font-medium text-sm transition-all ${paymentMode === method.value
-                                        ? 'bg-white text-blue-700 border-2 border-blue-500 shadow-md'
-                                        : 'bg-white text-gray-700 border border-gray-300 hover:border-gray-400'
-                                        }`}
-                                >
-                                    {method.label}
-                                </button>
-                            ))}
+                    {/* Multi-Payment Section */}
+                    <div className="space-y-4 mb-6">
+                        <label className="block text-sm font-semibold text-gray-900">Payment Breakdown</label>
+                        {paymentEntries.map((entry, idx) => (
+                            <div key={idx} className="bg-white p-3 rounded-lg border border-gray-200 space-y-3 shadow-sm">
+                                <div className="flex items-center justify-between gap-2">
+                                    <div className="flex-1 grid grid-cols-2 gap-2">
+                                        <select
+                                            value={entry.method}
+                                            onChange={(e) => updatePaymentEntry(idx, 'method', e.target.value)}
+                                            className="px-2 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                                        >
+                                            <option value="cash">💵 Cash</option>
+                                            <option value="qr">📱 QR Code</option>
+                                            <option value="cheque">📄 Cheque</option>
+                                            <option value="credit">💳 Credit</option>
+                                        </select>
+                                        <input
+                                            type="number"
+                                            value={entry.amount}
+                                            onChange={(e) => updatePaymentEntry(idx, 'amount', parseFloat(e.target.value) || 0)}
+                                            placeholder="Amount"
+                                            className="px-2 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 font-semibold"
+                                        />
+                                    </div>
+                                    <button
+                                        onClick={() => removePaymentEntry(idx)}
+                                        className="text-red-500 p-1 hover:bg-red-50 rounded"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </button>
+                                </div>
+                                {entry.method !== 'cash' && (
+                                    <input
+                                        type="text"
+                                        value={entry.reference || ''}
+                                        onChange={(e) => updatePaymentEntry(idx, 'reference', e.target.value)}
+                                        placeholder={entry.method === 'qr' ? 'Transaction ID' : entry.method === 'cheque' ? 'Cheque Numbers' : 'Notes'}
+                                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded"
+                                    />
+                                )}
+                            </div>
+                        ))}
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full py-2 bg-white flex items-center justify-center gap-2 border-dashed border-2 hover:border-indigo-500 hover:text-indigo-600 border-indigo-200 text-indigo-500"
+                            onClick={addPaymentEntry}
+                        >
+                            <Plus className="h-4 w-4" /> Add Payment Row
+                        </Button>
+                    </div>
+
+                    {/* Summary Calculations */}
+                    <div className="mb-6 p-4 bg-white rounded-lg border border-gray-200 shadow-inner">
+                        <div className="space-y-2 text-sm">
+                            <div className="flex justify-between text-gray-600">
+                                <span>Order Net Total:</span>
+                                <span>₹{(order.totalAmount - calculateDamageTotal() - calculateReturnTotal()).toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between text-emerald-600 font-bold">
+                                <span>Total Collected:</span>
+                                <span>₹{paymentEntries.reduce((s, p) => s + (p.method !== 'credit' ? (Number(p.amount) || 0) : 0), 0).toFixed(2)}</span>
+                            </div>
+                            {paymentEntries.some(p => p.method === 'credit') && (
+                                <div className="flex justify-between text-amber-600 font-bold">
+                                    <span>Credit Recorded:</span>
+                                    <span>₹{paymentEntries.reduce((s, p) => s + (p.method === 'credit' ? (Number(p.amount) || 0) : 0), 0).toFixed(2)}</span>
+                                </div>
+                            )}
                         </div>
                     </div>
 
-                    {/* Amount Collected */}
-                    {paymentMode !== 'credit' && (
-                        <div className="mb-4">
-                            <label className="block text-sm font-semibold text-gray-900 mb-2">Amount Collected</label>
-                            <input
-                                type="number"
-                                value={amountCollected}
-                                onChange={(e) => setAmountCollected(e.target.value)}
-                                placeholder="0.00"
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold text-lg"
-                            />
-                        </div>
-                    )}
-
-                    {/* Payment Reference */}
-                    {(paymentMode === 'qr' || paymentMode === 'cheque' || paymentMode === 'credit') && (
-                        <div className="mb-4">
-                            <label className="block text-sm font-semibold text-gray-900 mb-2">
-                                {paymentMode === 'qr' && 'QR Transaction ID'}
-                                {paymentMode === 'cheque' && 'Cheque Number'}
-                                {paymentMode === 'credit' && 'Reference/Notes'}
-                            </label>
-                            <input
-                                type="text"
-                                value={paymentReference}
-                                onChange={(e) => setPaymentReference(e.target.value)}
-                                placeholder={
-                                    paymentMode === 'qr' ? 'e.g., TXN123456789'
-                                        : paymentMode === 'cheque' ? 'e.g., CHQ123456'
-                                            : 'e.g., Credit terms'
-                                }
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                            />
-                        </div>
-                    )}
-
-                    {/* Remarks */}
-                    <div className="mb-5">
-                        <label className="block text-sm font-semibold text-gray-900 mb-2">Remarks (Optional)</label>
+                    {/* Remarks Area */}
+                    <div className="mb-6">
+                        <label className="block text-sm font-semibold text-gray-900 mb-2">Delivery Remarks</label>
                         <textarea
                             value={remarks}
                             onChange={(e) => setRemarks(e.target.value)}
-                            placeholder="e.g. Left at gate, store closed..."
-                            rows={2}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
+                            placeholder="Store was busy, left with security, etc."
+                            rows={3}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
                         />
                     </div>
 
-                    {/* Additional Actions */}
-                    <div className="grid grid-cols-2 gap-2 mb-5">
+                    {/* Additional Actions (Damage/Return) */}
+                    <div className="grid grid-cols-2 gap-3 mb-6">
                         <button
                             onClick={() => setShowDamageModal(true)}
-                            className="p-3 rounded-lg bg-white border border-orange-200 text-orange-700 hover:bg-orange-50 font-medium text-sm transition-all flex items-center justify-center gap-2"
+                            className="p-3 rounded-lg bg-white border border-orange-200 text-orange-700 hover:bg-orange-50 font-bold text-sm flex items-center justify-center gap-2 shadow-sm"
                         >
-                            <AlertCircle className="h-4 w-4" /> Damage
+                            <AlertCircle className="h-4 w-4" /> Record Damage
                         </button>
                         <button
                             onClick={() => setShowReturnModal(true)}
-                            className="p-3 rounded-lg bg-white border border-purple-200 text-purple-700 hover:bg-purple-50 font-medium text-sm transition-all flex items-center justify-center gap-2"
+                            className="p-3 rounded-lg bg-white border border-purple-200 text-purple-700 hover:bg-purple-50 font-bold text-sm flex items-center justify-center gap-2 shadow-sm"
                         >
-                            <Package className="h-4 w-4" /> Return
+                            <Package className="h-4 w-4" /> Record Return
                         </button>
                     </div>
 
-                    {/* Summary */}
-                    {(damages.length > 0 || returnItems.length > 0) && (
-                        <div className="mb-5 p-3 bg-white rounded-lg border border-gray-200">
-                            {damages.length > 0 && (
-                                <p className="text-sm text-orange-700 font-medium">Damage Deduction: ₹{calculateDamageTotal().toFixed(2)}</p>
-                            )}
-                            {returnItems.length > 0 && (
-                                <p className="text-sm text-purple-700 font-medium">Return Deduction: ₹{calculateReturnTotal().toFixed(2)}</p>
-                            )}
-                            <p className="text-sm font-bold text-gray-900 mt-2 border-t pt-2">
-                                Final Amount: ₹{Math.max(0, finalAmount).toFixed(2)}
-                            </p>
-                        </div>
-                    )}
-
                     {/* Action Buttons */}
-                    <div className="grid grid-cols-2 gap-3">
-                        <button
-                            onClick={handleReschedule}
-                            disabled={processing}
-                            className="p-3 rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium text-sm disabled:opacity-50"
-                        >
-                            <Clock className="h-4 w-4 inline mr-2" /> Reschedule
-                        </button>
-                        <button
-                            onClick={handleMarkFailed}
-                            disabled={processing}
-                            className="p-3 rounded-lg bg-white border border-red-200 text-red-700 hover:bg-red-50 font-medium text-sm disabled:opacity-50"
-                        >
-                            <XCircle className="h-4 w-4 inline mr-2" /> Failed
-                        </button>
+                    <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                            <button
+                                onClick={handleReschedule}
+                                disabled={processing}
+                                className="p-3 rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 font-bold text-sm shadow-sm"
+                            >
+                                <Clock className="h-4 w-4 inline mr-2" /> Reschedule
+                            </button>
+                            <button
+                                onClick={handleMarkFailed}
+                                disabled={processing}
+                                className="p-3 rounded-lg bg-white border border-red-200 text-red-700 hover:bg-red-50 font-bold text-sm shadow-sm"
+                            >
+                                <XCircle className="h-4 w-4 inline mr-2" /> Mark Failed
+                            </button>
+                        </div>
                         <button
                             onClick={handleMarkDelivered}
                             disabled={processing}
-                            className="col-span-2 p-4 rounded-lg bg-green-600 hover:bg-green-700 text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-all shadow-lg"
+                            className="w-full p-4 rounded-xl bg-green-600 hover:bg-green-700 text-white font-black text-lg flex items-center justify-center gap-3 transition-all shadow-xl hover:scale-[1.02] active:scale-95 disabled:opacity-50"
                         >
-                            <CheckCircle className="h-5 w-5" /> Mark Delivered
+                            <CheckCircle className="h-6 w-6" /> COMPLETE DELIVERY
                         </button>
                     </div>
                 </Card>
             )}
 
-            {order.status === 'delivered' && (
-                <Card className="p-6 bg-green-50 border border-green-200 rounded-xl text-center">
-                    <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-2" />
-                    <p className="text-xl font-bold text-green-800">Order Delivered ✓</p>
+            {(order.status === 'delivered' || order.status === 'completed') && !isEditing && (
+                <Card className="p-6 bg-green-50 border border-green-200 rounded-xl">
+                    <div className="text-center mb-4">
+                        <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-2" />
+                        <p className="text-xl font-bold text-green-800">Order Delivered ✓</p>
+                    </div>
+
+                    {/* Show delivery details */}
+                    <div className="bg-white p-4 rounded-lg border border-green-100 mb-4 text-sm space-y-2">
+                        <div className="flex justify-between">
+                            <span className="text-gray-600">Payment Method:</span>
+                            <span className="font-semibold">{(order as any).payment_method_at_delivery || order.paymentMode || 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-gray-600">Amount Collected:</span>
+                            <span className="font-semibold text-emerald-600">₹{((order as any).payment_collected || order.totalAmount || 0).toLocaleString()}</span>
+                        </div>
+                        {(order as any).delivered_at && (
+                            <div className="flex justify-between">
+                                <span className="text-gray-600">Delivered At:</span>
+                                <span className="font-semibold">{new Date((order as any).delivered_at).toLocaleString()}</span>
+                            </div>
+                        )}
+                        {order.remarks && (
+                            <div className="pt-2 border-t border-gray-100">
+                                <span className="text-gray-600">Remarks:</span>
+                                <p className="text-gray-800 mt-1">{order.remarks}</p>
+                            </div>
+                        )}
+                    </div>
+
+                    <Button
+                        variant="outline"
+                        className="w-full border-2 border-amber-400 text-amber-700 hover:bg-amber-50 font-bold"
+                        onClick={() => setIsEditing(true)}
+                    >
+                        ✏️ Edit Delivery Details
+                    </Button>
+                </Card>
+            )}
+
+            {/* Edit Mode for Delivered Orders */}
+            {(order.status === 'delivered' || order.status === 'completed') && isEditing && (
+                <Card className="p-5 bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-300 rounded-xl shadow-sm mb-4">
+                    <h3 className="font-bold text-gray-900 mb-4 flex items-center justify-between">
+                        <span>✏️ Edit Delivery Details</span>
+                        <button
+                            onClick={() => setIsEditing(false)}
+                            className="text-gray-500 hover:text-gray-700"
+                        >
+                            <X className="h-5 w-5" />
+                        </button>
+                    </h3>
+
+                    {/* Multi-Payment Section */}
+                    <div className="space-y-4 mb-6">
+                        <label className="block text-sm font-semibold text-gray-900">Payment Breakdown</label>
+                        {paymentEntries.map((entry, idx) => (
+                            <div key={idx} className="bg-white p-3 rounded-lg border border-gray-200 space-y-3 shadow-sm">
+                                <div className="flex items-center justify-between gap-2">
+                                    <div className="flex-1 grid grid-cols-2 gap-2">
+                                        <select
+                                            value={entry.method}
+                                            onChange={(e) => updatePaymentEntry(idx, 'method', e.target.value)}
+                                            className="px-2 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-amber-500"
+                                        >
+                                            <option value="cash">💵 Cash</option>
+                                            <option value="qr">📱 QR Code</option>
+                                            <option value="cheque">📄 Cheque</option>
+                                            <option value="credit">💳 Credit</option>
+                                        </select>
+                                        <input
+                                            type="number"
+                                            value={entry.amount}
+                                            onChange={(e) => updatePaymentEntry(idx, 'amount', parseFloat(e.target.value) || 0)}
+                                            placeholder="Amount"
+                                            className="px-2 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-amber-500 font-semibold"
+                                        />
+                                    </div>
+                                    <button
+                                        onClick={() => removePaymentEntry(idx)}
+                                        className="text-red-500 p-1 hover:bg-red-50 rounded"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </button>
+                                </div>
+                                {entry.method !== 'cash' && (
+                                    <input
+                                        type="text"
+                                        value={entry.reference || ''}
+                                        onChange={(e) => updatePaymentEntry(idx, 'reference', e.target.value)}
+                                        placeholder={entry.method === 'qr' ? 'Transaction ID' : entry.method === 'cheque' ? 'Cheque Number' : 'Notes'}
+                                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded"
+                                    />
+                                )}
+                            </div>
+                        ))}
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full py-2 bg-white flex items-center justify-center gap-2 border-dashed border-2 hover:border-amber-500 hover:text-amber-600 border-amber-200 text-amber-500"
+                            onClick={addPaymentEntry}
+                        >
+                            <Plus className="h-4 w-4" /> Add Payment Row
+                        </Button>
+                    </div>
+
+                    {/* Summary */}
+                    <div className="mb-6 p-4 bg-white rounded-lg border border-gray-200">
+                        <div className="space-y-2 text-sm">
+                            <div className="flex justify-between text-emerald-600 font-bold">
+                                <span>Total Collected:</span>
+                                <span>₹{paymentEntries.reduce((s, p) => s + (p.method !== 'credit' ? (Number(p.amount) || 0) : 0), 0).toFixed(2)}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Remarks */}
+                    <div className="mb-6">
+                        <label className="block text-sm font-semibold text-gray-900 mb-2">Updated Remarks</label>
+                        <textarea
+                            value={remarks}
+                            onChange={(e) => setRemarks(e.target.value)}
+                            placeholder="Update delivery notes..."
+                            rows={3}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
+                        />
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-3">
+                        <Button
+                            variant="outline"
+                            className="flex-1"
+                            onClick={() => setIsEditing(false)}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="primary"
+                            className="flex-1 bg-amber-600 hover:bg-amber-700"
+                            disabled={processing}
+                            onClick={handleUpdateDelivery}
+                        >
+                            {processing ? 'Saving...' : '💾 Save Changes'}
+                        </Button>
+                    </div>
                 </Card>
             )}
 
