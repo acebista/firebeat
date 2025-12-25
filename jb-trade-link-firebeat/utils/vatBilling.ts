@@ -64,15 +64,23 @@ const getDeliveredItems = (row: DeliveryReportRow, methodAmount: number): BillIt
     const orderItems = row.order.items || [];
     const VAT_RATE = 0.13; // 13% VAT
 
+    console.log(`[getDeliveredItems] Invoice: ${row.invoiceNumber}, methodAmount: ${methodAmount}`);
+    console.log(`[getDeliveredItems] Order items:`, orderItems);
+
     // Calculate subtotal from items, using qty * rate if total is missing
     const derivedSubtotal = orderItems.reduce((acc, i) => acc + (i.total || (i.qty * i.rate) || 0), 0);
 
-    if (derivedSubtotal <= 0) return [];
+    console.log(`[getDeliveredItems] derivedSubtotal: ${derivedSubtotal}`);
+
+    if (derivedSubtotal <= 0) {
+        console.warn(`[getDeliveredItems] derivedSubtotal is 0 or negative, returning empty array`);
+        return [];
+    }
 
     // Scaling factor for partial payments/returns
     const scalingFactor = methodAmount / derivedSubtotal;
 
-    return orderItems.map(item => {
+    const result = orderItems.map(item => {
         const billedQty = item.qty * scalingFactor;
 
         // item.rate and item.total are AFTER VAT (from DB)
@@ -80,6 +88,9 @@ const getDeliveredItems = (row: DeliveryReportRow, methodAmount: number): BillIt
         const itemTotalAfterVat = (item.total || (item.qty * item.rate) || 0) * scalingFactor;
         const itemTotalBeforeVat = itemTotalAfterVat / (1 + VAT_RATE);
         const rateBeforeVat = item.rate / (1 + VAT_RATE);
+
+        console.log(`[getDeliveredItems] Item: ${item.productName}, qty: ${item.qty}, rate: ${item.rate}, total: ${item.total}`);
+        console.log(`[getDeliveredItems]   -> billedQty: ${billedQty}, itemTotalAfterVat: ${itemTotalAfterVat}, itemTotalBeforeVat: ${itemTotalBeforeVat}`);
 
         return {
             productName: item.productName,
@@ -89,6 +100,9 @@ const getDeliveredItems = (row: DeliveryReportRow, methodAmount: number): BillIt
             total: Number(itemTotalBeforeVat.toFixed(2))
         };
     }).filter(i => i.total > 0.01);
+
+    console.log(`[getDeliveredItems] Returning ${result.length} items`);
+    return result;
 };
 
 export const generateVatBills = (rows: DeliveryReportRow[]): VatBill[] => {

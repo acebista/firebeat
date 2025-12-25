@@ -1,10 +1,7 @@
-import React, { useState } from 'react';
-import { Card, Button, Badge } from '../../../components/ui/Elements';
-import { generateVatBills, VatBill } from '../../../utils/vatBilling';
-import { Download, Printer, Eye, X, TrendingUp, TrendingDown, DollarSign, Package, User, FileText, PackageX } from 'lucide-react';
+import React from 'react';
+import { Card, Button } from '../../../components/ui/Elements';
+import { X, Printer, PackageX } from 'lucide-react';
 import { printContent } from '../../../lib/printUtils';
-import { Order, SalesReturn } from '../../../types';
-import { PaymentMode } from '../../../types/delivery-order';
 import { DeliveryReportRow } from './DeliveryRepo';
 
 interface ReturnsFailedModalProps {
@@ -23,40 +20,60 @@ interface ReturnItem {
     amount: number;
 }
 
+interface ConsolidatedItem {
+    productName: string;
+    totalQtyReturned: number;
+    totalQtyFailed: number;
+    totalQty: number;
+    invoices: string[];
+}
+
 export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, onClose }) => {
     const returnItems: ReturnItem[] = [];
 
-    rows.forEach(row => {
-        const status = row.status.toLowerCase();
+    console.log('[ReturnsFailedModal] Processing', rows.length, 'rows');
+
+    rows.forEach((row, idx) => {
+        const status = (row.status || '').toLowerCase();
         const isFailed = status === 'cancelled' || status === 'failed';
         const isReturned = status === 'returned' || status === 'partially_returned';
-        const hasReturns = row.salesReturn || row.hasReturnsInRemarks || row.returnAmount;
+        const hasReturns = row.salesReturn || row.hasReturnsInRemarks || (row.returnAmount && row.returnAmount > 0);
+
+        console.log(`Row ${idx}: ${row.invoiceNumber}, status=${status}, isFailed=${isFailed}, isReturned=${isReturned}, hasReturns=${hasReturns}`);
+
+        if (!row.order || !row.order.items) {
+            console.warn(`Row ${idx}: No order or items`);
+            return;
+        }
 
         if (isFailed) {
             row.order.items.forEach(item => {
                 if (!item) return;
+                const itemTotal = item.total || (item.qty * item.rate) || 0;
                 returnItems.push({
-                    invoiceNumber: row.invoiceNumber,
-                    customerName: row.customerName,
-                    productName: item.productName,
-                    qtyOrdered: item.qty,
+                    invoiceNumber: row.invoiceNumber || 'N/A',
+                    customerName: row.customerName || 'Unknown',
+                    productName: item.productName || 'Unknown Product',
+                    qtyOrdered: item.qty || 0,
                     qtyReturned: 0,
-                    qtyFailed: item.qty,
+                    qtyFailed: item.qty || 0,
                     reason: 'Delivery Failed',
-                    amount: item.total || (item.qty * item.rate) || 0
+                    amount: itemTotal
                 });
             });
-        } else if (isReturned || (hasReturns && row.returnAmount && row.returnAmount > 0)) {
+        } else if (isReturned || hasReturns) {
+            if (!row.netAmount || row.netAmount <= 0) return;
+
             row.order.items.forEach(item => {
-                if (!item || !row.netAmount || row.netAmount <= 0) return;
-                const returnFraction = row.returnAmount! / row.netAmount;
-                const estimatedReturnQty = Math.round(item.qty * returnFraction);
+                if (!item) return;
+                const returnFraction = (row.returnAmount || 0) / row.netAmount;
+                const estimatedReturnQty = Math.round((item.qty || 0) * returnFraction);
 
                 if (estimatedReturnQty > 0) {
                     returnItems.push({
-                        invoiceNumber: row.invoiceNumber,
-                        customerName: row.customerName,
-                        productName: item.productName || 'Unknown Item',
+                        invoiceNumber: row.invoiceNumber || 'N/A',
+                        customerName: row.customerName || 'Unknown',
+                        productName: item.productName || 'Unknown Product',
                         qtyOrdered: item.qty || 0,
                         qtyReturned: estimatedReturnQty,
                         qtyFailed: 0,
@@ -68,9 +85,34 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
         }
     });
 
+    console.log('[ReturnsFailedModal] Total items:', returnItems.length);
+
+    // Consolidate items by product name
+    const consolidatedMap = returnItems.reduce((acc, item) => {
+        const key = item.productName;
+        if (!acc[key]) {
+            acc[key] = {
+                productName: item.productName,
+                totalQtyReturned: 0,
+                totalQtyFailed: 0,
+                totalQty: 0,
+                invoices: []
+            };
+        }
+        acc[key].totalQtyReturned += item.qtyReturned;
+        acc[key].totalQtyFailed += item.qtyFailed;
+        acc[key].totalQty += item.qtyReturned + item.qtyFailed;
+        if (!acc[key].invoices.includes(item.invoiceNumber)) {
+            acc[key].invoices.push(item.invoiceNumber);
+        }
+        return acc;
+    }, {} as Record<string, ConsolidatedItem>);
+
+    const consolidatedItems = Object.values(consolidatedMap);
+
     const totalReturnedQty = returnItems.reduce((sum, i) => sum + i.qtyReturned, 0);
     const totalFailedQty = returnItems.reduce((sum, i) => sum + i.qtyFailed, 0);
-    const totalAmount = returnItems.reduce((sum, i) => sum + i.amount, 0);
+    const totalAmount = returnItems.reduce((sum, i) => sum + (i.amount || 0), 0);
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -154,7 +196,7 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
                                                 {item.reason.replace(/_/g, ' ')}
                                             </td>
                                             <td className="px-4 py-3 text-right font-bold text-gray-900">
-                                                ₹{item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                ₹{(item.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                             </td>
                                         </tr>
                                     ))}
@@ -186,36 +228,60 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
                 </div>
             </div>
 
+            {/* Consolidated Print View */}
             <div id="returns-print-view" style={{ display: 'none' }}>
-                <h2 style={{ textAlign: 'center', marginBottom: '20px' }}>Returns & Failed Deliveries Checklist</h2>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10pt' }}>
+                <h2 style={{ textAlign: 'center', marginBottom: '20px', fontSize: '18pt', fontWeight: 'bold' }}>
+                    Returns & Failed Deliveries Checklist
+                </h2>
+                <p style={{ textAlign: 'center', marginBottom: '30px', fontSize: '10pt', color: '#666' }}>
+                    Generated on: {new Date().toLocaleString()}
+                </p>
+
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11pt', marginBottom: '20px' }}>
                     <thead style={{ backgroundColor: '#f3f4f6' }}>
                         <tr>
-                            <th style={{ border: '2px solid #4b5563', padding: '6px' }}>Invoice</th>
-                            <th style={{ border: '2px solid #4b5563', padding: '6px' }}>Customer</th>
-                            <th style={{ border: '2px solid #4b5563', padding: '6px' }}>Product</th>
-                            <th style={{ border: '2px solid #4b5563', padding: '6px' }}>Qty</th>
-                            <th style={{ border: '2px solid #4b5563', padding: '6px' }}>Type</th>
-                            <th style={{ border: '2px solid #4b5563', padding: '6px' }}>✓</th>
+                            <th style={{ border: '2px solid #4b5563', padding: '8px', textAlign: 'left' }}>Product</th>
+                            <th style={{ border: '2px solid #4b5563', padding: '8px', textAlign: 'center', width: '100px' }}>Qty</th>
+                            <th style={{ border: '2px solid #4b5563', padding: '8px', textAlign: 'center', width: '80px' }}>Type</th>
+                            <th style={{ border: '2px solid #4b5563', padding: '8px', textAlign: 'center', width: '50px' }}>✓</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {returnItems.map((item, idx) => (
+                        {consolidatedItems.map((item, idx) => (
                             <tr key={idx}>
-                                <td style={{ border: '1px solid #4b5563', padding: '4px', fontSize: '9pt' }}>{item.invoiceNumber}</td>
-                                <td style={{ border: '1px solid #4b5563', padding: '4px' }}>{item.customerName}</td>
-                                <td style={{ border: '1px solid #4b5563', padding: '4px', fontWeight: 'bold' }}>{item.productName}</td>
-                                <td style={{ border: '1px solid #4b5563', padding: '4px', textAlign: 'center', fontWeight: 'bold' }}>
-                                    {item.qtyReturned || item.qtyFailed}
+                                <td style={{ border: '1px solid #4b5563', padding: '6px', fontWeight: 'bold' }}>
+                                    {item.productName}
+                                    <div style={{ fontSize: '9pt', color: '#666', fontWeight: 'normal', marginTop: '2px' }}>
+                                        Invoices: {item.invoices.join(', ')}
+                                    </div>
                                 </td>
-                                <td style={{ border: '1px solid #4b5563', padding: '4px', textAlign: 'center' }}>
-                                    {item.qtyFailed > 0 ? 'FAILED' : 'RETURN'}
+                                <td style={{ border: '1px solid #4b5563', padding: '6px', textAlign: 'center', fontWeight: 'bold', fontSize: '12pt' }}>
+                                    {item.totalQty}
                                 </td>
-                                <td style={{ border: '1px solid #4b5563', padding: '4px', width: '40px' }}></td>
+                                <td style={{ border: '1px solid #4b5563', padding: '6px', textAlign: 'center', fontSize: '9pt' }}>
+                                    {item.totalQtyFailed > 0 ? 'FAILED' : 'RETURN'}
+                                    {item.totalQtyReturned > 0 && item.totalQtyFailed > 0 && ' / BOTH'}
+                                </td>
+                                <td style={{ border: '1px solid #4b5563', padding: '6px' }}></td>
                             </tr>
                         ))}
                     </tbody>
+                    <tfoot style={{ backgroundColor: '#f9fafb', fontWeight: 'bold' }}>
+                        <tr>
+                            <td style={{ border: '2px solid #4b5563', padding: '8px', textAlign: 'right' }}>TOTAL:</td>
+                            <td style={{ border: '2px solid #4b5563', padding: '8px', textAlign: 'center', fontSize: '13pt' }}>
+                                {totalReturnedQty + totalFailedQty}
+                            </td>
+                            <td colSpan={2} style={{ border: '2px solid #4b5563', padding: '8px' }}></td>
+                        </tr>
+                    </tfoot>
                 </table>
+
+                <div style={{ marginTop: '40px', fontSize: '9pt', color: '#666' }}>
+                    <p><strong>Summary:</strong></p>
+                    <p>Total Items: {consolidatedItems.length} | Total Quantity: {totalReturnedQty + totalFailedQty} units</p>
+                    <p>Returned: {totalReturnedQty} | Failed: {totalFailedQty}</p>
+                </div>
             </div>
         </div>
     );
