@@ -1,14 +1,21 @@
 import React from 'react';
 import { Card, Button } from '../../../components/ui/Elements';
 import { SalesReportRow } from '../../../types/reports';
-import { Download, Printer } from 'lucide-react';
+import { Download, Printer, CalendarClock } from 'lucide-react';
 import { printContent } from '../../../lib/printUtils';
 
-export const SalesReport: React.FC<{ data: SalesReportRow[] }> = ({ data }) => {
+interface SalesReportProps {
+  data: SalesReportRow[];
+  rescheduledData?: SalesReportRow[];
+}
+
+export const SalesReport: React.FC<SalesReportProps> = ({ data, rescheduledData = [] }) => {
   // Calc Totals
   const totalSub = data.reduce((s, r) => s + r.subTotal, 0);
   const totalDisc = data.reduce((s, r) => s + r.discountAmount, 0);
   const totalGrand = data.reduce((s, r) => s + r.grandTotal, 0);
+
+  const reschTotalGrand = rescheduledData.reduce((s, r) => s + r.grandTotal, 0);
 
   const handlePrint = () => {
     printContent('Sales Report', 'sales-report-print');
@@ -106,6 +113,47 @@ export const SalesReport: React.FC<{ data: SalesReportRow[] }> = ({ data }) => {
           </table>
         </div>
       </Card>
+
+      {/* Rescheduled Orders Section */}
+      {rescheduledData.length > 0 && (
+        <Card className="overflow-hidden mt-6 border-2 border-amber-300">
+          <div className="bg-amber-50 px-4 py-3 border-b border-amber-200 flex items-center gap-2">
+            <CalendarClock className="h-5 w-5 text-amber-600" />
+            <h4 className="font-bold text-amber-800">📅 Rescheduled Orders ({rescheduledData.length})</h4>
+            <span className="ml-auto text-amber-700 font-semibold">₹{reschTotalGrand.toFixed(2)}</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-amber-200 text-sm">
+              <thead className="bg-amber-100">
+                <tr>
+                  <th className="px-3 py-3 text-center text-xs font-medium text-amber-700 uppercase">S.N.</th>
+                  <th className="px-3 py-3 text-center text-xs font-medium text-amber-700 uppercase">Salesperson</th>
+                  <th className="px-3 py-3 text-center text-xs font-medium text-amber-700 uppercase">Invoice</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-amber-700 uppercase">Customer</th>
+                  <th className="px-3 py-3 text-center text-xs font-medium text-amber-700 uppercase">Orig. Date</th>
+                  <th className="px-3 py-3 text-right text-xs font-medium text-amber-700 uppercase">Grand Total</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-amber-100">
+                {rescheduledData.map((row, idx) => (
+                  <tr key={row.id} className="hover:bg-amber-50">
+                    <td className="px-3 py-2 text-center text-gray-900">{idx + 1}</td>
+                    <td className="px-3 py-2 text-center text-gray-700">{row.salespersonName}</td>
+                    <td className="px-3 py-2 text-center font-mono text-xs text-amber-600">{row.invoiceNo}</td>
+                    <td className="px-3 py-2 text-gray-900">{row.customerName}</td>
+                    <td className="px-3 py-2 text-center">
+                      <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-xs">
+                        ↩ {(row.order as any).rescheduled_from || 'N/A'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-right font-semibold text-gray-900">₹{row.grandTotal.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       {/* Print View - Hidden on screen, with remarks and dark borders */}
       <div id="sales-report-print" style={{ display: 'none' }}>

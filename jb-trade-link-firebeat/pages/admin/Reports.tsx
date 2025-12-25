@@ -20,30 +20,37 @@ import { HRCommissionReport } from './reports/HRCommissionRepo'; // Component
 // In a production app with thousands of orders, this should be a Firebase Cloud Function or Aggregation Query.
 const calculateMetrics = (orders: Order[], filters: ReportFilterState, products: Product[]) => {
 
-  // 1. Sales Rows
-  const salesRows: SalesReportRow[] = orders.map(o => {
-    // Discount is stored as amount in database
+  // Separate regular orders from rescheduled orders
+  const regularOrders = orders.filter(o => !(o as any).rescheduled_from);
+  const rescheduledOrders = orders.filter(o => !!(o as any).rescheduled_from);
+
+  // Helper to map order to sales row
+  const mapToSalesRow = (o: Order): SalesReportRow => {
     const discountAmount = o.discount || 0;
     const subTotal = o.totalAmount + discountAmount;
-
-    // Find company
     const comps = Array.from(new Set((o.items || []).map(i => i.companyName || 'Unknown')));
 
     return {
       id: o.id,
       date: o.date,
-      invoiceNo: o.id, // using ID as invoice no for now
+      invoiceNo: o.id,
       salespersonName: o.salespersonName,
       customerName: o.customerName,
       companyName: comps.length > 1 ? 'Mixed' : (comps[0] || 'Unknown'),
       subTotal: subTotal,
       discountAmount: discountAmount,
       grandTotal: o.totalAmount,
-      paymentMode: (o as any).paymentMethod || 'Cash', // Use actual payment method from order
+      paymentMode: (o as any).paymentMethod || 'Cash',
       netAmount: o.totalAmount,
       order: o
     };
-  });
+  };
+
+  // 1. Sales Rows - Regular Orders
+  const salesRows: SalesReportRow[] = regularOrders.map(mapToSalesRow);
+
+  // 1b. Sales Rows - Rescheduled Orders
+  const rescheduledSalesRows: SalesReportRow[] = rescheduledOrders.map(mapToSalesRow);
 
   // 2. Dispatch Rows - Use products table for packaging data
   const productMap = new Map<string, DispatchRow>();
@@ -70,7 +77,7 @@ const calculateMetrics = (orders: Order[], filters: ReportFilterState, products:
     });
   }
 
-  orders.forEach(order => {
+  regularOrders.forEach(order => {
     // Parse items if they're stored as JSON string
     let items = order.items;
 
@@ -173,12 +180,51 @@ const calculateMetrics = (orders: Order[], filters: ReportFilterState, products:
   });
 
   console.log('[Dispatch Report] Final dispatch rows:', dispatchRows.length);
-  if (dispatchRows.length > 0) {
-    console.log('[Dispatch Report] Sample row:', dispatchRows[0]);
-  }
+
+  // 2b. Rescheduled Dispatch Rows
+  const rescheduledProductMap = new Map<string, DispatchRow>();
+  rescheduledOrders.forEach(order => {
+    let items = order.items;
+    if (typeof items === 'string') {
+      try { items = JSON.parse(items); } catch (e) { return; }
+    }
+    if (!items || !Array.isArray(items)) return;
+    items.forEach((item: any) => {
+      const pId = item.productId;
+      const masterProduct = productLookup.get(pId);
+      const resolvedProductName = masterProduct?.name || item.productName || 'Unknown Product';
+      const resolvedCompanyName = masterProduct?.companyName || item.companyName || 'Unknown';
+      const resolvedQty = Number(item.qty || item.quantity) || 0;
+      const resolvedTotal = Number(item.total || item.amount) || 0;
+      if (filters.companyIds.length > 0 && !filters.companyIds.includes(masterProduct?.companyId || item.companyId || '')) return;
+      if (!rescheduledProductMap.has(pId)) {
+        rescheduledProductMap.set(pId, { productId: pId, productName: resolvedProductName, companyName: resolvedCompanyName, totalQty: 0, cartons: 0, packets: 0, pieces: 0, totalAmount: 0 });
+      }
+      const entry = rescheduledProductMap.get(pId)!;
+      entry.totalQty += resolvedQty;
+      entry.totalAmount += resolvedTotal;
+    });
+  });
+
+  const rescheduledDispatchRows = Array.from(rescheduledProductMap.values()).map(row => {
+    const product = productLookup.get(row.productId);
+    const packetsPerCarton = product?.packetsPerCarton || 0;
+    const piecesPerPacket = product?.piecesPerPacket || 0;
+    const piecesPerCartonTotal = packetsPerCarton * piecesPerPacket;
+    let cartons = 0, packets = 0, pieces = 0;
+    const totalPieces = row.totalQty;
+    if (piecesPerCartonTotal > 0) {
+      cartons = Math.floor(totalPieces / piecesPerCartonTotal);
+      const remaining = totalPieces - (cartons * piecesPerCartonTotal);
+      if (piecesPerPacket > 0) { packets = Math.floor(remaining / piecesPerPacket); pieces = remaining % piecesPerPacket; } else { pieces = remaining; }
+    } else { pieces = totalPieces; }
+    return { productId: row.productId, productName: row.productName, companyName: row.companyName, totalQty: row.totalQty, cartons, packets, pieces, totalAmount: row.totalAmount };
+  });
+
+  console.log('[Dispatch Report] Rescheduled dispatch rows:', rescheduledDispatchRows.length);
 
   // 3. Scheme Rows (Simplified)
-  const schemeRows: SchemeRow[] = []; // Logic similar to above
+  const schemeRows: SchemeRow[] = [];
 
   // 4. Challan Rows
   const challanRows: ChallanValidationRow[] = orders.map(o => ({
@@ -187,13 +233,13 @@ const calculateMetrics = (orders: Order[], filters: ReportFilterState, products:
     customerName: o.customerName,
     date: o.date,
     expectedTotal: o.totalAmount,
-    calculatedTotal: o.totalAmount, // Assuming integrity
+    calculatedTotal: o.totalAmount,
     difference: 0,
     status: 'MATCH',
     itemsCount: o.totalItems
   }));
 
-  return { salesRows, dispatchRows, schemeRows, challanRows };
+  return { salesRows, rescheduledSalesRows, dispatchRows, rescheduledDispatchRows, schemeRows, challanRows };
 };
 
 
@@ -215,10 +261,12 @@ export const Reports: React.FC = () => {
 
   const [reportData, setReportData] = useState<{
     salesRows: SalesReportRow[],
+    rescheduledSalesRows: SalesReportRow[],
     dispatchRows: DispatchRow[],
+    rescheduledDispatchRows: DispatchRow[],
     schemeRows: SchemeRow[],
     challanRows: ChallanValidationRow[]
-  }>({ salesRows: [], dispatchRows: [], schemeRows: [], challanRows: [] });
+  }>({ salesRows: [], rescheduledSalesRows: [], dispatchRows: [], rescheduledDispatchRows: [], schemeRows: [], challanRows: [] });
 
   const [deliveryReportData, setDeliveryReportData] = useState<DeliveryReportData>({
     rows: [],
@@ -501,8 +549,8 @@ export const Reports: React.FC = () => {
 
       {!loading && (
         <>
-          {activeTab === 'sales' && <SalesReport data={reportData.salesRows} />}
-          {activeTab === 'dispatch' && <DispatchReport data={reportData.dispatchRows} />}
+          {activeTab === 'sales' && <SalesReport data={reportData.salesRows} rescheduledData={reportData.rescheduledSalesRows} />}
+          {activeTab === 'dispatch' && <DispatchReport data={reportData.dispatchRows} rescheduledData={reportData.rescheduledDispatchRows} />}
           {activeTab === 'scheme' && <SchemeReport data={reportData.schemeRows} />}
           {activeTab === 'damage' && <DamagedGoodsReport />}
           {activeTab === 'challan' && <ChallanReport data={reportData.challanRows} />}

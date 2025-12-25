@@ -187,6 +187,11 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
                                         <td className="px-3 py-2">
                                             <div className="font-mono text-xs text-indigo-600 font-medium">{row.invoiceNumber}</div>
                                             <div className="text-xs text-gray-500">{row.date}</div>
+                                            {(row.order as any).rescheduled_from && (
+                                                <div className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded mt-1 inline-block">
+                                                    ↩ From: {(row.order as any).rescheduled_from}
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="px-3 py-2 text-gray-900">{row.customerName}</td>
                                         <td className="px-3 py-2 text-gray-700">{row.salespersonName}</td>
