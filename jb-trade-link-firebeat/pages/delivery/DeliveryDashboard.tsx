@@ -40,6 +40,7 @@ export const DeliveryDashboard: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [tripSearchQuery, setTripSearchQuery] = useState(''); // Search within expanded trip
   const [selectedSalesperson, setSelectedSalesperson] = useState<string>(''); // Salesperson filter
+  const [selectedStatus, setSelectedStatus] = useState<string>(''); // Status filter: all, pending, completed, failed
   const [finishingTrip, setFinishingTrip] = useState<TripWithStats | null>(null); // Trip being finished
   const [isFinishing, setIsFinishing] = useState(false); // Processing state
 
@@ -561,6 +562,37 @@ export const DeliveryDashboard: React.FC = () => {
                     </select>
                   </div>
 
+                  {/* Status Filter */}
+                  <div className="mb-3">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Filter by Status</label>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setSelectedStatus('')}
+                        className={`flex-1 px-3 py-2 text-xs font-medium rounded-lg border transition ${selectedStatus === '' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                      >
+                        All
+                      </button>
+                      <button
+                        onClick={() => setSelectedStatus('pending')}
+                        className={`flex-1 px-3 py-2 text-xs font-medium rounded-lg border transition ${selectedStatus === 'pending' ? 'bg-yellow-500 text-white border-yellow-500' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                      >
+                        🟡 Pending
+                      </button>
+                      <button
+                        onClick={() => setSelectedStatus('completed')}
+                        className={`flex-1 px-3 py-2 text-xs font-medium rounded-lg border transition ${selectedStatus === 'completed' ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                      >
+                        ✓ Done
+                      </button>
+                      <button
+                        onClick={() => setSelectedStatus('failed')}
+                        className={`flex-1 px-3 py-2 text-xs font-medium rounded-lg border transition ${selectedStatus === 'failed' ? 'bg-red-600 text-white border-red-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                      >
+                        ✗ Failed
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="space-y-2">
                     {(() => {
                       // Show only matching orders when searching, all orders when not
@@ -579,6 +611,21 @@ export const DeliveryDashboard: React.FC = () => {
                       if (selectedSalesperson) {
                         filteredOrders = filteredOrders.filter(
                           (order: any) => order.salespersonId === selectedSalesperson
+                        );
+                      }
+
+                      // Apply status filter
+                      if (selectedStatus === 'pending') {
+                        filteredOrders = filteredOrders.filter(
+                          (order: any) => order.status !== 'delivered' && order.status !== 'cancelled' && order.status !== 'completed'
+                        );
+                      } else if (selectedStatus === 'completed') {
+                        filteredOrders = filteredOrders.filter(
+                          (order: any) => order.status === 'delivered' || order.status === 'completed'
+                        );
+                      } else if (selectedStatus === 'failed') {
+                        filteredOrders = filteredOrders.filter(
+                          (order: any) => order.status === 'cancelled'
                         );
                       }
 
