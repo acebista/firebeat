@@ -67,6 +67,12 @@ const getDeliveredItems = (row: DeliveryReportRow, methodAmount: number): BillIt
     console.log(`[getDeliveredItems] Invoice: ${row.invoiceNumber}, methodAmount: ${methodAmount}`);
     console.log(`[getDeliveredItems] Order items:`, orderItems);
 
+    // DEBUG: Log first item structure in detail
+    if (orderItems.length > 0) {
+        console.log(`[getDeliveredItems] First item detailed:`, JSON.stringify(orderItems[0], null, 2));
+        console.log(`[getDeliveredItems] First item keys:`, Object.keys(orderItems[0]));
+    }
+
     // Calculate subtotal from items, using qty * rate if total is missing
     // Explicitly cast to Number to prevent string-math issues
     const derivedSubtotal = orderItems.reduce((acc, i) => {
