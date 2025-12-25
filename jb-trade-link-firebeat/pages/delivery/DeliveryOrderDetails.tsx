@@ -13,6 +13,7 @@ interface DamageItem {
     productName: string;
     quantity: number;
     reason: string;
+    rate: number;
 }
 
 interface ReturnItem {
@@ -149,17 +150,7 @@ export const DeliveryOrderDetails: React.FC = () => {
         return order.items.reduce((sum, item) => sum + (Number(item.total) || 0), 0);
     };
 
-    const calculateDamageTotal = () => damages.reduce((sum, d) => {
-        // Try exact ID match first
-        let item = order?.items.find(i => i.productId === d.productId);
-
-        // Fallback: Try name match if ID fails (common with different data sources)
-        if (!item && d.productName) {
-            item = order?.items.find(i => i.productName.toLowerCase() === d.productName.toLowerCase());
-        }
-
-        return sum + (item ? (item.rate * d.quantity) : 0);
-    }, 0);
+    const calculateDamageTotal = () => damages.reduce((sum, d) => sum + (d.rate * d.quantity), 0);
 
     const calculateReturnTotal = () => returnItems.reduce((sum, r) => sum + (r.rate * r.returnQty), 0);
 
@@ -1176,11 +1167,17 @@ const DamageModal: React.FC<{
 
         const damageReason = reason === 'other' ? otherReason : reasonLabel?.label || reason;
 
+        const productInInvoice = order.items.find(i => i.productId === selectedProduct) ||
+            order.items.find(i => i.productName.toLowerCase() === (product.name || product.productName || '').toLowerCase());
+
+        const rate = productInInvoice ? productInInvoice.rate : (Number(product.price) || Number(product.rate) || 0);
+
         const newDamage: DamageItem = {
             productId: selectedProduct,
             productName: product.name || product.productName || 'Unknown Product',
             quantity: parseInt(quantity),
-            reason: damageReason
+            reason: damageReason,
+            rate: rate
         };
 
         const existing = damages.findIndex(d => d.productId === selectedProduct && d.reason === damageReason);
