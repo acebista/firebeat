@@ -501,11 +501,48 @@ export const Reports: React.FC = () => {
         totalCollected: filteredRows.reduce((sum, r) => sum + r.collectedAmount, 0),
         paymentBreakdown: filteredRows.reduce((breakdown, row) => {
           const method = (row.paymentMethod || 'cash').toString().toLowerCase();
-          if (!breakdown[method]) {
-            breakdown[method] = { count: 0, amount: 0 };
+
+          // Helper to capitalize for consistency
+          const formatMethod = (m: string) => m.charAt(0).toUpperCase() + m.slice(1).toLowerCase();
+
+          if (method === 'multiple' && (row.order.remarks || '').includes('Payments:')) {
+            // Parse distribution from remarks
+            const remarks = row.order.remarks || '';
+            const paymentMatch = remarks.match(/Payments:\s*([^|]+)/);
+
+            let parsed = false;
+            if (paymentMatch) {
+              const paymentsStr = paymentMatch[1];
+              const regex = /(\w+):\s*₹?(\d+(?:\.\d+)?)/g;
+              let match;
+              while ((match = regex.exec(paymentsStr)) !== null) {
+                const extractedMethod = match[1].toLowerCase();
+                const extractedAmount = parseFloat(match[2]);
+
+                if (!breakdown[extractedMethod]) {
+                  breakdown[extractedMethod] = { count: 0, amount: 0 };
+                }
+                breakdown[extractedMethod].count++;
+                breakdown[extractedMethod].amount += extractedAmount;
+                parsed = true;
+              }
+            }
+
+            // Fallback if regex dispatch fails but it is marked multiple
+            if (!parsed) {
+              if (!breakdown['multiple']) breakdown['multiple'] = { count: 0, amount: 0 };
+              breakdown['multiple'].count++;
+              breakdown['multiple'].amount += row.collectedAmount;
+            }
+          } else {
+            // Single payment method
+            const normalizedMethod = method;
+            if (!breakdown[normalizedMethod]) {
+              breakdown[normalizedMethod] = { count: 0, amount: 0 };
+            }
+            breakdown[normalizedMethod].count++;
+            breakdown[normalizedMethod].amount += row.collectedAmount;
           }
-          breakdown[method].count++;
-          breakdown[method].amount += row.collectedAmount;
           return breakdown;
         }, {} as Record<string, { count: number; amount: number }>)
       };

@@ -47,6 +47,7 @@ interface DeliveryReportProps {
 
 export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
     const [selectedInvoice, setSelectedInvoice] = useState<DeliveryReportRow | null>(null);
+    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
 
     const handlePrint = () => {
         printContent('Delivery Report', 'delivery-report-print');
@@ -194,16 +195,34 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
                 </h4>
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
                     {Object.entries(summary.paymentBreakdown).map(([method, data]) => (
-                        <div key={method} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                        <div key={method} className="bg-gray-50 rounded-lg p-3 border border-gray-200 relative group hover:border-indigo-300 transition-colors">
                             <div className="flex items-center justify-between mb-1">
                                 <span className="text-xs font-medium text-gray-600 uppercase">{method}</span>
                                 <Badge color={getPaymentColor(method) as any}>{data.count}</Badge>
                             </div>
                             <p className="text-lg font-bold text-gray-900">₹{data.amount.toLocaleString()}</p>
+
+                            <button
+                                onClick={() => setSelectedPaymentMethod(method)}
+                                className="absolute top-2 right-2 p-1 text-gray-400 hover:text-indigo-600 bg-white rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                                title="View Details"
+                            >
+                                <Eye className="h-4 w-4" />
+                            </button>
                         </div>
                     ))}
                 </div>
             </Card>
+
+            {/* Payment Method Detail Modal */}
+            {selectedPaymentMethod && (
+                <PaymentMethodDetailModal
+                    method={selectedPaymentMethod}
+                    allRows={rows}
+                    onClose={() => setSelectedPaymentMethod(null)}
+                    parsePaymentBreakdown={parsePaymentBreakdown}
+                />
+            )}
 
             {/* Invoice List Table */}
             <Card className="overflow-hidden">
@@ -384,6 +403,100 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
                         </tr>
                     </tbody>
                 </table>
+            </div>
+        </div>
+    );
+};
+
+interface PaymentMethodDetailModalProps {
+    method: string;
+    allRows: DeliveryReportRow[];
+    onClose: () => void;
+    parsePaymentBreakdown: (order: Order) => { method: string; amount: number }[] | null;
+}
+
+const PaymentMethodDetailModal: React.FC<PaymentMethodDetailModalProps> = ({ method, allRows, onClose, parsePaymentBreakdown }) => {
+    // Filter rows relevant to this method
+    const relevantRows = allRows.map(row => {
+        let methodAmount = 0;
+        let isRelevant = false;
+
+        const rowMethod = (row.paymentMethod || '').toString().toLowerCase();
+
+        if (rowMethod === method.toLowerCase()) {
+            isRelevant = true;
+            methodAmount = row.collectedAmount;
+        } else if (rowMethod === 'multiple') {
+            const breakdown = parsePaymentBreakdown(row.order);
+            if (breakdown) {
+                const entry = breakdown.find(e => e.method.toLowerCase() === method.toLowerCase());
+                if (entry) {
+                    isRelevant = true;
+                    methodAmount = entry.amount;
+                }
+            }
+        }
+
+        return { ...row, methodAmount, isRelevant };
+    }).filter(r => r.isRelevant);
+
+    const totalMethodAmount = relevantRows.reduce((sum, r) => sum + r.methodAmount, 0);
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+                {/* Header */}
+                <div className="bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-4 flex items-center justify-between shrink-0">
+                    <div>
+                        <h3 className="text-xl font-bold text-white capitalize">{method} Collections</h3>
+                        <p className="text-sm text-indigo-100">{relevantRows.length} transactions</p>
+                    </div>
+                    <button
+                        onClick={onClose}
+                        className="text-white hover:bg-white/20 rounded-full p-2 transition-colors"
+                    >
+                        <X className="h-6 w-6" />
+                    </button>
+                </div>
+
+                {/* Content */}
+                <div className="p-0 overflow-auto flex-1">
+                    <table className="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
+                            <tr>
+                                <th className="px-4 py-3 text-left font-medium text-gray-500">Invoice</th>
+                                <th className="px-4 py-3 text-left font-medium text-gray-500">Customer</th>
+                                <th className="px-4 py-3 text-left font-medium text-gray-500">Delivery User</th>
+                                <th className="px-4 py-3 text-right font-medium text-gray-500">Net Amount</th>
+                                <th className="px-4 py-3 text-center font-medium text-gray-500">Type</th>
+                                <th className="px-4 py-3 text-right font-bold text-gray-900">{method.toUpperCase()} Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {relevantRows.map((row) => (
+                                <tr key={row.invoiceId} className="hover:bg-gray-50">
+                                    <td className="px-4 py-3 font-mono text-indigo-600">{row.invoiceNumber}</td>
+                                    <td className="px-4 py-3 text-gray-900">{row.customerName}</td>
+                                    <td className="px-4 py-3 text-gray-600">{row.deliveryUserName}</td>
+                                    <td className="px-4 py-3 text-right text-gray-500">₹{row.netAmount.toFixed(2)}</td>
+                                    <td className="px-4 py-3 text-center">
+                                        <span className={`px-2 py-1 rounded text-xs font-medium ${row.paymentMethod.toString().toLowerCase() === 'multiple' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'
+                                            }`}>
+                                            {row.paymentMethod.toString().toLowerCase() === 'multiple' ? 'Split' : 'Single'}
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-3 text-right font-bold text-emerald-600">₹{row.methodAmount.toFixed(2)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                        <tfoot className="bg-gray-50 sticky bottom-0 z-10 font-bold border-t-2 border-gray-200">
+                            <tr>
+                                <td colSpan={5} className="px-4 py-3 text-right text-gray-900">TOTAL {method.toUpperCase()} COLLECTED:</td>
+                                <td className="px-4 py-3 text-right text-emerald-700 text-lg">₹{totalMethodAmount.toFixed(2)}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
             </div>
         </div>
     );
