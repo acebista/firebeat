@@ -90,9 +90,8 @@ export const ProtectedRouteV2: React.FC<ProtectedRouteV2Props> = ({
       admin: '/admin/dashboard',
       sales: '/sales/dashboard',
       delivery: '/delivery/dashboard',
-      finance: '/finance/dashboard',
     };
-    return <Navigate to={fallbackPath || dashboardPaths[user.role]} replace />;
+    return <Navigate to={fallbackPath || dashboardPaths[user.role] || '/login'} replace />;
   }
 
   // User is authorized - render protected content
@@ -164,9 +163,8 @@ export function withAuth<P extends object>(
         admin: '/admin/dashboard',
         sales: '/sales/dashboard',
         delivery: '/delivery/dashboard',
-        finance: '/finance/dashboard',
       };
-      return <Navigate to={fallbackPath || dashboardPaths[user.role]} replace />;
+      return <Navigate to={fallbackPath || dashboardPaths[user.role] || '/login'} replace />;
     }
 
     // Authorized - render component

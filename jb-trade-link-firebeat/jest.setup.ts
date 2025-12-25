@@ -6,6 +6,7 @@
  * - Supabase client
  * - localStorage
  */
+import '@testing-library/jest-dom';
 
 // Mock import.meta.env for Vite
 Object.defineProperty(globalThis, 'import', {
