@@ -2,22 +2,25 @@
 import { Order } from '../types';
 import { DeliveryReportRow } from '../pages/admin/reports/DeliveryRepo';
 
+interface BillItem {
+    productName: string;
+    quantity: number;
+    rate: number;
+    total: number;
+}
+
 export interface VatBill {
-    id: string; // generated ID
+    id: string;
     type: 'Individual' | 'Combined';
     paymentMethod: string;
     invoiceIds: string[];
     invoiceNumbers: string[];
     totalAmount: number;
     date: string;
-    itemsFormatted?: string; // Optional: Description of what is in this bill
+    itemsFormatted?: string;
+    items: BillItem[]; // Added items array
 }
 
-/**
- * Helper to parse payment breakdown from remarks
- * Duplicated from DeliveryRepo for utility usage, or should be exported from there.
- * For now, re-implementing to keep util standalone.
- */
 const parseBreakdown = (row: DeliveryReportRow): { method: string; amount: number }[] => {
     const rawMethod = (row.paymentMethod || 'cash').toString().toLowerCase();
 
@@ -50,11 +53,42 @@ const parseBreakdown = (row: DeliveryReportRow): { method: string; amount: numbe
     return results.length > 0 ? results : [{ method: 'multiple', amount: row.collectedAmount }];
 };
 
+/**
+ * Calculate actual delivered items for a row using proportional scaling.
+ * This implicitly accounts for returns/damages by scaling down the original items
+ * so that their total equals the bill amount (methodAmount).
+ */
+const getDeliveredItems = (row: DeliveryReportRow, methodAmount: number): BillItem[] => {
+    const orderItems = row.order.items || [];
+
+    // Calculate subtotal from items to ensure consistency
+    const derivedSubtotal = orderItems.reduce((acc, i) => acc + (i.total || 0), 0);
+
+    // Avoid division by zero
+    if (derivedSubtotal <= 0) return [];
+
+    // Scaling factor: How much of the original scope does this payment cover?
+    // Formula: (ItemTotal / Subtotal) * MethodAmount
+    const scalingFactor = methodAmount / derivedSubtotal;
+
+    return orderItems.map(item => {
+        // Calculate scaled quantity and total
+        const billedTotal = (item.total || 0) * scalingFactor;
+        const billedQty = item.qty * scalingFactor;
+
+        return {
+            productName: item.productName,
+            quantity: Number(billedQty.toFixed(2)),
+            rate: item.rate,
+            total: Number(billedTotal.toFixed(2))
+        };
+    }).filter(i => i.total > 0.01); // Filter out negligible amounts
+};
+
 export const generateVatBills = (rows: DeliveryReportRow[]): VatBill[] => {
     const bills: VatBill[] = [];
     const THRESHOLD = 50000;
 
-    // Bucket for accumulation
     const methodBuckets: Record<string, { rows: DeliveryReportRow[], amount: number }[]> = {
         'cash': [],
         'qr': [],
@@ -62,19 +96,13 @@ export const generateVatBills = (rows: DeliveryReportRow[]): VatBill[] => {
         'cheque': []
     };
 
-    // 1. Distribute amounts to buckets
     rows.forEach(row => {
         const breakdowns = parseBreakdown(row);
         breakdowns.forEach(bd => {
             const method = bd.method.toLowerCase();
-            // Simplify method mapping if needed (e.g., 'phonepe' -> 'qr')
-            // For now assuming standard keys: cash, qr, credit, cheque
-
-            // Just push the row reference + specific amount for this method
-            // We can't really split the DeliveryReportRow object easily, so we track the amount
 
             if (method === 'credit' || method === 'cheque') {
-                // INDIVIDUAL BILLS
+                // INDIVIDUAL
                 bills.push({
                     id: `VAT-${method.toUpperCase()}-${row.invoiceNumber}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
                     type: 'Individual',
@@ -82,30 +110,28 @@ export const generateVatBills = (rows: DeliveryReportRow[]): VatBill[] => {
                     invoiceIds: [row.invoiceId],
                     invoiceNumbers: [row.invoiceNumber],
                     totalAmount: bd.amount,
-                    date: new Date().toISOString().split('T')[0]
+                    date: new Date().toISOString().split('T')[0],
+                    items: getDeliveredItems(row, bd.amount)
                 });
             } else {
-                // COMBINED BILLS (Cash / QR)
-                // Initialize bucket if new method found
+                // COMBINED
                 if (!methodBuckets[method]) methodBuckets[method] = [];
                 methodBuckets[method].push({ rows: [row], amount: bd.amount });
             }
         });
     });
 
-    // 2. Process Cash and QR buckets
     ['cash', 'qr'].forEach(method => {
-        const items = methodBuckets[method] || [];
-        if (items.length === 0) return;
+        const itemsList = methodBuckets[method] || [];
+        if (itemsList.length === 0) return;
 
         let currentBillAmount = 0;
         let currentBillInvoices: string[] = [];
         let currentBillInvoiceNumbers: string[] = [];
+        let currentBillItems: BillItem[] = [];
 
-        items.forEach(item => {
-            // Check if adding this amount exceeds threshold
+        itemsList.forEach(item => {
             if (currentBillAmount + item.amount > THRESHOLD) {
-                // Finalize current bill
                 if (currentBillAmount > 0) {
                     bills.push({
                         id: `VAT-${method.toUpperCase()}-COMB-${bills.length + 1}`,
@@ -114,35 +140,37 @@ export const generateVatBills = (rows: DeliveryReportRow[]): VatBill[] => {
                         invoiceIds: [...currentBillInvoices],
                         invoiceNumbers: [...currentBillInvoiceNumbers],
                         totalAmount: currentBillAmount,
-                        date: new Date().toISOString().split('T')[0]
+                        date: new Date().toISOString().split('T')[0],
+                        items: currentBillItems
                     });
                 }
-
-                // Reset
                 currentBillAmount = 0;
                 currentBillInvoices = [];
                 currentBillInvoiceNumbers = [];
+                currentBillItems = [];
             }
-
-            // Do we assume a SINGLE item > 50000? 
-            // If item.amount > THRESHOLD, we technically should split it into multiple bills.
-            // But per "create a combined vat bill... split into multiple", it usually means
-            // chunking the total.
-            // If a single transaction is > 50k, we add it alone (it will trigger the check above next loop)
-            // If it's effectively > 50k by itself, we might need to split IT. 
-            // For now, let's assume we just start a new bill with it, even if > 50k, 
-            // unless we want to implement logic to chop up a single transaction. 
-            // Let's stick to simple aggregation logic first. 
 
             currentBillAmount += item.amount;
-            // Only add ID if not already there (though here we mapped one-to-one per split)
-            if (!currentBillInvoices.includes(item.rows[0].invoiceId)) {
-                currentBillInvoices.push(item.rows[0].invoiceId);
-                currentBillInvoiceNumbers.push(item.rows[0].invoiceNumber);
+            const row = item.rows[0];
+
+            if (!currentBillInvoices.includes(row.invoiceId)) {
+                currentBillInvoices.push(row.invoiceId);
+                currentBillInvoiceNumbers.push(row.invoiceNumber); // Use number for display
             }
+
+            // Aggregate items
+            const rowItems = getDeliveredItems(row, item.amount);
+            rowItems.forEach(newItem => {
+                const existing = currentBillItems.find(i => i.productName === newItem.productName && Math.abs(i.rate - newItem.rate) < 0.01);
+                if (existing) {
+                    existing.quantity += newItem.quantity;
+                    existing.total += newItem.total;
+                } else {
+                    currentBillItems.push({ ...newItem });
+                }
+            });
         });
 
-        // Finalize last bill
         if (currentBillAmount > 0) {
             bills.push({
                 id: `VAT-${method.toUpperCase()}-COMB-${bills.length + 1}`,
@@ -151,7 +179,8 @@ export const generateVatBills = (rows: DeliveryReportRow[]): VatBill[] => {
                 invoiceIds: currentBillInvoices,
                 invoiceNumbers: currentBillInvoiceNumbers,
                 totalAmount: currentBillAmount,
-                date: new Date().toISOString().split('T')[0]
+                date: new Date().toISOString().split('T')[0],
+                items: currentBillItems
             });
         }
     });

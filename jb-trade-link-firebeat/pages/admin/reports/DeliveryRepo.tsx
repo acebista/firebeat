@@ -667,6 +667,7 @@ const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice, onClos
                     </div>
 
                     {/* Line Items */}
+                    {/* Line Items */}
                     <div className="mb-6">
                         <h4 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
                             <Package className="h-5 w-5 text-indigo-600" />
@@ -702,7 +703,7 @@ const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice, onClos
                     </div>
 
                     {/* Financial Summary */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    < div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6" >
                         <Card className="p-4 bg-gray-50">
                             <h4 className="font-bold text-gray-800 mb-3">Financial Summary</h4>
                             <div className="space-y-2 text-sm">
@@ -726,45 +727,49 @@ const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice, onClos
                         </Card>
 
                         {/* Sales Return Info */}
-                        {invoice.salesReturn && (
-                            <Card className="p-4 bg-red-50 border-2 border-red-200">
-                                <h4 className="font-bold text-red-800 mb-3 flex items-center gap-2">
-                                    <TrendingDown className="h-5 w-5" />
-                                    Sales Return
-                                </h4>
-                                <div className="space-y-2 text-sm">
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-700">Return Type:</span>
-                                        <Badge color="red">{invoice.salesReturn.returnType}</Badge>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-700">Reason:</span>
-                                        <span className="text-gray-900 capitalize">{invoice.salesReturn.reason.replace(/_/g, ' ')}</span>
-                                    </div>
-                                    <div className="flex justify-between pt-2 border-t border-red-300">
-                                        <span className="font-bold text-red-800">Return Amount:</span>
-                                        <span className="font-bold text-red-800">₹{invoice.salesReturn.totalReturnAmount.toFixed(2)}</span>
-                                    </div>
-                                    {invoice.salesReturn.notes && (
-                                        <div className="pt-2 border-t border-red-300">
-                                            <p className="text-xs text-gray-600">Notes:</p>
-                                            <p className="text-sm text-gray-900">{invoice.salesReturn.notes}</p>
+                        {
+                            invoice.salesReturn && (
+                                <Card className="p-4 bg-red-50 border-2 border-red-200">
+                                    <h4 className="font-bold text-red-800 mb-3 flex items-center gap-2">
+                                        <TrendingDown className="h-5 w-5" />
+                                        Sales Return
+                                    </h4>
+                                    <div className="space-y-2 text-sm">
+                                        <div className="flex justify-between">
+                                            <span className="text-gray-700">Return Type:</span>
+                                            <Badge color="red">{invoice.salesReturn.returnType}</Badge>
                                         </div>
-                                    )}
-                                </div>
-                            </Card>
-                        )}
-                    </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-gray-700">Reason:</span>
+                                            <span className="text-gray-900 capitalize">{invoice.salesReturn.reason.replace(/_/g, ' ')}</span>
+                                        </div>
+                                        <div className="flex justify-between pt-2 border-t border-red-300">
+                                            <span className="font-bold text-red-800">Return Amount:</span>
+                                            <span className="font-bold text-red-800">₹{invoice.salesReturn.totalReturnAmount.toFixed(2)}</span>
+                                        </div>
+                                        {invoice.salesReturn.notes && (
+                                            <div className="pt-2 border-t border-red-300">
+                                                <p className="text-xs text-gray-600">Notes:</p>
+                                                <p className="text-sm text-gray-900">{invoice.salesReturn.notes}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </Card>
+                            )
+                        }
+                    </div >
 
                     {/* Remarks */}
-                    {invoice.order.remarks && (
-                        <Card className="p-4 bg-amber-50">
-                            <h4 className="font-bold text-gray-800 mb-2">Remarks</h4>
-                            <p className="text-sm text-gray-700">{invoice.order.remarks}</p>
-                        </Card>
-                    )}
-                </div>
-            </div>
-        </div>
+                    {
+                        invoice.order.remarks && (
+                            <Card className="p-4 bg-amber-50">
+                                <h4 className="font-bold text-gray-800 mb-2">Remarks</h4>
+                                <p className="text-sm text-gray-700">{invoice.order.remarks}</p>
+                            </Card>
+                        )
+                    }
+                </div >
+            </div >
+        </div >
     );
 };
