@@ -33,6 +33,7 @@ export interface DeliveryReportData {
         totalDelivered: number;
         totalReturned: number;
         totalPartiallyReturned: number;
+        totalFailed: number;
         totalAmount: number;
         totalCollected: number;
         paymentBreakdown: Record<string, { count: number; amount: number }>;
@@ -97,7 +98,8 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
             case 'completed': return 'emerald';
             case 'dispatched': return 'blue';
             case 'partially_returned': return 'amber';
-            case 'returned': return 'red';
+            case 'returned':
+            case 'cancelled': return 'red';
             default: return 'slate';
         }
     };
@@ -118,7 +120,7 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
             </div>
 
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
                 <Card className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200">
                     <div className="flex items-center justify-between">
                         <div>
@@ -139,13 +141,23 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
                     </div>
                 </Card>
 
-                <Card className="p-4 bg-gradient-to-br from-red-50 to-orange-50 border-2 border-red-200">
+                <Card className="p-4 bg-gradient-to-br from-amber-50 to-yellow-50 border-2 border-amber-200">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-sm text-gray-600 font-medium">Returns</p>
-                            <p className="text-2xl font-bold text-red-600">
+                            <p className="text-sm text-gray-600 font-medium">Partial Returns</p>
+                            <p className="text-2xl font-bold text-amber-600">
                                 {summary.totalReturned + summary.totalPartiallyReturned}
                             </p>
+                        </div>
+                        <TrendingDown className="h-10 w-10 text-amber-600 opacity-80" />
+                    </div>
+                </Card>
+
+                <Card className="p-4 bg-gradient-to-br from-red-50 to-rose-50 border-2 border-red-300">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm text-gray-600 font-medium">Failed</p>
+                            <p className="text-2xl font-bold text-red-600">{summary.totalFailed}</p>
                         </div>
                         <TrendingDown className="h-10 w-10 text-red-600 opacity-80" />
                     </div>

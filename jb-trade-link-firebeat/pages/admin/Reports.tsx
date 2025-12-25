@@ -275,6 +275,7 @@ export const Reports: React.FC = () => {
       totalDelivered: 0,
       totalReturned: 0,
       totalPartiallyReturned: 0,
+      totalFailed: 0,
       totalAmount: 0,
       totalCollected: 0,
       paymentBreakdown: {}
@@ -373,8 +374,8 @@ export const Reports: React.FC = () => {
         deliveryFilters.endDate
       );
 
-      // Filter to only delivered/completed/returned orders
-      const deliveryStatuses = ['delivered', 'completed', 'dispatched', 'partially_returned', 'returned'];
+      // Include cancelled (failed deliveries) in the report
+      const deliveryStatuses = ['delivered', 'completed', 'dispatched', 'partially_returned', 'returned', 'cancelled'];
       orders = orders.filter(o => deliveryStatuses.includes(o.status));
 
       // Fetch all users to resolve delivery user names
@@ -456,13 +457,15 @@ export const Reports: React.FC = () => {
       const summary = {
         totalInvoices: filteredRows.length,
         totalDelivered: filteredRows.filter(r => r.status.toLowerCase() === 'delivered' || r.status.toLowerCase() === 'completed').length,
-        totalReturned: filteredRows.filter(r => r.status.toLowerCase() === 'returned' || r.status.toLowerCase() === 'cancelled').length,
+        totalReturned: filteredRows.filter(r => r.status.toLowerCase() === 'returned').length,
         // Include both status-based and remarks-based partial returns
         totalPartiallyReturned: filteredRows.filter(r =>
           r.status.toLowerCase() === 'partially_returned' ||
           (r as any).hasReturnsInRemarks === true ||
           r.salesReturn !== undefined
         ).length,
+        // Failed = cancelled orders (failed delivery attempts)
+        totalFailed: filteredRows.filter(r => r.status.toLowerCase() === 'cancelled').length,
         totalAmount: filteredRows.reduce((sum, r) => sum + r.netAmount, 0),
         totalCollected: filteredRows.reduce((sum, r) => sum + r.collectedAmount, 0),
         paymentBreakdown: filteredRows.reduce((breakdown, row) => {
@@ -498,6 +501,7 @@ export const Reports: React.FC = () => {
           totalDelivered: 0,
           totalReturned: 0,
           totalPartiallyReturned: 0,
+          totalFailed: 0,
           totalAmount: 0,
           totalCollected: 0,
           paymentBreakdown: {},
