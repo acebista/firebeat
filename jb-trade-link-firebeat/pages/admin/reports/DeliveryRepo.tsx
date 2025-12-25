@@ -6,6 +6,7 @@ import { printContent } from '../../../lib/printUtils';
 import { Order, SalesReturn } from '../../../types';
 import { PaymentMode } from '../../../types/delivery-order';
 import { ReturnsFailedModal } from './ReturnsFailedModal';
+import { VatBillDetailModal } from './VatBillDetailModal';
 
 export interface DeliveryReportRow {
     invoiceId: string;
@@ -53,6 +54,7 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
     const [showVatModal, setShowVatModal] = useState(false);
     const [generatedBills, setGeneratedBills] = useState<VatBill[]>([]);
     const [showReturnsModal, setShowReturnsModal] = useState(false);
+    const [selectedVatBill, setSelectedVatBill] = useState<VatBill | null>(null);
 
     const handlePrint = () => {
         printContent('Delivery Report', 'delivery-report-print');
@@ -478,6 +480,7 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
                                             <th className="px-4 py-3 text-center font-medium text-gray-500">Method</th>
                                             <th className="px-4 py-3 text-left font-medium text-gray-500">Invoices Included</th>
                                             <th className="px-4 py-3 text-right font-medium text-gray-500">Total Amount</th>
+                                            <th className="px-4 py-3 text-center font-medium text-gray-500">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-200">
@@ -501,6 +504,15 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
                                                 <td className="px-4 py-3 text-right font-bold text-gray-900">
                                                     ₹{bill.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                                 </td>
+                                                <td className="px-4 py-3 text-center">
+                                                    <button
+                                                        onClick={() => setSelectedVatBill(bill)}
+                                                        className="text-indigo-600 hover:text-indigo-900 transition-colors"
+                                                        title="View Bill"
+                                                    >
+                                                        <Eye className="h-4 w-4" />
+                                                    </button>
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -523,6 +535,14 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
                 <ReturnsFailedModal
                     rows={rows}
                     onClose={() => setShowReturnsModal(false)}
+                />
+            )}
+
+            {/* VAT Bill Detail Modal */}
+            {selectedVatBill && (
+                <VatBillDetailModal
+                    bill={selectedVatBill}
+                    onClose={() => setSelectedVatBill(null)}
                 />
             )}
         </div>

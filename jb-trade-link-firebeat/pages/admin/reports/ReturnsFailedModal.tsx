@@ -27,8 +27,10 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
     const returnItems: ReturnItem[] = [];
 
     rows.forEach(row => {
-        const isFailed = row.status.toLowerCase() === 'cancelled' || row.status.toLowerCase() === 'failed';
-        const hasReturns = row.salesReturn || row.hasReturnsInRemarks;
+        const status = row.status.toLowerCase();
+        const isFailed = status === 'cancelled' || status === 'failed';
+        const isReturned = status === 'returned' || status === 'partially_returned';
+        const hasReturns = row.salesReturn || row.hasReturnsInRemarks || row.returnAmount;
 
         if (isFailed) {
             row.order.items.forEach(item => {
@@ -43,7 +45,7 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
                     amount: item.total
                 });
             });
-        } else if (hasReturns && row.returnAmount && row.returnAmount > 0) {
+        } else if (isReturned || (hasReturns && row.returnAmount && row.returnAmount > 0)) {
             row.order.items.forEach(item => {
                 const returnFraction = row.returnAmount! / row.netAmount;
                 const estimatedReturnQty = Math.round(item.qty * returnFraction);
