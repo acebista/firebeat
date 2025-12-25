@@ -255,7 +255,9 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
                                         </td>
                                         <td className="px-3 py-2 text-center">
                                             <Badge color={getStatusColor(row.status) as any}>
-                                                {capitalize(row.status)}
+                                                {row.status.toLowerCase() === 'approved' ? 'Rescheduled' :
+                                                    row.status.toLowerCase() === 'cancelled' ? 'Failed' :
+                                                        capitalize(row.status)}
                                             </Badge>
                                             {row.returnAmount && row.returnAmount > 0 && (
                                                 <div className="text-xs text-red-600 mt-1">-₹{row.returnAmount.toFixed(2)}</div>
@@ -360,7 +362,11 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
                                 <td style={{ border: '1px solid #4b5563', padding: '4px' }}>{row.invoiceNumber}</td>
                                 <td style={{ border: '1px solid #4b5563', padding: '4px' }}>{row.customerName}</td>
                                 <td style={{ border: '1px solid #4b5563', padding: '4px' }}>{row.deliveryUserName || 'N/A'}</td>
-                                <td style={{ border: '1px solid #4b5563', padding: '4px', textAlign: 'center' }}>{row.status}</td>
+                                <td style={{ border: '1px solid #4b5563', padding: '4px', textAlign: 'center' }}>
+                                    {row.status.toLowerCase() === 'approved' ? 'Rescheduled' :
+                                        row.status.toLowerCase() === 'cancelled' ? 'Failed' :
+                                            row.status}
+                                </td>
                                 <td style={{ border: '1px solid #4b5563', padding: '4px', textAlign: 'right' }}>{row.netAmount.toFixed(2)}</td>
                                 <td style={{ border: '1px solid #4b5563', padding: '4px', textAlign: 'center' }}>{row.paymentMethod}</td>
                                 <td style={{ border: '1px solid #4b5563', padding: '4px', textAlign: 'right' }}>{row.collectedAmount.toFixed(2)}</td>

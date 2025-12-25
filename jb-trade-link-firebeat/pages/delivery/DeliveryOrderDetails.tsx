@@ -144,8 +144,20 @@ export const DeliveryOrderDetails: React.FC = () => {
         loadData();
     }, [id]);
 
+    const calculateOriginalTotal = () => {
+        if (!order?.items) return 0;
+        return order.items.reduce((sum, item) => sum + (Number(item.total) || 0), 0);
+    };
+
     const calculateDamageTotal = () => damages.reduce((sum, d) => {
-        const item = order?.items.find(i => i.productId === d.productId);
+        // Try exact ID match first
+        let item = order?.items.find(i => i.productId === d.productId);
+
+        // Fallback: Try name match if ID fails (common with different data sources)
+        if (!item && d.productName) {
+            item = order?.items.find(i => i.productName.toLowerCase() === d.productName.toLowerCase());
+        }
+
         return sum + (item ? (item.rate * d.quantity) : 0);
     }, 0);
 
@@ -170,7 +182,7 @@ export const DeliveryOrderDetails: React.FC = () => {
         if (!order) return;
 
         const totalCollected = paymentEntries.reduce((sum, p) => sum + (p.method !== 'credit' ? Number(p.amount) : 0), 0);
-        const netTotal = order.totalAmount - calculateDamageTotal() - calculateReturnTotal();
+        const netTotal = calculateOriginalTotal() - calculateReturnTotal() - calculateDamageTotal();
 
         if (paymentEntries.some(p => p.amount < 0)) {
             toast.error("Payment amounts cannot be negative");
@@ -311,11 +323,13 @@ export const DeliveryOrderDetails: React.FC = () => {
                 if (remarks) remarkText += ` | ${remarks}`;
 
                 const mainPaymentMethod = paymentEntries.length === 1 ? paymentEntries[0].method : 'Multiple';
+                const currentNetTotal = calculateOriginalTotal() - calculateReturnTotal() - calculateDamageTotal();
 
                 updateData = {
                     remarks: remarkText,
                     payment_collected: totalCollected,
-                    payment_method_at_delivery: mainPaymentMethod
+                    payment_method_at_delivery: mainPaymentMethod,
+                    totalAmount: Math.max(0, currentNetTotal)
                 };
             }
 
@@ -549,23 +563,42 @@ export const DeliveryOrderDetails: React.FC = () => {
                     </div>
 
                     {/* Summary Calculations */}
-                    <div className="mb-6 p-4 bg-white rounded-lg border border-gray-200 shadow-inner">
-                        <div className="space-y-2 text-sm">
-                            <div className="flex justify-between text-gray-600">
-                                <span>Order Net Total:</span>
-                                <span>₹{(order.totalAmount - calculateDamageTotal() - calculateReturnTotal()).toFixed(2)}</span>
-                            </div>
-                            <div className="flex justify-between text-emerald-600 font-bold">
-                                <span>Total Collected:</span>
-                                <span>₹{paymentEntries.reduce((s, p) => s + (p.method !== 'credit' ? (Number(p.amount) || 0) : 0), 0).toFixed(2)}</span>
-                            </div>
-                            {paymentEntries.some(p => p.method === 'credit') && (
-                                <div className="flex justify-between text-amber-600 font-bold">
-                                    <span>Credit Recorded:</span>
-                                    <span>₹{paymentEntries.reduce((s, p) => s + (p.method === 'credit' ? (Number(p.amount) || 0) : 0), 0).toFixed(2)}</span>
-                                </div>
-                            )}
+                    <div className="mb-6 p-4 bg-white rounded-lg border border-gray-200 shadow-sm space-y-3">
+                        <div className="flex justify-between text-sm text-gray-500">
+                            <span>Order Total:</span>
+                            <span>₹{calculateOriginalTotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
+
+                        {calculateReturnTotal() > 0 && (
+                            <div className="flex justify-between text-sm text-purple-600">
+                                <span>Returns (-) :</span>
+                                <span>₹{calculateReturnTotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                        )}
+
+                        {calculateDamageTotal() > 0 && (
+                            <div className="flex justify-between text-sm text-orange-600">
+                                <span>Damages (-) :</span>
+                                <span>₹{calculateDamageTotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                        )}
+
+                        <div className="pt-2 border-t border-dashed border-gray-200 flex justify-between items-center bg-blue-50/50 p-2 rounded">
+                            <span className="font-semibold text-gray-800">Order Net Total:</span>
+                            <span className="text-lg font-bold text-gray-900">₹{(calculateOriginalTotal() - calculateReturnTotal() - calculateDamageTotal()).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+
+                        <div className="flex justify-between items-center pt-1 px-2">
+                            <span className="text-sm font-medium text-emerald-600">Total Collected:</span>
+                            <span className="text-md font-bold text-emerald-600">₹{paymentEntries.reduce((s, p) => s + (p.method !== 'credit' ? (Number(p.amount) || 0) : 0), 0).toFixed(2)}</span>
+                        </div>
+
+                        {paymentEntries.some(p => p.method === 'credit') && (
+                            <div className="flex justify-between items-center text-amber-600 font-bold px-2">
+                                <span>Credit Recorded:</span>
+                                <span>₹{paymentEntries.reduce((s, p) => s + (p.method === 'credit' ? (Number(p.amount) || 0) : 0), 0).toFixed(2)}</span>
+                            </div>
+                        )}
                     </div>
 
                     {/* Remarks Area */}
@@ -796,13 +829,35 @@ export const DeliveryOrderDetails: React.FC = () => {
                                 </Button>
                             </div>
 
-                            {/* Summary */}
-                            <div className="mb-6 p-4 bg-white rounded-lg border border-gray-200">
-                                <div className="space-y-2 text-sm">
-                                    <div className="flex justify-between text-emerald-600 font-bold">
-                                        <span>Total Collected:</span>
-                                        <span>₹{paymentEntries.reduce((s, p) => s + (p.method !== 'credit' ? (Number(p.amount) || 0) : 0), 0).toFixed(2)}</span>
+                            {/* Summary Calculations (Breakdown) */}
+                            <div className="mb-6 p-4 bg-white rounded-lg border border-gray-200 shadow-sm space-y-2">
+                                <div className="flex justify-between text-xs text-gray-500">
+                                    <span>Original Order Total:</span>
+                                    <span>₹{calculateOriginalTotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                </div>
+
+                                {calculateReturnTotal() > 0 && (
+                                    <div className="flex justify-between text-xs text-purple-600">
+                                        <span>Returns (-) :</span>
+                                        <span>₹{calculateReturnTotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                     </div>
+                                )}
+
+                                {calculateDamageTotal() > 0 && (
+                                    <div className="flex justify-between text-xs text-orange-600">
+                                        <span>Damages (-) :</span>
+                                        <span>₹{calculateDamageTotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                    </div>
+                                )}
+
+                                <div className="pt-1 border-t border-dashed border-gray-200 flex justify-between items-center mt-1">
+                                    <span className="font-semibold text-gray-800 text-sm">Revised Net Total:</span>
+                                    <span className="font-bold text-gray-900">₹{(calculateOriginalTotal() - calculateReturnTotal() - calculateDamageTotal()).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                </div>
+
+                                <div className="flex justify-between text-emerald-600 font-bold text-sm pt-1">
+                                    <span>Total Collected:</span>
+                                    <span>₹{paymentEntries.reduce((s, p) => s + (p.method !== 'credit' ? (Number(p.amount) || 0) : 0), 0).toFixed(2)}</span>
                                 </div>
                             </div>
 
