@@ -34,6 +34,7 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
 
         if (isFailed) {
             row.order.items.forEach(item => {
+                if (!item) return;
                 returnItems.push({
                     invoiceNumber: row.invoiceNumber,
                     customerName: row.customerName,
@@ -47,6 +48,7 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
             });
         } else if (isReturned || (hasReturns && row.returnAmount && row.returnAmount > 0)) {
             row.order.items.forEach(item => {
+                if (!item || !row.netAmount || row.netAmount <= 0) return;
                 const returnFraction = row.returnAmount! / row.netAmount;
                 const estimatedReturnQty = Math.round(item.qty * returnFraction);
 
@@ -54,12 +56,12 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
                     returnItems.push({
                         invoiceNumber: row.invoiceNumber,
                         customerName: row.customerName,
-                        productName: item.productName,
-                        qtyOrdered: item.qty,
+                        productName: item.productName || 'Unknown Item',
+                        qtyOrdered: item.qty || 0,
                         qtyReturned: estimatedReturnQty,
                         qtyFailed: 0,
                         reason: row.salesReturn?.reason || 'Customer Return',
-                        amount: item.rate * estimatedReturnQty
+                        amount: (item.rate || 0) * estimatedReturnQty
                     });
                 }
             });

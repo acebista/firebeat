@@ -75,18 +75,18 @@ const getDeliveredItems = (row: DeliveryReportRow, methodAmount: number): BillIt
     return orderItems.map(item => {
         const billedQty = item.qty * scalingFactor;
 
-        // item.rate is AFTER VAT, so we need to reverse it
-        // rateAfterVat = rateBeforeVat * (1 + VAT_RATE)
-        // rateBeforeVat = rateAfterVat / (1 + VAT_RATE)
+        // item.rate and item.total are AFTER VAT (from DB)
+        // First scale the total, then remove VAT
+        const itemTotalAfterVat = (item.total || 0) * scalingFactor;
+        const itemTotalBeforeVat = itemTotalAfterVat / (1 + VAT_RATE);
         const rateBeforeVat = item.rate / (1 + VAT_RATE);
-        const lineTotal = rateBeforeVat * billedQty;
 
         return {
             productName: item.productName,
             quantity: Number(billedQty.toFixed(2)),
             rateBeforeVat: Number(rateBeforeVat.toFixed(2)),
             rate: item.rate,
-            total: Number(lineTotal.toFixed(2))
+            total: Number(itemTotalBeforeVat.toFixed(2))
         };
     }).filter(i => i.total > 0.01);
 };
