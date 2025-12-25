@@ -51,6 +51,8 @@ export const DeliveryOrderDetails: React.FC = () => {
     const [returnItems, setReturnItems] = useState<ReturnItem[]>([]);
     const [paymentEntries, setPaymentEntries] = useState<PaymentEntry[]>([]);
     const [isEditing, setIsEditing] = useState(false); // For editing already delivered orders
+    const [editStatus, setEditStatus] = useState<'delivered' | 'cancelled'>('delivered'); // Status toggle in edit mode
+    const [editFailReason, setEditFailReason] = useState(''); // Failure reason if marking as failed
 
     useEffect(() => {
         const loadData = async () => {
@@ -255,32 +257,78 @@ export const DeliveryOrderDetails: React.FC = () => {
     const handleUpdateDelivery = async () => {
         if (!order) return;
 
-        const totalCollected = paymentEntries.reduce((sum, p) => sum + (p.method !== 'credit' ? Number(p.amount) : 0), 0);
+        // Validate if marking as failed
+        if (editStatus === 'cancelled' && !editFailReason.trim()) {
+            toast.error("Please provide a reason for failed delivery");
+            return;
+        }
 
-        if (!window.confirm("Are you sure you want to update this delivery record?")) return;
+        const totalCollected = editStatus === 'cancelled'
+            ? 0
+            : paymentEntries.reduce((sum, p) => sum + (p.method !== 'credit' ? Number(p.amount) : 0), 0);
+
+        const confirmMsg = editStatus === 'cancelled'
+            ? "Are you sure you want to mark this as a FAILED delivery? This will reset payment data."
+            : "Are you sure you want to update this delivery record?";
+
+        if (!window.confirm(confirmMsg)) return;
 
         setProcessing(true);
         try {
             const { data: { session } } = await supabase.auth.getSession();
             const userId = session?.user?.id;
 
-            // Build updated remarks
-            let remarkText = `[EDITED] Payments: ${paymentEntries.map(p => `${p.method.toUpperCase()}: ₹${p.amount}${p.reference ? ` (${p.reference})` : ''}`).join(', ')}`;
-            if (remarks) remarkText += ` | ${remarks}`;
+            let remarkText = '';
+            let updateData: any = {};
 
-            const mainPaymentMethod = paymentEntries.length === 1 ? paymentEntries[0].method : 'Multiple';
+            if (editStatus === 'cancelled') {
+                // Marking as failed delivery
+                remarkText = `Delivery Attempt Failed: ${editFailReason}`;
+                if (remarks) remarkText += ` | ${remarks}`;
+
+                updateData = {
+                    status: 'cancelled',
+                    remarks: remarkText,
+                    payment_collected: 0,
+                    payment_method_at_delivery: null,
+                    delivered_at: null,
+                    delivered_by: null
+                };
+            } else {
+                // Regular update - keep as delivered
+                remarkText = `[EDITED] Payments: ${paymentEntries.map(p => `${p.method.toUpperCase()}: ₹${p.amount}${p.reference ? ` (${p.reference})` : ''}`).join(', ')}`;
+
+                // Add returns info if any
+                if (returnItems.length > 0) {
+                    remarkText += ` | Returns: ${returnItems.map(r => `${r.productName}(${r.returnQty})`).join(', ')}`;
+                }
+
+                // Add damages info if any
+                if (damages.length > 0) {
+                    remarkText += ` | Damages: ${damages.map(d => `${d.productName}(${d.quantity}) - ${d.reason}`).join(', ')}`;
+                }
+
+                if (remarks) remarkText += ` | ${remarks}`;
+
+                const mainPaymentMethod = paymentEntries.length === 1 ? paymentEntries[0].method : 'Multiple';
+
+                updateData = {
+                    remarks: remarkText,
+                    payment_collected: totalCollected,
+                    payment_method_at_delivery: mainPaymentMethod
+                };
+            }
 
             // Update order record
-            await OrderService.update(order.id, {
-                remarks: remarkText,
-                payment_collected: totalCollected,
-                payment_method_at_delivery: mainPaymentMethod as any
-            } as any);
+            await OrderService.update(order.id, updateData);
 
             // Note: We don't create new payment records here to avoid duplicates
             // Payment corrections should be handled through the admin ledger module
 
-            toast.success("Delivery record updated successfully!");
+            toast.success(editStatus === 'cancelled'
+                ? "Order marked as failed delivery!"
+                : "Delivery record updated successfully!"
+            );
             setIsEditing(false);
 
             // Refresh order data
@@ -611,7 +659,11 @@ export const DeliveryOrderDetails: React.FC = () => {
                     <Button
                         variant="outline"
                         className="w-full border-2 border-amber-400 text-amber-700 hover:bg-amber-50 font-bold"
-                        onClick={() => setIsEditing(true)}
+                        onClick={() => {
+                            setEditStatus('delivered');
+                            setEditFailReason('');
+                            setIsEditing(true);
+                        }}
                     >
                         ✏️ Edit Delivery Details
                     </Button>
@@ -631,68 +683,188 @@ export const DeliveryOrderDetails: React.FC = () => {
                         </button>
                     </h3>
 
-                    {/* Multi-Payment Section */}
-                    <div className="space-y-4 mb-6">
-                        <label className="block text-sm font-semibold text-gray-900">Payment Breakdown</label>
-                        {paymentEntries.map((entry, idx) => (
-                            <div key={idx} className="bg-white p-3 rounded-lg border border-gray-200 space-y-3 shadow-sm">
-                                <div className="flex items-center justify-between gap-2">
-                                    <div className="flex-1 grid grid-cols-2 gap-2">
-                                        <select
-                                            value={entry.method}
-                                            onChange={(e) => updatePaymentEntry(idx, 'method', e.target.value)}
-                                            className="px-2 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-amber-500"
-                                        >
-                                            <option value="cash">💵 Cash</option>
-                                            <option value="qr">📱 QR Code</option>
-                                            <option value="cheque">📄 Cheque</option>
-                                            <option value="credit">💳 Credit</option>
-                                        </select>
-                                        <input
-                                            type="number"
-                                            value={entry.amount}
-                                            onChange={(e) => updatePaymentEntry(idx, 'amount', parseFloat(e.target.value) || 0)}
-                                            placeholder="Amount"
-                                            className="px-2 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-amber-500 font-semibold"
-                                        />
-                                    </div>
-                                    <button
-                                        onClick={() => removePaymentEntry(idx)}
-                                        className="text-red-500 p-1 hover:bg-red-50 rounded"
-                                    >
-                                        <Trash2 className="h-4 w-4" />
-                                    </button>
-                                </div>
-                                {entry.method !== 'cash' && (
+                    {/* Delivery Status Toggle */}
+                    <div className="mb-6 p-4 bg-white rounded-lg border border-gray-200">
+                        <label className="block text-sm font-semibold text-gray-900 mb-3">Delivery Status</label>
+                        <div className="grid grid-cols-2 gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setEditStatus('delivered')}
+                                className={`px-4 py-3 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${editStatus === 'delivered'
+                                        ? 'bg-emerald-100 border-2 border-emerald-500 text-emerald-800'
+                                        : 'bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100'
+                                    }`}
+                            >
+                                <CheckCircle className="h-4 w-4" />
+                                Delivered ✓
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setEditStatus('cancelled')}
+                                className={`px-4 py-3 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${editStatus === 'cancelled'
+                                        ? 'bg-red-100 border-2 border-red-500 text-red-800'
+                                        : 'bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100'
+                                    }`}
+                            >
+                                <XCircle className="h-4 w-4" />
+                                Failed ✗
+                            </button>
+                        </div>
+
+                        {/* Show failure reason input if marking as failed */}
+                        {editStatus === 'cancelled' && (
+                            <div className="mt-4">
+                                <label className="block text-sm font-medium text-red-700 mb-2">Reason for Failed Delivery *</label>
+                                <select
+                                    value={editFailReason}
+                                    onChange={(e) => setEditFailReason(e.target.value)}
+                                    className="w-full px-3 py-2 border border-red-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 bg-white"
+                                >
+                                    <option value="">Select a reason...</option>
+                                    <option value="Shop closed">Shop closed</option>
+                                    <option value="No money">No money</option>
+                                    <option value="Customer not available">Customer not available</option>
+                                    <option value="Wrong address">Wrong address</option>
+                                    <option value="Customer refused">Customer refused</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                                {editFailReason === 'Other' && (
                                     <input
                                         type="text"
-                                        value={entry.reference || ''}
-                                        onChange={(e) => updatePaymentEntry(idx, 'reference', e.target.value)}
-                                        placeholder={entry.method === 'qr' ? 'Transaction ID' : entry.method === 'cheque' ? 'Cheque Number' : 'Notes'}
-                                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded"
+                                        placeholder="Enter custom reason..."
+                                        onChange={(e) => setEditFailReason(e.target.value)}
+                                        className="w-full mt-2 px-3 py-2 border border-red-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500"
                                     />
                                 )}
                             </div>
-                        ))}
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full py-2 bg-white flex items-center justify-center gap-2 border-dashed border-2 hover:border-amber-500 hover:text-amber-600 border-amber-200 text-amber-500"
-                            onClick={addPaymentEntry}
-                        >
-                            <Plus className="h-4 w-4" /> Add Payment Row
-                        </Button>
+                        )}
                     </div>
 
-                    {/* Summary */}
-                    <div className="mb-6 p-4 bg-white rounded-lg border border-gray-200">
-                        <div className="space-y-2 text-sm">
-                            <div className="flex justify-between text-emerald-600 font-bold">
-                                <span>Total Collected:</span>
-                                <span>₹{paymentEntries.reduce((s, p) => s + (p.method !== 'credit' ? (Number(p.amount) || 0) : 0), 0).toFixed(2)}</span>
+                    {/* Only show payment/returns/damages if keeping as delivered */}
+                    {editStatus === 'delivered' && (
+                        <>
+                            {/* Multi-Payment Section */}
+                            <div className="space-y-4 mb-6">
+                                <label className="block text-sm font-semibold text-gray-900">Payment Breakdown</label>
+                                {paymentEntries.map((entry, idx) => (
+                                    <div key={idx} className="bg-white p-3 rounded-lg border border-gray-200 space-y-3 shadow-sm">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <div className="flex-1 grid grid-cols-2 gap-2">
+                                                <select
+                                                    value={entry.method}
+                                                    onChange={(e) => updatePaymentEntry(idx, 'method', e.target.value)}
+                                                    className="px-2 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-amber-500"
+                                                >
+                                                    <option value="cash">💵 Cash</option>
+                                                    <option value="qr">📱 QR Code</option>
+                                                    <option value="cheque">📄 Cheque</option>
+                                                    <option value="credit">💳 Credit</option>
+                                                </select>
+                                                <input
+                                                    type="number"
+                                                    value={entry.amount}
+                                                    onChange={(e) => updatePaymentEntry(idx, 'amount', parseFloat(e.target.value) || 0)}
+                                                    placeholder="Amount"
+                                                    className="px-2 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-amber-500 font-semibold"
+                                                />
+                                            </div>
+                                            <button
+                                                onClick={() => removePaymentEntry(idx)}
+                                                className="text-red-500 p-1 hover:bg-red-50 rounded"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </button>
+                                        </div>
+                                        {entry.method !== 'cash' && (
+                                            <input
+                                                type="text"
+                                                value={entry.reference || ''}
+                                                onChange={(e) => updatePaymentEntry(idx, 'reference', e.target.value)}
+                                                placeholder={entry.method === 'qr' ? 'Transaction ID' : entry.method === 'cheque' ? 'Cheque Number' : 'Notes'}
+                                                className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded"
+                                            />
+                                        )}
+                                    </div>
+                                ))}
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="w-full py-2 bg-white flex items-center justify-center gap-2 border-dashed border-2 hover:border-amber-500 hover:text-amber-600 border-amber-200 text-amber-500"
+                                    onClick={addPaymentEntry}
+                                >
+                                    <Plus className="h-4 w-4" /> Add Payment Row
+                                </Button>
                             </div>
-                        </div>
-                    </div>
+
+                            {/* Summary */}
+                            <div className="mb-6 p-4 bg-white rounded-lg border border-gray-200">
+                                <div className="space-y-2 text-sm">
+                                    <div className="flex justify-between text-emerald-600 font-bold">
+                                        <span>Total Collected:</span>
+                                        <span>₹{paymentEntries.reduce((s, p) => s + (p.method !== 'credit' ? (Number(p.amount) || 0) : 0), 0).toFixed(2)}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Returns Section */}
+                            <div className="mb-6 p-4 bg-white rounded-lg border border-gray-200">
+                                <div className="flex items-center justify-between mb-3">
+                                    <label className="text-sm font-semibold text-gray-900">Returns</label>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="text-amber-600 border-amber-300"
+                                        onClick={() => setShowReturnModal(true)}
+                                    >
+                                        <Plus className="h-3 w-3 mr-1" /> Add Return
+                                    </Button>
+                                </div>
+                                {returnItems.length > 0 ? (
+                                    <div className="space-y-2">
+                                        {returnItems.map((item, idx) => (
+                                            <div key={idx} className="flex justify-between items-center text-sm bg-amber-50 p-2 rounded">
+                                                <span>{item.productName} x{item.returnQty}</span>
+                                                <button onClick={() => setReturnItems(prev => prev.filter((_, i) => i !== idx))} className="text-red-500">
+                                                    <Trash2 className="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-gray-500">No returns added</p>
+                                )}
+                            </div>
+
+                            {/* Damages Section */}
+                            <div className="mb-6 p-4 bg-white rounded-lg border border-gray-200">
+                                <div className="flex items-center justify-between mb-3">
+                                    <label className="text-sm font-semibold text-gray-900">Damages</label>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="text-red-600 border-red-300"
+                                        onClick={() => setShowDamageModal(true)}
+                                    >
+                                        <Plus className="h-3 w-3 mr-1" /> Add Damage
+                                    </Button>
+                                </div>
+                                {damages.length > 0 ? (
+                                    <div className="space-y-2">
+                                        {damages.map((item, idx) => (
+                                            <div key={idx} className="flex justify-between items-center text-sm bg-red-50 p-2 rounded">
+                                                <span>{item.productName} x{item.quantity} - {item.reason}</span>
+                                                <button onClick={() => setDamages(prev => prev.filter((_, i) => i !== idx))} className="text-red-500">
+                                                    <Trash2 className="h-3 w-3" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-gray-500">No damages added</p>
+                                )}
+                            </div>
+                        </>
+                    )}
 
                     {/* Remarks */}
                     <div className="mb-6">
@@ -717,11 +889,11 @@ export const DeliveryOrderDetails: React.FC = () => {
                         </Button>
                         <Button
                             variant="primary"
-                            className="flex-1 bg-amber-600 hover:bg-amber-700"
+                            className={`flex-1 ${editStatus === 'cancelled' ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-600 hover:bg-amber-700'}`}
                             disabled={processing}
                             onClick={handleUpdateDelivery}
                         >
-                            {processing ? 'Saving...' : '💾 Save Changes'}
+                            {processing ? 'Saving...' : editStatus === 'cancelled' ? '⚠️ Mark as Failed' : '💾 Save Changes'}
                         </Button>
                     </div>
                 </Card>
