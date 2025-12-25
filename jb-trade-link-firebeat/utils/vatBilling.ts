@@ -68,7 +68,13 @@ const getDeliveredItems = (row: DeliveryReportRow, methodAmount: number): BillIt
     console.log(`[getDeliveredItems] Order items:`, orderItems);
 
     // Calculate subtotal from items, using qty * rate if total is missing
-    const derivedSubtotal = orderItems.reduce((acc, i) => acc + (i.total || (i.qty * i.rate) || 0), 0);
+    // Explicitly cast to Number to prevent string-math issues
+    const derivedSubtotal = orderItems.reduce((acc, i) => {
+        const qty = Number(i.qty) || 0;
+        const rate = Number(i.rate) || 0;
+        const total = Number(i.total) || (qty * rate);
+        return acc + total;
+    }, 0);
 
     console.log(`[getDeliveredItems] derivedSubtotal: ${derivedSubtotal}`);
 
@@ -81,22 +87,27 @@ const getDeliveredItems = (row: DeliveryReportRow, methodAmount: number): BillIt
     const scalingFactor = methodAmount / derivedSubtotal;
 
     const result = orderItems.map(item => {
-        const billedQty = item.qty * scalingFactor;
+        // Explicit Number casting to prevent string-math issues
+        const qty = Number(item.qty) || 0;
+        const rate = Number(item.rate) || 0;
+        const total = Number(item.total) || (qty * rate);
+
+        const billedQty = qty * scalingFactor;
 
         // item.rate and item.total are AFTER VAT (from DB)
         // First scale the total, then remove VAT
-        const itemTotalAfterVat = (item.total || (item.qty * item.rate) || 0) * scalingFactor;
+        const itemTotalAfterVat = total * scalingFactor;
         const itemTotalBeforeVat = itemTotalAfterVat / (1 + VAT_RATE);
-        const rateBeforeVat = item.rate / (1 + VAT_RATE);
+        const rateBeforeVat = rate / (1 + VAT_RATE);
 
-        console.log(`[getDeliveredItems] Item: ${item.productName}, qty: ${item.qty}, rate: ${item.rate}, total: ${item.total}`);
+        console.log(`[getDeliveredItems] Item: ${item.productName}, qty: ${qty}, rate: ${rate}, total: ${total}`);
         console.log(`[getDeliveredItems]   -> billedQty: ${billedQty}, itemTotalAfterVat: ${itemTotalAfterVat}, itemTotalBeforeVat: ${itemTotalBeforeVat}`);
 
         return {
-            productName: item.productName,
+            productName: item.productName || 'Unknown Product',
             quantity: Number(billedQty.toFixed(2)),
             rateBeforeVat: Number(rateBeforeVat.toFixed(2)),
-            rate: item.rate,
+            rate: rate,
             total: Number(itemTotalBeforeVat.toFixed(2))
         };
     }).filter(i => i.total > 0.01);

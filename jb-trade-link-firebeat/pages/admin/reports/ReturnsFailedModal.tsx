@@ -49,36 +49,62 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
         if (isFailed) {
             row.order.items.forEach(item => {
                 if (!item) return;
-                const itemTotal = item.total || (item.qty * item.rate) || 0;
+
+                // Explicit Number casting
+                const qty = Number(item.qty) || 0;
+                const rate = Number(item.rate) || 0;
+                const total = Number(item.total) || (qty * rate);
+
                 returnItems.push({
                     invoiceNumber: row.invoiceNumber || 'N/A',
                     customerName: row.customerName || 'Unknown',
                     productName: item.productName || 'Unknown Product',
-                    qtyOrdered: item.qty || 0,
+                    qtyOrdered: qty,
                     qtyReturned: 0,
-                    qtyFailed: item.qty || 0,
+                    qtyFailed: qty,
                     reason: 'Delivery Failed',
-                    amount: itemTotal
+                    amount: total
                 });
             });
         } else if (isReturned || hasReturns) {
-            if (!row.netAmount || row.netAmount <= 0) return;
+            const netAmount = Number(row.netAmount) || 0;
+            const returnAmount = Number(row.returnAmount) || 0;
+
+            if (netAmount <= 0) {
+                console.warn(`Row ${idx}: Invalid netAmount: ${netAmount}`);
+                return;
+            }
 
             row.order.items.forEach(item => {
                 if (!item) return;
-                const returnFraction = (row.returnAmount || 0) / row.netAmount;
-                const estimatedReturnQty = Math.round((item.qty || 0) * returnFraction);
+
+                // Explicit Number casting
+                const qty = Number(item.qty) || 0;
+                const rate = Number(item.rate) || 0;
+
+                let estimatedReturnQty = 0;
+
+                // If we have return amount data, calculate proportionally
+                if (returnAmount > 0) {
+                    const returnFraction = returnAmount / netAmount;
+                    estimatedReturnQty = Math.round(qty * returnFraction);
+                } else {
+                    // If no return amount but status is returned, assume full return
+                    estimatedReturnQty = qty;
+                }
+
+                console.log(`Row ${idx} Item: ${item.productName}, qty=${qty}, returnAmount=${returnAmount}, estimatedReturnQty=${estimatedReturnQty}`);
 
                 if (estimatedReturnQty > 0) {
                     returnItems.push({
                         invoiceNumber: row.invoiceNumber || 'N/A',
                         customerName: row.customerName || 'Unknown',
                         productName: item.productName || 'Unknown Product',
-                        qtyOrdered: item.qty || 0,
+                        qtyOrdered: qty,
                         qtyReturned: estimatedReturnQty,
                         qtyFailed: 0,
                         reason: row.salesReturn?.reason || 'Customer Return',
-                        amount: (item.rate || 0) * estimatedReturnQty
+                        amount: rate * estimatedReturnQty
                     });
                 }
             });
