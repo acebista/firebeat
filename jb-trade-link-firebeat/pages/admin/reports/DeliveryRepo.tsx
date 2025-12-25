@@ -51,6 +51,33 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
 
     const { rows, summary } = data;
 
+    // Capitalize first letter of each word
+    const capitalize = (str: string): string => {
+        return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+    };
+
+    // Parse payment breakdown from order remarks (format: "Payments: CASH: ₹1000, QR: ₹500")
+    const parsePaymentBreakdown = (order: Order): { method: string; amount: number }[] | null => {
+        const remarks = order.remarks || '';
+        const paymentMatch = remarks.match(/Payments:\s*([^|]+)/);
+        if (!paymentMatch) return null;
+
+        const paymentsStr = paymentMatch[1];
+        const entries: { method: string; amount: number }[] = [];
+
+        // Match patterns like "CASH: ₹1000" or "QR: ₹500 (ref123)"
+        const regex = /(\w+):\s*₹?(\d+(?:\.\d+)?)/g;
+        let match;
+        while ((match = regex.exec(paymentsStr)) !== null) {
+            entries.push({
+                method: capitalize(match[1]),
+                amount: parseFloat(match[2])
+            });
+        }
+
+        return entries.length > 0 ? entries : null;
+    };
+
     // Payment method colors
     const getPaymentColor = (method: string): string => {
         switch (method.toLowerCase()) {
@@ -213,9 +240,24 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
                                         <td className="px-3 py-2 text-right text-red-600">₹{row.discount.toFixed(2)}</td>
                                         <td className="px-3 py-2 text-right font-semibold text-gray-900">₹{row.netAmount.toFixed(2)}</td>
                                         <td className="px-3 py-2 text-center">
-                                            <Badge color={getPaymentColor(row.paymentMethod) as any}>
-                                                {row.paymentMethod}
-                                            </Badge>
+                                            {row.paymentMethod.toLowerCase() === 'multiple' ? (
+                                                <div className="flex flex-col gap-1">
+                                                    {parsePaymentBreakdown(row.order)?.map((entry, idx) => (
+                                                        <div key={idx} className="flex items-center justify-center gap-1">
+                                                            <Badge color={getPaymentColor(entry.method) as any}>
+                                                                {entry.method}
+                                                            </Badge>
+                                                            <span className="text-xs text-gray-600">₹{entry.amount.toFixed(0)}</span>
+                                                        </div>
+                                                    )) || (
+                                                            <Badge color="purple">Multiple</Badge>
+                                                        )}
+                                                </div>
+                                            ) : (
+                                                <Badge color={getPaymentColor(row.paymentMethod) as any}>
+                                                    {capitalize(row.paymentMethod)}
+                                                </Badge>
+                                            )}
                                         </td>
                                         <td className="px-3 py-2 text-right font-bold text-emerald-600">
                                             ₹{row.collectedAmount.toFixed(2)}
