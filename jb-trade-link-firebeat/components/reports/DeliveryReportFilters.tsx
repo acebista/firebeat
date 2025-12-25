@@ -1,11 +1,12 @@
 import React from 'react';
 import { Card, Button, Select } from '../../components/ui/Elements';
-import { Calendar, User, RefreshCw } from 'lucide-react';
+import { Calendar, User, RefreshCw, UserCircle } from 'lucide-react';
 
 export interface DeliveryReportFilters {
     startDate: string;
     endDate: string;
     deliveryUserId: string;
+    salespersonId: string;
 }
 
 interface DeliveryReportFiltersProps {
@@ -13,6 +14,7 @@ interface DeliveryReportFiltersProps {
     setFilters: (filters: DeliveryReportFilters) => void;
     onGenerate: () => void;
     deliveryUsers: Array<{ id: string; name: string }>;
+    salesUsers: Array<{ id: string; name: string }>;
     loading?: boolean;
 }
 
@@ -21,6 +23,7 @@ export const DeliveryReportFilters: React.FC<DeliveryReportFiltersProps> = ({
     setFilters,
     onGenerate,
     deliveryUsers,
+    salesUsers,
     loading = false
 }) => {
     const handleDateChange = (field: 'startDate' | 'endDate', value: string) => {
@@ -31,12 +34,17 @@ export const DeliveryReportFilters: React.FC<DeliveryReportFiltersProps> = ({
         setFilters({ ...filters, deliveryUserId: value });
     };
 
+    const handleSalespersonChange = (value: string) => {
+        setFilters({ ...filters, salespersonId: value });
+    };
+
     const handleClearFilters = () => {
         const today = new Date().toISOString().split('T')[0];
         setFilters({
             startDate: today,
             endDate: today,
-            deliveryUserId: ''
+            deliveryUserId: '',
+            salespersonId: ''
         });
     };
 
@@ -44,6 +52,15 @@ export const DeliveryReportFilters: React.FC<DeliveryReportFiltersProps> = ({
     const deliveryUserOptions = [
         { label: 'All Delivery Users', value: '' },
         ...deliveryUsers.map(user => ({
+            label: user.name,
+            value: user.id
+        }))
+    ];
+
+    // Prepare salesperson options
+    const salespersonOptions = [
+        { label: 'All Salespersons', value: '' },
+        ...salesUsers.map(user => ({
             label: user.name,
             value: user.id
         }))
@@ -69,7 +86,7 @@ export const DeliveryReportFilters: React.FC<DeliveryReportFiltersProps> = ({
                 </div>
 
                 {/* Filter Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                     {/* Start Date */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -118,6 +135,20 @@ export const DeliveryReportFilters: React.FC<DeliveryReportFiltersProps> = ({
                         />
                     </div>
 
+                    {/* Salesperson Filter */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                            <UserCircle className="h-4 w-4" />
+                            Salesperson
+                        </label>
+                        <Select
+                            options={salespersonOptions}
+                            value={filters.salespersonId}
+                            onChange={handleSalespersonChange}
+                            disabled={loading}
+                        />
+                    </div>
+
                     {/* Generate Button */}
                     <div className="flex items-end">
                         <Button
@@ -132,7 +163,7 @@ export const DeliveryReportFilters: React.FC<DeliveryReportFiltersProps> = ({
                 </div>
 
                 {/* Active Filters Summary */}
-                {(filters.deliveryUserId || filters.startDate !== filters.endDate) && (
+                {(filters.deliveryUserId || filters.salespersonId || filters.startDate !== filters.endDate) && (
                     <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-200">
                         <span className="text-xs text-gray-600 font-medium">Active Filters:</span>
 
@@ -146,6 +177,13 @@ export const DeliveryReportFilters: React.FC<DeliveryReportFiltersProps> = ({
                             <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                                 <User className="h-3 w-3 mr-1" />
                                 {deliveryUsers.find(u => u.id === filters.deliveryUserId)?.name || 'Selected User'}
+                            </span>
+                        )}
+
+                        {filters.salespersonId && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                                <UserCircle className="h-3 w-3 mr-1" />
+                                {salesUsers.find(u => u.id === filters.salespersonId)?.name || 'Selected Salesperson'}
                             </span>
                         )}
                     </div>

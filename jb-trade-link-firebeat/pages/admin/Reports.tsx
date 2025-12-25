@@ -285,11 +285,14 @@ export const Reports: React.FC = () => {
   const [deliveryFilters, setDeliveryFilters] = useState<DeliveryFiltersType>({
     startDate: new Date().toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
-    deliveryUserId: ''
+    deliveryUserId: '',
+    salespersonId: ''
   });
 
   // Delivery users for filter dropdown
   const [deliveryUsers, setDeliveryUsers] = useState<User[]>([]);
+  // Sales users for filter dropdown
+  const [salesUsers, setSalesUsers] = useState<User[]>([]);
 
   const [loading, setLoading] = useState(false);
   const [deliveryReportError, setDeliveryReportError] = useState<string | null>(null);
@@ -383,6 +386,15 @@ export const Reports: React.FC = () => {
       const deliveryRoleUsers = allUsers.filter(u => u.role === 'delivery');
       setDeliveryUsers(deliveryRoleUsers);
 
+      // Store sales users for filter dropdown
+      const salesRoleUsers = allUsers.filter(u => u.role === 'sales');
+      setSalesUsers(salesRoleUsers);
+
+      // Apply salesperson filter if specified
+      if (deliveryFilters.salespersonId) {
+        orders = orders.filter(o => o.salespersonId === deliveryFilters.salespersonId);
+      }
+
       // Fetch all returns to link with invoices
       const allReturns = await ReturnService.getAll();
       const returnsByInvoiceId = new Map<string, SalesReturn>();
@@ -434,6 +446,9 @@ export const Reports: React.FC = () => {
       if (deliveryFilters.deliveryUserId) {
         filteredRows = rows.filter(r => r.deliveryUserId === deliveryFilters.deliveryUserId);
       }
+
+      // Sort by invoice number in ascending order
+      filteredRows.sort((a, b) => a.invoiceNumber.localeCompare(b.invoiceNumber));
 
       // Calculate summary statistics
       const summary = {
@@ -532,6 +547,7 @@ export const Reports: React.FC = () => {
           filters={deliveryFilters}
           setFilters={setDeliveryFilters}
           deliveryUsers={deliveryUsers}
+          salesUsers={salesUsers}
           onGenerate={fetchDeliveryData}
           loading={loading}
         />
