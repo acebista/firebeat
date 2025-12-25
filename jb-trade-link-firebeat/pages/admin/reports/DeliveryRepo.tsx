@@ -62,6 +62,13 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
 
     const { rows, summary } = data;
 
+    // DEBUG: Log the first row's order structure
+    if (rows.length > 0) {
+        console.log('[DeliveryReport] First row:', rows[0]);
+        console.log('[DeliveryReport] First row order:', rows[0].order);
+        console.log('[DeliveryReport] First row order.items:', rows[0].order?.items);
+    }
+
     // Capitalize first letter of each word
     const capitalize = (str: string): string => {
         return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
