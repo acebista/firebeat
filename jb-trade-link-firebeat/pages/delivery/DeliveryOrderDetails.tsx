@@ -304,13 +304,33 @@ export const DeliveryOrderDetails: React.FC = () => {
 
         setProcessing(true);
         try {
+            const currentTripId = order.assignedTripId;
+
+            // Update order: change status, date, and clear trip assignment
             await OrderService.update(order.id, {
                 status: 'approved',
                 date: newDate, // CRITICAL: Move order to the new date
                 assignedTripId: undefined,
                 remarks: `Rescheduled to ${newDate}${remarks ? ` | ${remarks}` : ''}`
             });
-            toast.success(`Delivery rescheduled to ${newDate} and order returned to dispatch pool.`);
+
+            // CRITICAL: Remove order from trip's orderIds array
+            if (currentTripId) {
+                try {
+                    const trip = await TripService.getById(currentTripId);
+                    if (trip && trip.orderIds) {
+                        const updatedOrderIds = trip.orderIds.filter(id => id !== order.id);
+                        await TripService.update(trip.id, {
+                            orderIds: updatedOrderIds,
+                            totalOrders: updatedOrderIds.length
+                        });
+                    }
+                } catch (tripError) {
+                    console.error('Failed to update trip orderIds', tripError);
+                }
+            }
+
+            toast.success(`Delivery rescheduled to ${newDate} and removed from current trip.`);
             navigate('/delivery/dashboard');
         } catch (e) {
             console.error(e);
