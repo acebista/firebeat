@@ -5,8 +5,9 @@ import { DeliveryReportRow } from '../pages/admin/reports/DeliveryRepo';
 interface BillItem {
     productName: string;
     quantity: number;
-    rate: number;
-    total: number;
+    rateBeforeVat: number;  // Price before VAT
+    rate: number;           // Price after VAT (from DB)
+    total: number;          // Line total before VAT
 }
 
 export interface VatBill {
@@ -15,10 +16,12 @@ export interface VatBill {
     paymentMethod: string;
     invoiceIds: string[];
     invoiceNumbers: string[];
-    totalAmount: number;
+    subtotal: number;       // Total before VAT
+    discount: number;       // Discount amount
+    vatAmount: number;      // VAT amount (13%)
+    totalAmount: number;    // Final total with VAT
     date: string;
-    itemsFormatted?: string;
-    items: BillItem[]; // Added items array
+    items: BillItem[];
 }
 
 const parseBreakdown = (row: DeliveryReportRow): { method: string; amount: number }[] => {
@@ -55,34 +58,37 @@ const parseBreakdown = (row: DeliveryReportRow): { method: string; amount: numbe
 
 /**
  * Calculate actual delivered items for a row using proportional scaling.
- * This implicitly accounts for returns/damages by scaling down the original items
- * so that their total equals the bill amount (methodAmount).
+ * Converts prices to before-VAT amounts (assuming 13% VAT rate).
  */
 const getDeliveredItems = (row: DeliveryReportRow, methodAmount: number): BillItem[] => {
     const orderItems = row.order.items || [];
+    const VAT_RATE = 0.13; // 13% VAT
 
-    // Calculate subtotal from items to ensure consistency
+    // Calculate subtotal from items
     const derivedSubtotal = orderItems.reduce((acc, i) => acc + (i.total || 0), 0);
 
-    // Avoid division by zero
     if (derivedSubtotal <= 0) return [];
 
-    // Scaling factor: How much of the original scope does this payment cover?
-    // Formula: (ItemTotal / Subtotal) * MethodAmount
+    // Scaling factor for partial payments/returns
     const scalingFactor = methodAmount / derivedSubtotal;
 
     return orderItems.map(item => {
-        // Calculate scaled quantity and total
-        const billedTotal = (item.total || 0) * scalingFactor;
         const billedQty = item.qty * scalingFactor;
+
+        // item.rate is AFTER VAT, so we need to reverse it
+        // rateAfterVat = rateBeforeVat * (1 + VAT_RATE)
+        // rateBeforeVat = rateAfterVat / (1 + VAT_RATE)
+        const rateBeforeVat = item.rate / (1 + VAT_RATE);
+        const lineTotal = rateBeforeVat * billedQty;
 
         return {
             productName: item.productName,
             quantity: Number(billedQty.toFixed(2)),
+            rateBeforeVat: Number(rateBeforeVat.toFixed(2)),
             rate: item.rate,
-            total: Number(billedTotal.toFixed(2))
+            total: Number(lineTotal.toFixed(2))
         };
-    }).filter(i => i.total > 0.01); // Filter out negligible amounts
+    }).filter(i => i.total > 0.01);
 };
 
 export const generateVatBills = (rows: DeliveryReportRow[]): VatBill[] => {
@@ -103,25 +109,35 @@ export const generateVatBills = (rows: DeliveryReportRow[]): VatBill[] => {
 
             if (method === 'credit' || method === 'cheque') {
                 // INDIVIDUAL
+                const items = getDeliveredItems(row, bd.amount);
+                const subtotal = items.reduce((sum, i) => sum + i.total, 0);
+                const discount = 0;
+                const vatAmount = subtotal * 0.13;
+
                 bills.push({
                     id: `VAT-${method.toUpperCase()}-${row.invoiceNumber}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
                     type: 'Individual',
                     paymentMethod: method,
                     invoiceIds: [row.invoiceId],
                     invoiceNumbers: [row.invoiceNumber],
-                    totalAmount: bd.amount,
+                    subtotal: Number(subtotal.toFixed(2)),
+                    discount: Number(discount.toFixed(2)),
+                    vatAmount: Number(vatAmount.toFixed(2)),
+                    totalAmount: Number((subtotal + vatAmount).toFixed(2)),
                     date: new Date().toISOString().split('T')[0],
-                    items: getDeliveredItems(row, bd.amount)
+                    items
                 });
             } else {
-                // COMBINED
-                if (!methodBuckets[method]) methodBuckets[method] = [];
-                methodBuckets[method].push({ rows: [row], amount: bd.amount });
+                // COMBINED - Treat both cash and QR as "cash"
+                const combinedMethod = (method === 'qr' || method === 'cash') ? 'cash' : method;
+                if (!methodBuckets[combinedMethod]) methodBuckets[combinedMethod] = [];
+                methodBuckets[combinedMethod].push({ rows: [row], amount: bd.amount });
             }
         });
     });
 
-    ['cash', 'qr'].forEach(method => {
+    // Only process 'cash' bucket (which now includes QR)
+    ['cash'].forEach(method => {
         const itemsList = methodBuckets[method] || [];
         if (itemsList.length === 0) return;
 
@@ -133,13 +149,21 @@ export const generateVatBills = (rows: DeliveryReportRow[]): VatBill[] => {
         itemsList.forEach(item => {
             if (currentBillAmount + item.amount > THRESHOLD) {
                 if (currentBillAmount > 0) {
+                    // Calculate VAT breakdown
+                    const subtotal = currentBillItems.reduce((sum, i) => sum + i.total, 0);
+                    const discount = 0; // Discount already applied in items
+                    const vatAmount = subtotal * 0.13;
+
                     bills.push({
-                        id: `VAT-${method.toUpperCase()}-COMB-${bills.length + 1}`,
+                        id: `VAT-CASH-COMB-${bills.length + 1}`,
                         type: 'Combined',
-                        paymentMethod: method,
+                        paymentMethod: 'cash/qr',
                         invoiceIds: [...currentBillInvoices],
                         invoiceNumbers: [...currentBillInvoiceNumbers],
-                        totalAmount: currentBillAmount,
+                        subtotal: Number(subtotal.toFixed(2)),
+                        discount: Number(discount.toFixed(2)),
+                        vatAmount: Number(vatAmount.toFixed(2)),
+                        totalAmount: Number((subtotal + vatAmount).toFixed(2)),
                         date: new Date().toISOString().split('T')[0],
                         items: currentBillItems
                     });
@@ -155,13 +179,13 @@ export const generateVatBills = (rows: DeliveryReportRow[]): VatBill[] => {
 
             if (!currentBillInvoices.includes(row.invoiceId)) {
                 currentBillInvoices.push(row.invoiceId);
-                currentBillInvoiceNumbers.push(row.invoiceNumber); // Use number for display
+                currentBillInvoiceNumbers.push(row.invoiceNumber);
             }
 
             // Aggregate items
             const rowItems = getDeliveredItems(row, item.amount);
             rowItems.forEach(newItem => {
-                const existing = currentBillItems.find(i => i.productName === newItem.productName && Math.abs(i.rate - newItem.rate) < 0.01);
+                const existing = currentBillItems.find(i => i.productName === newItem.productName && Math.abs(i.rateBeforeVat - newItem.rateBeforeVat) < 0.01);
                 if (existing) {
                     existing.quantity += newItem.quantity;
                     existing.total += newItem.total;
@@ -172,13 +196,20 @@ export const generateVatBills = (rows: DeliveryReportRow[]): VatBill[] => {
         });
 
         if (currentBillAmount > 0) {
+            const subtotal = currentBillItems.reduce((sum, i) => sum + i.total, 0);
+            const discount = 0;
+            const vatAmount = subtotal * 0.13;
+
             bills.push({
-                id: `VAT-${method.toUpperCase()}-COMB-${bills.length + 1}`,
+                id: `VAT-CASH-COMB-${bills.length + 1}`,
                 type: 'Combined',
-                paymentMethod: method,
+                paymentMethod: 'cash/qr',
                 invoiceIds: currentBillInvoices,
                 invoiceNumbers: currentBillInvoiceNumbers,
-                totalAmount: currentBillAmount,
+                subtotal: Number(subtotal.toFixed(2)),
+                discount: Number(discount.toFixed(2)),
+                vatAmount: Number(vatAmount.toFixed(2)),
+                totalAmount: Number((subtotal + vatAmount).toFixed(2)),
                 date: new Date().toISOString().split('T')[0],
                 items: currentBillItems
             });

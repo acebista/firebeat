@@ -129,13 +129,37 @@ export const VatBillDetailModal: React.FC<VatBillDetailModalProps> = ({ bill, on
                                         <td className="text-center">{idx + 1}</td>
                                         <td>{item.productName}</td>
                                         <td className="text-center">{item.quantity}</td>
-                                        <td className="text-right">₹{item.rate.toFixed(2)}</td>
+                                        <td className="text-right">₹{item.rateBeforeVat.toFixed(2)}</td>
                                         <td className="text-right">₹{item.total.toFixed(2)}</td>
                                     </tr>
                                 ))}
-                                <tr className="total-row">
-                                    <td colSpan={4} className="text-right" style={{ fontWeight: 'bold' }}>TOTAL</td>
-                                    <td className="text-right" style={{ fontWeight: 'bold', fontSize: '15px' }}>
+
+                                {/* Subtotal */}
+                                <tr style={{ borderTop: '2px solid #333' }}>
+                                    <td colSpan={4} className="text-right" style={{ fontWeight: 'bold', paddingTop: '10px' }}>SUBTOTAL</td>
+                                    <td className="text-right" style={{ fontWeight: 'bold', paddingTop: '10px' }}>
+                                        ₹{bill.subtotal.toFixed(2)}
+                                    </td>
+                                </tr>
+
+                                {/* Discount */}
+                                {bill.discount > 0 && (
+                                    <tr>
+                                        <td colSpan={4} className="text-right">Discount</td>
+                                        <td className="text-right">-₹{bill.discount.toFixed(2)}</td>
+                                    </tr>
+                                )}
+
+                                {/* VAT */}
+                                <tr>
+                                    <td colSpan={4} className="text-right">VAT (13%)</td>
+                                    <td className="text-right">₹{bill.vatAmount.toFixed(2)}</td>
+                                </tr>
+
+                                {/* Grand Total */}
+                                <tr className="total-row" style={{ borderTop: '2px solid #333' }}>
+                                    <td colSpan={4} className="text-right" style={{ fontWeight: 'bold', fontSize: '15px' }}>GRAND TOTAL</td>
+                                    <td className="text-right" style={{ fontWeight: 'bold', fontSize: '16px' }}>
                                         ₹{bill.totalAmount.toFixed(2)}
                                     </td>
                                 </tr>
