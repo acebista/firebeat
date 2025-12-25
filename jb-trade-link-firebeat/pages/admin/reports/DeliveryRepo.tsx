@@ -34,6 +34,7 @@ export interface DeliveryReportData {
         totalReturned: number;
         totalPartiallyReturned: number;
         totalFailed: number;
+        totalRescheduled: number;
         totalAmount: number;
         totalCollected: number;
         paymentBreakdown: Record<string, { count: number; amount: number }>;
@@ -100,6 +101,7 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
             case 'partially_returned': return 'amber';
             case 'returned':
             case 'cancelled': return 'red';
+            case 'approved': return 'purple'; // Rescheduled orders
             default: return 'slate';
         }
     };
@@ -120,7 +122,7 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
             </div>
 
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
                 <Card className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200">
                     <div className="flex items-center justify-between">
                         <div>
@@ -160,6 +162,16 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
                             <p className="text-2xl font-bold text-red-600">{summary.totalFailed}</p>
                         </div>
                         <TrendingDown className="h-10 w-10 text-red-600 opacity-80" />
+                    </div>
+                </Card>
+
+                <Card className="p-4 bg-gradient-to-br from-violet-50 to-indigo-50 border-2 border-violet-300">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm text-gray-600 font-medium">Rescheduled</p>
+                            <p className="text-2xl font-bold text-violet-600">{summary.totalRescheduled}</p>
+                        </div>
+                        <TrendingDown className="h-10 w-10 text-violet-600 opacity-80" />
                     </div>
                 </Card>
 

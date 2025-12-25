@@ -9,7 +9,7 @@ import { ChallanReport } from './reports/ChallanRepo';
 import { DeliveryReport, DeliveryReportData } from './reports/DeliveryRepo';
 import { DeliveryReportFilters, DeliveryReportFilters as DeliveryFiltersType } from '../../components/reports/DeliveryReportFilters';
 import { FileText, Truck, Percent, AlertTriangle, FileCheck, UserCheck } from 'lucide-react';
-import { OrderService, ProductService, UserService, ReturnService, CompanyService } from '../../services/db';
+import { OrderService, ProductService, UserService, ReturnService, CompanyService, TripService } from '../../services/db';
 import { CommissionRateService } from '../../services/hr'; // Import CommissionRateService
 import { Order, Product, User, SalesReturn, Company } from '../../types';
 import { CommissionRate } from '../../types/hr'; // Import CommissionRate type
@@ -276,6 +276,7 @@ export const Reports: React.FC = () => {
       totalReturned: 0,
       totalPartiallyReturned: 0,
       totalFailed: 0,
+      totalRescheduled: 0,
       totalAmount: 0,
       totalCollected: 0,
       paymentBreakdown: {}
@@ -374,9 +375,12 @@ export const Reports: React.FC = () => {
         deliveryFilters.endDate
       );
 
-      // Include cancelled (failed deliveries) in the report
+      // Include delivered, cancelled (failed), and any order that was assigned to a trip
       const deliveryStatuses = ['delivered', 'completed', 'dispatched', 'partially_returned', 'returned', 'cancelled'];
-      orders = orders.filter(o => deliveryStatuses.includes(o.status));
+      orders = orders.filter(o =>
+        deliveryStatuses.includes(o.status) ||
+        (o as any).assignedTripId // Include rescheduled orders that were on a trip
+      );
 
       // Fetch all users to resolve delivery user names
       const allUsers = await UserService.getAll();
@@ -390,6 +394,14 @@ export const Reports: React.FC = () => {
       // Store sales users for filter dropdown
       const salesRoleUsers = allUsers.filter(u => u.role === 'sales');
       setSalesUsers(salesRoleUsers);
+
+      // Fetch all trips to resolve delivery person for undelivered orders
+      const allTrips = await TripService.getAll();
+      const tripMap = new Map<string, { deliveryPersonId: string; deliveryPersonName: string }>();
+      allTrips.forEach(t => tripMap.set(t.id, {
+        deliveryPersonId: t.deliveryPersonId,
+        deliveryPersonName: t.deliveryPersonName
+      }));
 
       // Apply salesperson filter if specified
       if (deliveryFilters.salespersonId) {
@@ -408,10 +420,21 @@ export const Reports: React.FC = () => {
         const salesReturn = returnsByInvoiceId.get(order.id);
         const returnAmount = salesReturn?.totalReturnAmount || 0;
 
-        // Use the newly added AR/Reporting fields
-        const deliveryUserId = order.delivered_by || '';
-        const deliveryUser = deliveryUserId ? userMap.get(deliveryUserId) : null;
-        const deliveryUserName = deliveryUser?.name || '';
+        // Use delivered_by first, then fall back to trip's delivery person for undelivered orders
+        let deliveryUserId = order.delivered_by || '';
+        let deliveryUserName = '';
+
+        if (deliveryUserId) {
+          const deliveryUser = userMap.get(deliveryUserId);
+          deliveryUserName = deliveryUser?.name || '';
+        } else if ((order as any).assignedTripId) {
+          // For cancelled/dispatched orders, get delivery person from trip
+          const tripInfo = tripMap.get((order as any).assignedTripId);
+          if (tripInfo) {
+            deliveryUserId = tripInfo.deliveryPersonId;
+            deliveryUserName = tripInfo.deliveryPersonName;
+          }
+        }
 
         // Get payment method from the delivery capture field
         const paymentMethod = order.payment_method_at_delivery || order.paymentMode || 'cash';
@@ -466,6 +489,8 @@ export const Reports: React.FC = () => {
         ).length,
         // Failed = cancelled orders (failed delivery attempts)
         totalFailed: filteredRows.filter(r => r.status.toLowerCase() === 'cancelled').length,
+        // Rescheduled = orders with rescheduled_from set (status is typically approved)
+        totalRescheduled: filteredRows.filter(r => (r.order as any).rescheduled_from).length,
         totalAmount: filteredRows.reduce((sum, r) => sum + r.netAmount, 0),
         totalCollected: filteredRows.reduce((sum, r) => sum + r.collectedAmount, 0),
         paymentBreakdown: filteredRows.reduce((breakdown, row) => {
@@ -502,6 +527,7 @@ export const Reports: React.FC = () => {
           totalReturned: 0,
           totalPartiallyReturned: 0,
           totalFailed: 0,
+          totalRescheduled: 0,
           totalAmount: 0,
           totalCollected: 0,
           paymentBreakdown: {},
