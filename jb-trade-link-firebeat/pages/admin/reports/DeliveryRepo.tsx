@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Card, Button, Badge } from '../../../components/ui/Elements';
-import { Download, Printer, Eye, X, TrendingUp, TrendingDown, DollarSign, Package, User } from 'lucide-react';
+import { generateVatBills, VatBill } from '../../../utils/vatBilling';
+import { Download, Printer, Eye, X, TrendingUp, TrendingDown, DollarSign, Package, User, FileText } from 'lucide-react';
 import { printContent } from '../../../lib/printUtils';
 import { Order, SalesReturn } from '../../../types';
 import { PaymentMode } from '../../../types/delivery-order';
@@ -48,6 +49,8 @@ interface DeliveryReportProps {
 export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
     const [selectedInvoice, setSelectedInvoice] = useState<DeliveryReportRow | null>(null);
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
+    const [showVatModal, setShowVatModal] = useState(false);
+    const [generatedBills, setGeneratedBills] = useState<VatBill[]>([]);
 
     const handlePrint = () => {
         printContent('Delivery Report', 'delivery-report-print');
@@ -107,12 +110,24 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
         }
     };
 
+
+    // Effect to generate bills when modal opens
+    React.useEffect(() => {
+        if (showVatModal && rows.length > 0) {
+            const bills = generateVatBills(rows);
+            setGeneratedBills(bills);
+        }
+    }, [showVatModal, rows]);
+
     return (
         <div className="space-y-6">
             {/* Header with Actions */}
             <div className="flex justify-between items-center">
                 <h3 className="text-lg font-bold text-gray-800">Delivery Performance Report</h3>
                 <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setShowVatModal(true)}>
+                        <FileText className="mr-2 h-4 w-4" /> VAT Bills
+                    </Button>
                     <Button variant="outline" size="sm" onClick={handlePrint}>
                         <Printer className="mr-2 h-4 w-4" /> Print
                     </Button>
@@ -121,6 +136,8 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
                     </Button>
                 </div>
             </div>
+
+            {/* ... rest of the existing UI ... */}
 
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -404,6 +421,97 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
                     </tbody>
                 </table>
             </div>
+
+            {/* VAT Bill Calculation Modal */}
+            {showVatModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+                        <div className="bg-gradient-to-r from-teal-600 to-green-600 px-6 py-4 flex items-center justify-between shrink-0">
+                            <div>
+                                <h3 className="text-xl font-bold text-white">Generated VAT Bills</h3>
+                                <p className="text-sm text-teal-100">Based on {rows.length} invoices in current view</p>
+                            </div>
+                            <button onClick={() => setShowVatModal(false)} className="text-white hover:bg-white/20 rounded-full p-2 transition-colors">
+                                <X className="h-6 w-6" />
+                            </button>
+                        </div>
+
+                        <div className="p-6 overflow-auto flex-1 bg-gray-50">
+                            {/* Stats Summary */}
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                                <Card className="p-4 bg-white border-l-4 border-emerald-500">
+                                    <div className="text-gray-500 text-xs uppercase font-bold">Total Bills</div>
+                                    <div className="text-2xl font-bold text-gray-800">{generatedBills.length}</div>
+                                </Card>
+                                <Card className="p-4 bg-white border-l-4 border-blue-500">
+                                    <div className="text-gray-500 text-xs uppercase font-bold">Cash/QR Bill Sets</div>
+                                    <div className="text-2xl font-bold text-gray-800">
+                                        {generatedBills.filter(b => b.type === 'Combined').length}
+                                    </div>
+                                </Card>
+                                <Card className="p-4 bg-white border-l-4 border-purple-500">
+                                    <div className="text-gray-500 text-xs uppercase font-bold">Credit/Cheque Bills</div>
+                                    <div className="text-2xl font-bold text-gray-800">
+                                        {generatedBills.filter(b => b.type === 'Individual').length}
+                                    </div>
+                                </Card>
+                                <Card className="p-4 bg-white border-l-4 border-amber-500">
+                                    <div className="text-gray-500 text-xs uppercase font-bold">Total VAT Amount</div>
+                                    <div className="text-2xl font-bold text-gray-800">
+                                        ₹{generatedBills.reduce((sum, b) => sum + b.totalAmount, 0).toLocaleString()}
+                                    </div>
+                                </Card>
+                            </div>
+
+                            {/* Table */}
+                            <div className="bg-white rounded-lg shadow overflow-hidden">
+                                <table className="min-w-full divide-y divide-gray-200 text-sm">
+                                    <thead className="bg-gray-100">
+                                        <tr>
+                                            <th className="px-4 py-3 text-left font-medium text-gray-500">Bill ID</th>
+                                            <th className="px-4 py-3 text-center font-medium text-gray-500">Type</th>
+                                            <th className="px-4 py-3 text-center font-medium text-gray-500">Method</th>
+                                            <th className="px-4 py-3 text-left font-medium text-gray-500">Invoices Included</th>
+                                            <th className="px-4 py-3 text-right font-medium text-gray-500">Total Amount</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200">
+                                        {generatedBills.map(bill => (
+                                            <tr key={bill.id} className="hover:bg-gray-50">
+                                                <td className="px-4 py-3 font-mono text-xs text-indigo-600 font-medium">{bill.id}</td>
+                                                <td className="px-4 py-3 text-center">
+                                                    <Badge color={bill.type === 'Combined' ? 'blue' : 'purple' as any}>{bill.type}</Badge>
+                                                </td>
+                                                <td className="px-4 py-3 text-center uppercase text-xs font-bold text-gray-700">
+                                                    {bill.paymentMethod}
+                                                </td>
+                                                <td className="px-4 py-3 text-xs text-gray-600 max-w-md">
+                                                    <div className="truncate" title={bill.invoiceNumbers.join(', ')}>
+                                                        {bill.invoiceNumbers.length > 5
+                                                            ? `${bill.invoiceNumbers.slice(0, 5).join(', ')} ... +${bill.invoiceNumbers.length - 5} more`
+                                                            : bill.invoiceNumbers.join(', ')
+                                                        }
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-bold text-gray-900">
+                                                    ₹{bill.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div className="p-4 bg-white border-t flex justify-end gap-3">
+                            <Button variant="outline" onClick={() => setShowVatModal(false)}>Close</Button>
+                            <Button className="bg-teal-600 hover:bg-teal-700 text-white">
+                                <Download className="mr-2 h-4 w-4" /> Save / Export
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
