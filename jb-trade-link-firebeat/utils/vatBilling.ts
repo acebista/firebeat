@@ -64,8 +64,8 @@ const getDeliveredItems = (row: DeliveryReportRow, methodAmount: number): BillIt
     const orderItems = row.order.items || [];
     const VAT_RATE = 0.13; // 13% VAT
 
-    // Calculate subtotal from items
-    const derivedSubtotal = orderItems.reduce((acc, i) => acc + (i.total || 0), 0);
+    // Calculate subtotal from items, using qty * rate if total is missing
+    const derivedSubtotal = orderItems.reduce((acc, i) => acc + (i.total || (i.qty * i.rate) || 0), 0);
 
     if (derivedSubtotal <= 0) return [];
 
@@ -77,7 +77,7 @@ const getDeliveredItems = (row: DeliveryReportRow, methodAmount: number): BillIt
 
         // item.rate and item.total are AFTER VAT (from DB)
         // First scale the total, then remove VAT
-        const itemTotalAfterVat = (item.total || 0) * scalingFactor;
+        const itemTotalAfterVat = (item.total || (item.qty * item.rate) || 0) * scalingFactor;
         const itemTotalBeforeVat = itemTotalAfterVat / (1 + VAT_RATE);
         const rateBeforeVat = item.rate / (1 + VAT_RATE);
 

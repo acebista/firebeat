@@ -43,7 +43,7 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
                     qtyReturned: 0,
                     qtyFailed: item.qty,
                     reason: 'Delivery Failed',
-                    amount: item.total
+                    amount: item.total || (item.qty * item.rate) || 0
                 });
             });
         } else if (isReturned || (hasReturns && row.returnAmount && row.returnAmount > 0)) {
