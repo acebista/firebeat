@@ -1170,7 +1170,7 @@ const DamageModal: React.FC<{
         const productInInvoice = order.items.find(i => i.productId === selectedProduct) ||
             order.items.find(i => i.productName.toLowerCase() === (product.name || product.productName || '').toLowerCase());
 
-        const rate = productInInvoice ? productInInvoice.rate : (Number(product.price) || Number(product.rate) || 0);
+        const rate = productInInvoice ? Number(productInInvoice.rate) : (Number(product.discountedRate) || Number(product.baseRate) || Number(product.price) || Number(product.rate) || 0);
 
         const newDamage: DamageItem = {
             productId: selectedProduct,
