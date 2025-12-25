@@ -76,7 +76,7 @@ export const DeliveryOrderDetails: React.FC = () => {
                         let normalizedItems = parsedItems.map((item: any) => ({
                             ...item,
                             productId: item.productId || item.product_id || item.id || '',
-                            productName: item.productName || item.product_name || item.name || 'Unknown Item',
+                            productName: item.productName || item.product_name || item.tempProductName || item.name || 'Unknown Item',
                             qty: Number(item.qty || item.quantity || 0),
                             rate: Number(item.rate || item.price || item.unit_price || 0),
                             total: Number(item.total || item.amount || 0)
@@ -691,8 +691,8 @@ export const DeliveryOrderDetails: React.FC = () => {
                                 type="button"
                                 onClick={() => setEditStatus('delivered')}
                                 className={`px-4 py-3 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${editStatus === 'delivered'
-                                        ? 'bg-emerald-100 border-2 border-emerald-500 text-emerald-800'
-                                        : 'bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100'
+                                    ? 'bg-emerald-100 border-2 border-emerald-500 text-emerald-800'
+                                    : 'bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100'
                                     }`}
                             >
                                 <CheckCircle className="h-4 w-4" />
@@ -702,8 +702,8 @@ export const DeliveryOrderDetails: React.FC = () => {
                                 type="button"
                                 onClick={() => setEditStatus('cancelled')}
                                 className={`px-4 py-3 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${editStatus === 'cancelled'
-                                        ? 'bg-red-100 border-2 border-red-500 text-red-800'
-                                        : 'bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100'
+                                    ? 'bg-red-100 border-2 border-red-500 text-red-800'
+                                    : 'bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100'
                                     }`}
                             >
                                 <XCircle className="h-4 w-4" />
