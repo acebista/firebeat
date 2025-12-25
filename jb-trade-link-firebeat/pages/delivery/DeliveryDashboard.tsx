@@ -164,7 +164,10 @@ export const DeliveryDashboard: React.FC = () => {
     for (const trip of trips) {
       if (trip.orderIds && trip.orderIds.length > 0) {
         const orders = await OrderService.getOrdersByIds(trip.orderIds);
-        const completed = orders.filter(o => o.status === 'delivered').length;
+        // Count both delivered and failed/cancelled as completed (finalized)
+        const completed = orders.filter(o =>
+          o.status === 'delivered' || o.status === 'cancelled' || o.status === 'completed'
+        ).length;
         const pending = orders.length - completed;
         const tripValue = orders.reduce((sum, o) => sum + o.totalAmount, 0);
 
@@ -627,7 +630,14 @@ export const DeliveryDashboard: React.FC = () => {
                                           Stop #{order.originalIndex + 1}
                                         </span>
                                         {order.status === 'delivered' && (
-                                          <CheckCircle size={14} className="text-green-600 flex-shrink-0" />
+                                          <span className="flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded">
+                                            <CheckCircle size={12} /> Delivered
+                                          </span>
+                                        )}
+                                        {order.status === 'cancelled' && (
+                                          <span className="flex items-center gap-1 text-xs font-semibold text-red-700 bg-red-100 px-2 py-0.5 rounded">
+                                            ✗ Failed
+                                          </span>
                                         )}
                                         {isMatch && (
                                           <span className="text-xs font-semibold text-yellow-700 bg-yellow-100 px-2 py-0.5 rounded">
@@ -640,12 +650,12 @@ export const DeliveryDashboard: React.FC = () => {
                                     </div>
                                     <div className="text-right flex-shrink-0">
                                       <p className="font-bold text-indigo-600">₹{order.totalAmount.toFixed(0)}</p>
-                                      {order.status === 'delivered' ? (
+                                      {(order.status === 'delivered' || order.status === 'cancelled' || order.status === 'completed') ? (
                                         <Button
                                           size="sm"
                                           variant="outline"
                                           onClick={() => navigate(`/delivery/invoice/${order.id}`)}
-                                          className="mt-1 text-xs border-amber-400 text-amber-700 hover:bg-amber-50"
+                                          className={`mt-1 text-xs ${order.status === 'cancelled' ? 'border-red-400 text-red-700 hover:bg-red-50' : 'border-amber-400 text-amber-700 hover:bg-amber-50'}`}
                                         >
                                           ✏️ Edit
                                         </Button>

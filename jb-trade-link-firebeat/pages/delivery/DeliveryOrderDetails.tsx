@@ -705,6 +705,100 @@ export const DeliveryOrderDetails: React.FC = () => {
                 </Card>
             )}
 
+            {/* Cancelled/Failed Order Display */}
+            {order.status === 'cancelled' && !isEditing && (
+                <Card className="p-6 bg-red-50 border border-red-200 rounded-xl">
+                    <div className="text-center mb-4">
+                        <XCircle className="h-12 w-12 text-red-600 mx-auto mb-2" />
+                        <p className="text-xl font-bold text-red-800">Delivery Failed ✗</p>
+                    </div>
+
+                    {/* Show failure details */}
+                    <div className="bg-white p-4 rounded-lg border border-red-100 mb-4 text-sm space-y-2">
+                        {order.remarks && (
+                            <div>
+                                <span className="text-gray-600">Reason:</span>
+                                <p className="text-red-800 mt-1 font-medium">{order.remarks}</p>
+                            </div>
+                        )}
+                        <div className="flex justify-between">
+                            <span className="text-gray-600">Order Amount:</span>
+                            <span className="font-semibold">₹{(order.totalAmount || 0).toLocaleString()}</span>
+                        </div>
+                    </div>
+
+                    <Button
+                        variant="outline"
+                        className="w-full border-2 border-red-400 text-red-700 hover:bg-red-50 font-bold"
+                        onClick={() => setIsEditing(true)}
+                    >
+                        ✏️ Edit / Reactivate Order
+                    </Button>
+                </Card>
+            )}
+
+            {/* Edit Mode for Cancelled Orders */}
+            {order.status === 'cancelled' && isEditing && (
+                <Card className="p-5 bg-gradient-to-br from-red-50 to-orange-50 border-2 border-red-300 rounded-xl shadow-sm mb-4">
+                    <h3 className="font-bold text-gray-900 mb-4 flex items-center justify-between">
+                        <span>✏️ Edit Failed Order</span>
+                        <button
+                            onClick={() => setIsEditing(false)}
+                            className="text-gray-500 hover:text-gray-700"
+                        >
+                            <X className="h-5 w-5" />
+                        </button>
+                    </h3>
+
+                    {/* Remarks */}
+                    <div className="mb-6">
+                        <label className="block text-sm font-semibold text-gray-900 mb-2">Updated Remarks</label>
+                        <textarea
+                            value={remarks}
+                            onChange={(e) => setRemarks(e.target.value)}
+                            placeholder="Update failure reason or notes..."
+                            rows={3}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500"
+                        />
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-3">
+                        <Button
+                            variant="outline"
+                            className="flex-1"
+                            onClick={() => setIsEditing(false)}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="primary"
+                            className="flex-1 bg-red-600 hover:bg-red-700"
+                            disabled={processing}
+                            onClick={async () => {
+                                setProcessing(true);
+                                try {
+                                    await OrderService.update(order.id, {
+                                        remarks: remarks || order.remarks
+                                    } as any);
+                                    toast.success("Order updated!");
+                                    setIsEditing(false);
+                                    const updatedOrder = await OrderService.getById(order.id);
+                                    if (updatedOrder) setOrder(updatedOrder);
+                                } catch (e) {
+                                    console.error(e);
+                                    toast.error("Failed to update order");
+                                } finally {
+                                    setProcessing(false);
+                                }
+                            }}
+                        >
+                            {processing ? 'Saving...' : '💾 Save Changes'}
+                        </Button>
+                    </div>
+                </Card>
+            )}
+
             {/* Damage Modal */}
             {showDamageModal && (
                 <DamageModal
