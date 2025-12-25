@@ -439,10 +439,16 @@ export const Reports: React.FC = () => {
         // Get payment method from the delivery capture field
         const paymentMethod = order.payment_method_at_delivery || order.paymentMode || 'cash';
 
-        // Use the actual collected amount recorded at delivery
-        const collectedAmount = (order.payment_collected !== undefined && order.payment_collected !== null)
-          ? Number(order.payment_collected)
-          : (order.status === 'delivered' || order.status === 'completed' ? order.totalAmount : 0);
+        // Calculate collected amount - cap at netAmount to account for returns
+        // If order.totalAmount is 0 (full return), collected should be 0
+        let collectedAmount = 0;
+        if (order.status === 'delivered' || order.status === 'completed') {
+          const rawCollected = (order.payment_collected !== undefined && order.payment_collected !== null)
+            ? Number(order.payment_collected)
+            : order.totalAmount;
+          // Cap collected amount at the net amount (after returns)
+          collectedAmount = Math.min(rawCollected, order.totalAmount);
+        }
 
         return {
           invoiceId: order.id,
