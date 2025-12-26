@@ -18,6 +18,12 @@ export const ChallanPrint: React.FC<ChallanPrintProps> = ({
 }) => {
   const [currentOrientation, setCurrentOrientation] = useState<'portrait' | 'landscape'>(orientation);
 
+  // DEBUG: Log order structure
+  console.log('[ChallanPrint] Order data:', order);
+  console.log('[ChallanPrint] Order.items:', order.items);
+  console.log('[ChallanPrint] Order.items type:', typeof order.items);
+  console.log('[ChallanPrint] Order.items isArray:', Array.isArray(order.items));
+
   // Generate QR code URL for Google Maps location
   const getQRCodeUrl = (location: string) => {
     const parts = location.split(',').map(p => p.trim());
@@ -28,14 +34,36 @@ export const ChallanPrint: React.FC<ChallanPrintProps> = ({
     return `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(mapsUrl)}`;
   };
 
-  const subtotal = order.items?.reduce((sum, item) => {
+  // Handle items - check if it's a string that needs parsing
+  let orderItems = order.items;
+  if (typeof orderItems === 'string') {
+    try {
+      orderItems = JSON.parse(orderItems);
+      console.log('[ChallanPrint] Parsed items from string:', orderItems);
+    } catch (e) {
+      console.error('[ChallanPrint] Failed to parse items string:', e);
+      orderItems = [];
+    }
+  }
+
+  if (!Array.isArray(orderItems)) {
+    console.error('[ChallanPrint] Items is not an array:', orderItems);
+    orderItems = [];
+  }
+
+  console.log('[ChallanPrint] Final orderItems:', orderItems);
+
+  const subtotal = orderItems?.reduce((sum, item) => {
     const total = Number(item.total || item.amount) || 0;
+    console.log(`[ChallanPrint] Item subtotal: ${item.productName || item.tempProductName}, total: ${total}`);
     return sum + total;
   }, 0) || 0;
   const discountAmount = order.discount || 0;
   const discountPct = subtotal > 0 ? ((discountAmount / subtotal) * 100).toFixed(2) : '0';
   const grandTotal = order.totalAmount || 0;
   const qrCodeUrl = customerLocation ? getQRCodeUrl(customerLocation) : undefined;
+
+  console.log('[ChallanPrint] Calculated subtotal:', subtotal, 'grandTotal:', grandTotal);
 
   // Dimension styles based on orientation
   const pageStyle = currentOrientation === 'portrait' ? {
@@ -139,12 +167,14 @@ export const ChallanPrint: React.FC<ChallanPrintProps> = ({
           </tr>
         </thead>
         <tbody>
-          {order.items?.map((item, index) => {
+          {orderItems?.map((item, index) => {
             // Handle both database field formats
             const qty = Number(item.qty || item.quantity) || 0;
             const rate = Number(item.rate || item.price) || 0;
             const total = Number(item.total || item.amount) || (qty * rate);
             const productName = item.productName || item.tempProductName || 'undefined';
+
+            console.log(`[ChallanPrint] Rendering item ${index}: ${productName}, qty: ${qty}, rate: ${rate}, total: ${total}`);
 
             const itemDiscount = (item.discountPct || 0) > 0
               ? total * ((item.discountPct || 0) / 100)

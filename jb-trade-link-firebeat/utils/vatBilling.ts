@@ -202,6 +202,8 @@ export const generateVatBills = (rows: DeliveryReportRow[]): VatBill[] => {
     const bills: VatBill[] = [];
     const THRESHOLD = 50000;
 
+    console.log(`[generateVatBills] Processing ${rows.length} delivery rows`);
+
     const methodBuckets: Record<string, { rows: DeliveryReportRow[], amount: number }[]> = {
         'cash': [],
         'qr': [],
@@ -210,16 +212,24 @@ export const generateVatBills = (rows: DeliveryReportRow[]): VatBill[] => {
     };
 
     rows.forEach(row => {
+        console.log(`[generateVatBills] Processing invoice ${row.invoiceNumber}, status: ${row.status}, payment: ${row.paymentMethod}, amount: ${row.collectedAmount}`);
+
         const breakdowns = parseBreakdown(row);
+        console.log(`[generateVatBills] Payment breakdown for ${row.invoiceNumber}:`, breakdowns);
+
         breakdowns.forEach(bd => {
             const method = bd.method.toLowerCase();
 
             if (method === 'credit' || method === 'cheque') {
                 // INDIVIDUAL
+                console.log(`[generateVatBills] Creating individual ${method} bill for ${row.invoiceNumber}`);
                 const items = getDeliveredItems(row, bd.amount);
                 const subtotal = items.reduce((sum, i) => sum + i.total, 0);
                 const discount = 0;
                 const vatAmount = subtotal * 0.13;
+
+                console.log(`[generateVatBills] Individual bill items:`, items);
+                console.log(`[generateVatBills] Subtotal: ${subtotal}, VAT: ${vatAmount}, Total: ${subtotal + vatAmount}`);
 
                 bills.push({
                     id: `VAT-${method.toUpperCase()}-${row.invoiceNumber}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
@@ -241,6 +251,7 @@ export const generateVatBills = (rows: DeliveryReportRow[]): VatBill[] => {
                 const combinedMethod = (method === 'qr' || method === 'cash') ? 'cash' : method;
                 if (!methodBuckets[combinedMethod]) methodBuckets[combinedMethod] = [];
                 methodBuckets[combinedMethod].push({ rows: [row], amount: bd.amount });
+                console.log(`[generateVatBills] Added to ${combinedMethod} bucket: ${row.invoiceNumber}, amount: ${bd.amount}`);
             }
         });
     });
@@ -250,18 +261,22 @@ export const generateVatBills = (rows: DeliveryReportRow[]): VatBill[] => {
         const itemsList = methodBuckets[method] || [];
         if (itemsList.length === 0) return;
 
+        console.log(`[generateVatBills] Processing ${itemsList.length} ${method} items for combined bills`);
+
         let currentBillAmount = 0;
         let currentBillInvoices: string[] = [];
         let currentBillInvoiceNumbers: string[] = [];
         let currentBillItems: BillItem[] = [];
 
-        itemsList.forEach(item => {
+        itemsList.forEach((item, idx) => {
             if (currentBillAmount + item.amount > THRESHOLD) {
                 if (currentBillAmount > 0) {
                     // Calculate VAT breakdown
                     const subtotal = currentBillItems.reduce((sum, i) => sum + i.total, 0);
                     const discount = 0; // Discount already applied in items
                     const vatAmount = subtotal * 0.13;
+
+                    console.log(`[generateVatBills] Creating combined bill with ${currentBillInvoices.length} invoices, subtotal: ${subtotal}`);
 
                     bills.push({
                         id: `VAT-CASH-COMB-${bills.length + 1}`,
@@ -295,12 +310,16 @@ export const generateVatBills = (rows: DeliveryReportRow[]): VatBill[] => {
 
             // Aggregate items
             const rowItems = getDeliveredItems(row, item.amount);
+            console.log(`[generateVatBills] Adding items from ${row.invoiceNumber}:`, rowItems);
+
             rowItems.forEach(newItem => {
                 const existing = currentBillItems.find(i => i.productName === newItem.productName && Math.abs(i.rateBeforeVat - newItem.rateBeforeVat) < 0.01);
                 if (existing) {
+                    console.log(`[generateVatBills] Aggregating ${newItem.productName}: ${existing.quantity} + ${newItem.quantity}`);
                     existing.quantity += newItem.quantity;
                     existing.total += newItem.total;
                 } else {
+                    console.log(`[generateVatBills] Adding new item: ${newItem.productName}, qty: ${newItem.quantity}`);
                     currentBillItems.push({ ...newItem });
                 }
             });
@@ -310,6 +329,8 @@ export const generateVatBills = (rows: DeliveryReportRow[]): VatBill[] => {
             const subtotal = currentBillItems.reduce((sum, i) => sum + i.total, 0);
             const discount = 0;
             const vatAmount = subtotal * 0.13;
+
+            console.log(`[generateVatBills] Creating final combined bill with ${currentBillInvoices.length} invoices, subtotal: ${subtotal}`);
 
             bills.push({
                 id: `VAT-CASH-COMB-${bills.length + 1}`,
@@ -327,6 +348,11 @@ export const generateVatBills = (rows: DeliveryReportRow[]): VatBill[] => {
                 items: currentBillItems
             });
         }
+    });
+
+    console.log(`[generateVatBills] Generated ${bills.length} VAT bills`);
+    bills.forEach(bill => {
+        console.log(`[generateVatBills] Bill ${bill.id}: ${bill.invoiceNumbers.length} invoices, ${bill.items.length} items, total: ₹${bill.totalAmount}`);
     });
 
     return bills;
