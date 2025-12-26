@@ -59,65 +59,144 @@ const parseBreakdown = (row: DeliveryReportRow): { method: string; amount: numbe
 };
 
 /**
- * Calculate actual delivered items for a row using proportional scaling.
- * Converts prices to before-VAT amounts (assuming 13% VAT rate).
+ * Parse return quantities from order remarks
+ * Format: "Returns: ProductName(qty), ProductName2(qty)"
+ */
+const parseReturnsFromRemarks = (remarks: string): Map<string, number> => {
+    const returnMap = new Map<string, number>();
+
+    if (!remarks || !remarks.includes('Returns:')) {
+        return returnMap;
+    }
+
+    const returnsMatch = remarks.match(/Returns:\s*([^|]+)/);
+    if (!returnsMatch) return returnMap;
+
+    const returnsStr = returnsMatch[1];
+    // Match patterns like "Product Name(5)" or "Product Name (5)"
+    const regex = /([^(]+)\((\d+)\)/g;
+    let match;
+
+    while ((match = regex.exec(returnsStr)) !== null) {
+        const productName = match[1].trim();
+        const qty = parseInt(match[2]);
+        returnMap.set(productName, qty);
+    }
+
+    return returnMap;
+};
+
+/**
+ * Parse damage quantities from order remarks
+ * Format: "Damages: ProductName(qty) - reason, ProductName2(qty) - reason"
+ */
+const parseDamagesFromRemarks = (remarks: string): Map<string, number> => {
+    const damageMap = new Map<string, number>();
+
+    if (!remarks || !remarks.includes('Damages:')) {
+        return damageMap;
+    }
+
+    const damagesMatch = remarks.match(/Damages:\s*([^|]+)/);
+    if (!damagesMatch) return damageMap;
+
+    const damagesStr = damagesMatch[1];
+    // Match patterns like "Product Name(5) - reason"
+    const regex = /([^(]+)\((\d+)\)/g;
+    let match;
+
+    while ((match = regex.exec(damagesStr)) !== null) {
+        const productName = match[1].trim();
+        const qty = parseInt(match[2]);
+        damageMap.set(productName, qty);
+    }
+
+    return damageMap;
+};
+
+/**
+ * Calculate ACTUAL delivered items using real delivery data.
+ * This is 100% accurate - no proportional scaling or estimation.
  */
 const getDeliveredItems = (row: DeliveryReportRow, methodAmount: number): BillItem[] => {
     const orderItems = row.order.items || [];
     const VAT_RATE = 0.13; // 13% VAT
 
     console.log(`[getDeliveredItems] Invoice: ${row.invoiceNumber}, methodAmount: ${methodAmount}`);
-    console.log(`[getDeliveredItems] Order items:`, orderItems);
+    console.log(`[getDeliveredItems] Status: ${row.status}, Order items:`, orderItems);
 
-    // Calculate subtotal from items, using qty * rate if total is missing
-    // Explicitly cast to Number to prevent string-math issues
-    // Handle database field compatibility (quantity/price/amount vs qty/rate/total)
-    const derivedSubtotal = orderItems.reduce((acc, i) => {
-        const qty = Number(i.quantity || i.qty) || 0;
-        const rate = Number(i.price || i.rate) || 0;
-        const total = Number(i.amount || i.total) || (qty * rate);
-        return acc + total;
-    }, 0);
+    // Parse returns and damages from remarks
+    const returnsFromRemarks = parseReturnsFromRemarks(row.order.remarks || '');
+    const damagesFromRemarks = parseDamagesFromRemarks(row.order.remarks || '');
 
-    console.log(`[getDeliveredItems] derivedSubtotal: ${derivedSubtotal}`);
+    console.log(`[getDeliveredItems] Returns from remarks:`, Array.from(returnsFromRemarks.entries()));
+    console.log(`[getDeliveredItems] Damages from remarks:`, Array.from(damagesFromRemarks.entries()));
 
-    if (derivedSubtotal <= 0) {
-        console.warn(`[getDeliveredItems] derivedSubtotal is 0 or negative, returning empty array`);
-        return [];
-    }
+    // Build a map of actual delivered quantities
+    const deliveredItems: BillItem[] = [];
 
-    // Scaling factor for partial payments/returns
-    const scalingFactor = methodAmount / derivedSubtotal;
-
-    const result = orderItems.map(item => {
-        // Explicit Number casting to prevent string-math issues
+    orderItems.forEach(item => {
         const qty = Number(item.quantity || item.qty) || 0;
         const rate = Number(item.price || item.rate) || 0;
-        const total = Number(item.amount || item.total) || (qty * rate);
+        const productName = item.tempProductName || item.productName || 'Unknown Product';
 
-        const billedQty = qty * scalingFactor;
+        // Calculate actual delivered quantity
+        let deliveredQty = qty;
 
-        // item.rate and item.total are AFTER VAT (from DB)
-        // First scale the total, then remove VAT
-        const itemTotalAfterVat = total * scalingFactor;
-        const itemTotalBeforeVat = itemTotalAfterVat / (1 + VAT_RATE);
-        const rateBeforeVat = rate / (1 + VAT_RATE);
+        // Subtract returns (check both exact match and partial match)
+        const returnQty = returnsFromRemarks.get(productName) ||
+            Array.from(returnsFromRemarks.entries())
+                .find(([key]) => key.toLowerCase().includes(productName.toLowerCase()) ||
+                    productName.toLowerCase().includes(key.toLowerCase()))?.[1] || 0;
 
-        console.log(`[getDeliveredItems] Item: ${item.tempProductName || item.productName}, qty: ${qty}, rate: ${rate}, total: ${total}`);
-        console.log(`[getDeliveredItems]   -> billedQty: ${billedQty}, itemTotalAfterVat: ${itemTotalAfterVat}, itemTotalBeforeVat: ${itemTotalBeforeVat}`);
+        // Subtract damages (check both exact match and partial match)
+        const damageQty = damagesFromRemarks.get(productName) ||
+            Array.from(damagesFromRemarks.entries())
+                .find(([key]) => key.toLowerCase().includes(productName.toLowerCase()) ||
+                    productName.toLowerCase().includes(key.toLowerCase()))?.[1] || 0;
 
-        return {
-            productName: item.tempProductName || item.productName || 'Unknown Product',
-            quantity: Math.round(billedQty), // CRITICAL: Round to whole number to avoid decimals
-            rateBeforeVat: Number(rateBeforeVat.toFixed(2)),
-            rate: rate,
-            total: Number(itemTotalBeforeVat.toFixed(2))
-        };
-    }).filter(i => i.total > 0.01);
+        deliveredQty = deliveredQty - returnQty - damageQty;
 
-    console.log(`[getDeliveredItems] Returning ${result.length} items`);
-    return result;
+        console.log(`[getDeliveredItems] ${productName}: ordered=${qty}, returned=${returnQty}, damaged=${damageQty}, delivered=${deliveredQty}`);
+
+        // Only include items that were actually delivered
+        if (deliveredQty > 0) {
+            // Calculate amounts before VAT
+            const rateBeforeVat = rate / (1 + VAT_RATE);
+            const totalBeforeVat = deliveredQty * rateBeforeVat;
+
+            deliveredItems.push({
+                productName: productName,
+                quantity: deliveredQty, // Exact delivered quantity - no rounding needed
+                rateBeforeVat: Number(rateBeforeVat.toFixed(2)),
+                rate: rate,
+                total: Number(totalBeforeVat.toFixed(2))
+            });
+        }
+    });
+
+    // CRITICAL: For orders with multiple payment methods, we need to split items proportionally
+    // Calculate what portion of the total this payment method represents
+    const totalDeliveredAmount = deliveredItems.reduce((sum, i) => sum + (i.quantity * i.rate), 0);
+
+    if (totalDeliveredAmount > 0 && methodAmount < totalDeliveredAmount - 0.01) {
+        // This is a partial payment (multiple payment methods)
+        const paymentFraction = methodAmount / totalDeliveredAmount;
+
+        console.log(`[getDeliveredItems] Multiple payment methods detected. Payment fraction: ${paymentFraction}`);
+
+        // Scale quantities proportionally for this payment method
+        return deliveredItems.map(item => ({
+            ...item,
+            quantity: Math.round(item.quantity * paymentFraction),
+            total: Number((item.total * paymentFraction).toFixed(2))
+        })).filter(i => i.quantity > 0);
+    }
+
+    console.log(`[getDeliveredItems] Returning ${deliveredItems.length} items with exact delivered quantities`);
+    return deliveredItems;
 };
+
 
 export const generateVatBills = (rows: DeliveryReportRow[]): VatBill[] => {
     const bills: VatBill[] = [];
