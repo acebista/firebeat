@@ -175,15 +175,24 @@ const getDeliveredItems = (row: DeliveryReportRow, methodAmount: number): BillIt
         }
     });
 
-    // CRITICAL: For orders with multiple payment methods, we need to split items proportionally
-    // Calculate what portion of the total this payment method represents
-    const totalDeliveredAmount = deliveredItems.reduce((sum, i) => sum + (i.quantity * i.rate), 0);
+    // CRITICAL: Only apply proportional scaling for TRUE partial payments (multiple payment methods)
+    // NOT for discounts - discount is already reflected in the item totals
 
-    if (totalDeliveredAmount > 0 && methodAmount < totalDeliveredAmount - 0.01) {
-        // This is a partial payment (multiple payment methods)
-        const paymentFraction = methodAmount / totalDeliveredAmount;
+    // Calculate the actual total amount from delivered items (before VAT, includes any discount)
+    const totalDeliveredAmountBeforeVat = deliveredItems.reduce((sum, i) => sum + i.total, 0);
+    const totalDeliveredAmountWithVat = totalDeliveredAmountBeforeVat * (1 + VAT_RATE);
 
-        console.log(`[getDeliveredItems] Multiple payment methods detected. Payment fraction: ${paymentFraction}`);
+    console.log(`[getDeliveredItems] Total delivered (before VAT): ${totalDeliveredAmountBeforeVat}, with VAT: ${totalDeliveredAmountWithVat}, methodAmount: ${methodAmount}`);
+
+    // Only scale if methodAmount is significantly less than the total (indicating multiple payment methods)
+    // Use a 1% tolerance to account for rounding
+    const tolerance = totalDeliveredAmountWithVat * 0.01;
+
+    if (totalDeliveredAmountWithVat > 0 && methodAmount < (totalDeliveredAmountWithVat - tolerance)) {
+        // This is a TRUE partial payment (multiple payment methods)
+        const paymentFraction = methodAmount / totalDeliveredAmountWithVat;
+
+        console.log(`[getDeliveredItems] Multiple payment methods detected. Payment fraction: ${paymentFraction.toFixed(4)}`);
 
         // Scale quantities proportionally for this payment method
         return deliveredItems.map(item => ({
@@ -193,7 +202,7 @@ const getDeliveredItems = (row: DeliveryReportRow, methodAmount: number): BillIt
         })).filter(i => i.quantity > 0);
     }
 
-    console.log(`[getDeliveredItems] Returning ${deliveredItems.length} items with exact delivered quantities`);
+    console.log(`[getDeliveredItems] Single payment method - returning ${deliveredItems.length} items with exact delivered quantities`);
     return deliveredItems;
 };
 
