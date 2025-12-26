@@ -67,18 +67,13 @@ const getDeliveredItems = (row: DeliveryReportRow, methodAmount: number): BillIt
     console.log(`[getDeliveredItems] Invoice: ${row.invoiceNumber}, methodAmount: ${methodAmount}`);
     console.log(`[getDeliveredItems] Order items:`, orderItems);
 
-    // DEBUG: Log first item structure in detail
-    if (orderItems.length > 0) {
-        console.log(`[getDeliveredItems] First item detailed:`, JSON.stringify(orderItems[0], null, 2));
-        console.log(`[getDeliveredItems] First item keys:`, Object.keys(orderItems[0]));
-    }
-
     // Calculate subtotal from items, using qty * rate if total is missing
     // Explicitly cast to Number to prevent string-math issues
+    // Handle database field compatibility (quantity/price/amount vs qty/rate/total)
     const derivedSubtotal = orderItems.reduce((acc, i) => {
-        const qty = Number(i.qty) || 0;
-        const rate = Number(i.rate) || 0;
-        const total = Number(i.total) || (qty * rate);
+        const qty = Number(i.quantity || i.qty) || 0;
+        const rate = Number(i.price || i.rate) || 0;
+        const total = Number(i.amount || i.total) || (qty * rate);
         return acc + total;
     }, 0);
 
@@ -94,9 +89,9 @@ const getDeliveredItems = (row: DeliveryReportRow, methodAmount: number): BillIt
 
     const result = orderItems.map(item => {
         // Explicit Number casting to prevent string-math issues
-        const qty = Number(item.qty) || 0;
-        const rate = Number(item.rate) || 0;
-        const total = Number(item.total) || (qty * rate);
+        const qty = Number(item.quantity || item.qty) || 0;
+        const rate = Number(item.price || item.rate) || 0;
+        const total = Number(item.amount || item.total) || (qty * rate);
 
         const billedQty = qty * scalingFactor;
 
@@ -106,11 +101,11 @@ const getDeliveredItems = (row: DeliveryReportRow, methodAmount: number): BillIt
         const itemTotalBeforeVat = itemTotalAfterVat / (1 + VAT_RATE);
         const rateBeforeVat = rate / (1 + VAT_RATE);
 
-        console.log(`[getDeliveredItems] Item: ${item.productName}, qty: ${qty}, rate: ${rate}, total: ${total}`);
+        console.log(`[getDeliveredItems] Item: ${item.tempProductName || item.productName}, qty: ${qty}, rate: ${rate}, total: ${total}`);
         console.log(`[getDeliveredItems]   -> billedQty: ${billedQty}, itemTotalAfterVat: ${itemTotalAfterVat}, itemTotalBeforeVat: ${itemTotalBeforeVat}`);
 
         return {
-            productName: item.productName || 'Unknown Product',
+            productName: item.tempProductName || item.productName || 'Unknown Product',
             quantity: Number(billedQty.toFixed(2)),
             rateBeforeVat: Number(rateBeforeVat.toFixed(2)),
             rate: rate,

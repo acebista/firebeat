@@ -82,6 +82,11 @@ export interface OrderItem {
   qty: number;
   rate: number;           // This will be the Final/Net Rate
   total: number;
+  // DB Compatibility fields
+  quantity?: number;
+  price?: number;
+  amount?: number;
+  tempProductName?: string;
   // New fields for detailed invoice
   baseRate?: number;      // The original Rate before discounts
   discountPct?: number;   // Total applied discount percentage

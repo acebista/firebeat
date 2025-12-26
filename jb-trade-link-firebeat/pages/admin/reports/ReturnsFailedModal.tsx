@@ -51,14 +51,16 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
                 if (!item) return;
 
                 // Explicit Number casting
-                const qty = Number(item.qty) || 0;
-                const rate = Number(item.rate) || 0;
-                const total = Number(item.total) || (qty * rate);
+                // Handle database field compatibility
+                const qty = Number(item.quantity || item.qty) || 0;
+                const rate = Number(item.price || item.rate) || 0;
+                const total = Number(item.amount || item.total) || (qty * rate);
+                const productName = item.tempProductName || item.productName || 'Unknown Product';
 
                 returnItems.push({
                     invoiceNumber: row.invoiceNumber || 'N/A',
                     customerName: row.customerName || 'Unknown',
-                    productName: item.productName || 'Unknown Product',
+                    productName: productName,
                     qtyOrdered: qty,
                     qtyReturned: 0,
                     qtyFailed: qty,
@@ -79,8 +81,10 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
                 if (!item) return;
 
                 // Explicit Number casting
-                const qty = Number(item.qty) || 0;
-                const rate = Number(item.rate) || 0;
+                // Handle database field compatibility
+                const qty = Number(item.quantity || item.qty) || 0;
+                const rate = Number(item.price || item.rate) || 0;
+                const productName = item.tempProductName || item.productName || 'Unknown Product';
 
                 let estimatedReturnQty = 0;
 
@@ -93,13 +97,13 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
                     estimatedReturnQty = qty;
                 }
 
-                console.log(`Row ${idx} Item: ${item.productName}, qty=${qty}, returnAmount=${returnAmount}, estimatedReturnQty=${estimatedReturnQty}`);
+                console.log(`Row ${idx} Item: ${productName}, qty=${qty}, returnAmount=${returnAmount}, estimatedReturnQty=${estimatedReturnQty}`);
 
                 if (estimatedReturnQty > 0) {
                     returnItems.push({
                         invoiceNumber: row.invoiceNumber || 'N/A',
                         customerName: row.customerName || 'Unknown',
-                        productName: item.productName || 'Unknown Product',
+                        productName: productName,
                         qtyOrdered: qty,
                         qtyReturned: estimatedReturnQty,
                         qtyFailed: 0,
