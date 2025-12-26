@@ -16,6 +16,7 @@ interface ReturnItem {
     qtyOrdered: number;
     qtyReturned: number;
     qtyFailed: number;
+    qtyDamaged: number;  // NEW: Track damaged items
     reason: string;
     amount: number;
 }
@@ -24,9 +25,38 @@ interface ConsolidatedItem {
     productName: string;
     totalQtyReturned: number;
     totalQtyFailed: number;
+    totalQtyDamaged: number;  // NEW: Track damaged items
     totalQty: number;
     invoices: string[];
 }
+
+/**
+ * Parse damage quantities from order remarks
+ * Format: "Damages: ProductName(qty) - reason, ProductName2(qty) - reason"
+ */
+const parseDamagesFromRemarks = (remarks: string): Map<string, number> => {
+    const damageMap = new Map<string, number>();
+
+    if (!remarks || !remarks.includes('Damages:')) {
+        return damageMap;
+    }
+
+    const damagesMatch = remarks.match(/Damages:\s*([^|]+)/);
+    if (!damagesMatch) return damageMap;
+
+    const damagesStr = damagesMatch[1];
+    // Match patterns like "Product Name(5) - reason" or "Product Name(5)"
+    const regex = /([^(]+)\((\d+)\)/g;
+    let match;
+
+    while ((match = regex.exec(damagesStr)) !== null) {
+        const productName = match[1].trim();
+        const qty = parseInt(match[2]);
+        damageMap.set(productName, qty);
+    }
+
+    return damageMap;
+};
 
 export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, onClose }) => {
     const returnItems: ReturnItem[] = [];
@@ -38,20 +68,24 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
         const isFailed = status === 'cancelled' || status === 'failed';
         const isReturned = status === 'returned' || status === 'partially_returned';
         const hasReturns = row.salesReturn || row.hasReturnsInRemarks || (row.returnAmount && row.returnAmount > 0);
+        const hasDamages = (row.order.remarks || '').includes('Damages:');
 
-        console.log(`Row ${idx}: ${row.invoiceNumber}, status=${status}, isFailed=${isFailed}, isReturned=${isReturned}, hasReturns=${hasReturns}`);
+        console.log(`Row ${idx}: ${row.invoiceNumber}, status=${status}, isFailed=${isFailed}, isReturned=${isReturned}, hasReturns=${hasReturns}, hasDamages=${hasDamages}`);
 
         if (!row.order || !row.order.items) {
             console.warn(`Row ${idx}: No order or items`);
             return;
         }
 
+        // Parse damages from remarks for all delivered orders
+        const damagesFromRemarks = parseDamagesFromRemarks(row.order.remarks || '');
+        console.log(`Row ${idx}: Damages parsed:`, Array.from(damagesFromRemarks.entries()));
+
         if (isFailed) {
+            // Failed delivery - all items come back
             row.order.items.forEach(item => {
                 if (!item) return;
 
-                // Explicit Number casting
-                // Handle database field compatibility
                 const qty = Number(item.quantity || item.qty) || 0;
                 const rate = Number(item.price || item.rate) || 0;
                 const total = Number(item.amount || item.total) || (qty * rate);
@@ -64,51 +98,50 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
                     qtyOrdered: qty,
                     qtyReturned: 0,
                     qtyFailed: qty,
+                    qtyDamaged: 0,
                     reason: 'Delivery Failed',
                     amount: total
                 });
             });
-        } else if (isReturned || hasReturns) {
-            // For partial returns, only include items that were actually returned
-            // Don't include all items from the order
+        } else if (isReturned || hasReturns || hasDamages) {
+            // Delivered order with returns and/or damages
             const netAmount = Number(row.netAmount) || 0;
             const returnAmount = Number(row.returnAmount) || 0;
 
-            // Skip if this is a delivered order with no actual returns
-            if (status === 'delivered' && returnAmount === 0 && !row.salesReturn) {
-                console.log(`Row ${idx}: Delivered with no returns, skipping`);
-                return;
-            }
-
-            if (netAmount <= 0 && returnAmount === 0) {
-                console.warn(`Row ${idx}: Invalid netAmount: ${netAmount}`);
+            // Skip if this is a delivered order with no actual returns or damages
+            if (status === 'delivered' && returnAmount === 0 && !row.salesReturn && !hasDamages) {
+                console.log(`Row ${idx}: Delivered with no returns or damages, skipping`);
                 return;
             }
 
             row.order.items.forEach(item => {
                 if (!item) return;
 
-                // Explicit Number casting
-                // Handle database field compatibility
                 const qty = Number(item.quantity || item.qty) || 0;
                 const rate = Number(item.price || item.rate) || 0;
                 const productName = item.tempProductName || item.productName || 'Unknown Product';
 
                 let estimatedReturnQty = 0;
+                let damageQty = 0;
 
-                // If we have return amount data, calculate proportionally
+                // Calculate returns
                 if (returnAmount > 0 && netAmount > 0) {
                     const returnFraction = returnAmount / netAmount;
                     estimatedReturnQty = Math.round(qty * returnFraction);
                 } else if (status === 'returned') {
-                    // If status is fully returned, assume full return
                     estimatedReturnQty = qty;
                 }
 
-                console.log(`Row ${idx} Item: ${productName}, qty=${qty}, returnAmount=${returnAmount}, estimatedReturnQty=${estimatedReturnQty}`);
+                // Get damages for this specific product (with fuzzy matching)
+                damageQty = damagesFromRemarks.get(productName) ||
+                    Array.from(damagesFromRemarks.entries())
+                        .find(([key]) => key.toLowerCase().includes(productName.toLowerCase()) ||
+                            productName.toLowerCase().includes(key.toLowerCase()))?.[1] || 0;
 
-                // CRITICAL: Only add items that were actually returned (estimatedReturnQty > 0)
-                if (estimatedReturnQty > 0) {
+                console.log(`Row ${idx} Item: ${productName}, qty=${qty}, returnQty=${estimatedReturnQty}, damageQty=${damageQty}`);
+
+                // CRITICAL: Include items that were returned OR damaged
+                if (estimatedReturnQty > 0 || damageQty > 0) {
                     returnItems.push({
                         invoiceNumber: row.invoiceNumber || 'N/A',
                         customerName: row.customerName || 'Unknown',
@@ -116,8 +149,9 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
                         qtyOrdered: qty,
                         qtyReturned: estimatedReturnQty,
                         qtyFailed: 0,
-                        reason: row.salesReturn?.reason || 'Customer Return',
-                        amount: rate * estimatedReturnQty
+                        qtyDamaged: damageQty,
+                        reason: damageQty > 0 ? 'Damaged' : (row.salesReturn?.reason || 'Customer Return'),
+                        amount: rate * (estimatedReturnQty + damageQty)
                     });
                 }
             });
@@ -134,13 +168,15 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
                 productName: item.productName,
                 totalQtyReturned: 0,
                 totalQtyFailed: 0,
+                totalQtyDamaged: 0,
                 totalQty: 0,
                 invoices: []
             };
         }
         acc[key].totalQtyReturned += item.qtyReturned;
         acc[key].totalQtyFailed += item.qtyFailed;
-        acc[key].totalQty += item.qtyReturned + item.qtyFailed;
+        acc[key].totalQtyDamaged += item.qtyDamaged;
+        acc[key].totalQty += item.qtyReturned + item.qtyFailed + item.qtyDamaged;
         if (!acc[key].invoices.includes(item.invoiceNumber)) {
             acc[key].invoices.push(item.invoiceNumber);
         }
@@ -151,6 +187,7 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
 
     const totalReturnedQty = returnItems.reduce((sum, i) => sum + i.qtyReturned, 0);
     const totalFailedQty = returnItems.reduce((sum, i) => sum + i.qtyFailed, 0);
+    const totalDamagedQty = returnItems.reduce((sum, i) => sum + i.qtyDamaged, 0);
     const totalAmount = returnItems.reduce((sum, i) => sum + (i.amount || 0), 0);
 
     return (
@@ -175,10 +212,10 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
                         <Card className="p-4 bg-white border-l-4 border-orange-500">
                             <div className="text-gray-500 text-xs uppercase font-bold">Total Quantity</div>
                             <div className="text-2xl font-bold text-gray-800">
-                                {totalReturnedQty + totalFailedQty} units
+                                {totalReturnedQty + totalFailedQty + totalDamagedQty} units
                             </div>
                             <div className="text-xs text-gray-500 mt-1">
-                                Returned: {totalReturnedQty} | Failed: {totalFailedQty}
+                                Returned: {totalReturnedQty} | Failed: {totalFailedQty} | Damaged: {totalDamagedQty}
                             </div>
                         </Card>
                         <Card className="p-4 bg-white border-l-4 border-amber-500">
@@ -206,6 +243,7 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
                                         <th className="px-4 py-3 text-center font-medium text-gray-500">Ordered</th>
                                         <th className="px-4 py-3 text-center font-medium text-gray-500">Returned</th>
                                         <th className="px-4 py-3 text-center font-medium text-gray-500">Failed</th>
+                                        <th className="px-4 py-3 text-center font-medium text-gray-500">Damaged</th>
                                         <th className="px-4 py-3 text-left font-medium text-gray-500">Reason</th>
                                         <th className="px-4 py-3 text-right font-medium text-gray-500">Amount</th>
                                     </tr>
@@ -231,6 +269,13 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
                                                     <span className="text-gray-300">-</span>
                                                 )}
                                             </td>
+                                            <td className="px-4 py-3 text-center">
+                                                {item.qtyDamaged > 0 ? (
+                                                    <span className="font-bold text-amber-600">{item.qtyDamaged}</span>
+                                                ) : (
+                                                    <span className="text-gray-300">-</span>
+                                                )}
+                                            </td>
                                             <td className="px-4 py-3 text-gray-600 text-xs capitalize">
                                                 {item.reason.replace(/_/g, ' ')}
                                             </td>
@@ -248,6 +293,7 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
                                         </td>
                                         <td className="px-4 py-3 text-center text-orange-600">{totalReturnedQty}</td>
                                         <td className="px-4 py-3 text-center text-red-600">{totalFailedQty}</td>
+                                        <td className="px-4 py-3 text-center text-amber-600">{totalDamagedQty}</td>
                                         <td className="px-4 py-3"></td>
                                         <td className="px-4 py-3 text-right text-gray-900">
                                             ₹{totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
@@ -298,8 +344,9 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
                                     {item.totalQty}
                                 </td>
                                 <td style={{ border: '1px solid #4b5563', padding: '6px', textAlign: 'center', fontSize: '9pt' }}>
-                                    {item.totalQtyFailed > 0 ? 'FAILED' : 'RETURN'}
-                                    {item.totalQtyReturned > 0 && item.totalQtyFailed > 0 && ' / BOTH'}
+                                    {item.totalQtyFailed > 0 && 'FAILED'}
+                                    {item.totalQtyReturned > 0 && (item.totalQtyFailed > 0 ? ' / ' : '') + 'RETURN'}
+                                    {item.totalQtyDamaged > 0 && ((item.totalQtyFailed > 0 || item.totalQtyReturned > 0) ? ' / ' : '') + 'DAMAGED'}
                                 </td>
                                 <td style={{ border: '1px solid #4b5563', padding: '6px' }}></td>
                             </tr>
@@ -309,7 +356,7 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
                         <tr>
                             <td style={{ border: '2px solid #4b5563', padding: '8px', textAlign: 'right' }}>TOTAL:</td>
                             <td style={{ border: '2px solid #4b5563', padding: '8px', textAlign: 'center', fontSize: '13pt' }}>
-                                {totalReturnedQty + totalFailedQty}
+                                {totalReturnedQty + totalFailedQty + totalDamagedQty}
                             </td>
                             <td colSpan={2} style={{ border: '2px solid #4b5563', padding: '8px' }}></td>
                         </tr>
@@ -318,8 +365,8 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
 
                 <div style={{ marginTop: '40px', fontSize: '9pt', color: '#666' }}>
                     <p><strong>Summary:</strong></p>
-                    <p>Total Items: {consolidatedItems.length} | Total Quantity: {totalReturnedQty + totalFailedQty} units</p>
-                    <p>Returned: {totalReturnedQty} | Failed: {totalFailedQty}</p>
+                    <p>Total Items: {consolidatedItems.length} | Total Quantity: {totalReturnedQty + totalFailedQty + totalDamagedQty} units</p>
+                    <p>Returned: {totalReturnedQty} | Failed: {totalFailedQty} | Damaged: {totalDamagedQty}</p>
                 </div>
             </div>
         </div>
