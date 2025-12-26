@@ -145,6 +145,84 @@ export const DeliveryOrderDetails: React.FC = () => {
         loadData();
     }, [id]);
 
+    // Parse existing returns and damages from remarks when entering edit mode
+    useEffect(() => {
+        if (isEditing && order?.remarks) {
+            const remarks = order.remarks;
+
+            // Parse Returns: ProductName(qty), ProductName2(qty)
+            const returnsMatch = remarks.match(/Returns:\s*([^|]+)/);
+            if (returnsMatch) {
+                const returnsStr = returnsMatch[1].trim();
+                const returnRegex = /([^(]+)\((\d+)\)/g;
+                const parsedReturns: ReturnItem[] = [];
+                let match;
+
+                while ((match = returnRegex.exec(returnsStr)) !== null) {
+                    const productName = match[1].trim();
+                    const returnQty = parseInt(match[2]);
+
+                    // Find the product in order items to get rate and original qty
+                    const orderItem = order.items?.find(item =>
+                        (item.productName || item.tempProductName || '').toLowerCase() === productName.toLowerCase()
+                    );
+
+                    if (orderItem) {
+                        parsedReturns.push({
+                            productId: orderItem.productId || '',
+                            productName: productName,
+                            originalQty: Number(orderItem.qty || orderItem.quantity || 0),
+                            returnQty: returnQty,
+                            rate: Number(orderItem.rate || orderItem.price || 0)
+                        });
+                    }
+                }
+
+                if (parsedReturns.length > 0) {
+                    setReturnItems(parsedReturns);
+                }
+            }
+
+            // Parse Damages: ProductName(qty) - reason, ProductName2(qty) - reason
+            const damagesMatch = remarks.match(/Damages:\s*([^|]+)/);
+            if (damagesMatch) {
+                const damagesStr = damagesMatch[1].trim();
+                const damageRegex = /([^(]+)\((\d+)\)\s*-\s*([^,]+)/g;
+                const parsedDamages: DamageItem[] = [];
+                let match;
+
+                while ((match = damageRegex.exec(damagesStr)) !== null) {
+                    const productName = match[1].trim();
+                    const quantity = parseInt(match[2]);
+                    const reason = match[3].trim();
+
+                    // Find the product in order items to get rate and product ID
+                    const orderItem = order.items?.find(item =>
+                        (item.productName || item.tempProductName || '').toLowerCase() === productName.toLowerCase()
+                    );
+
+                    if (orderItem) {
+                        parsedDamages.push({
+                            productId: orderItem.productId || '',
+                            productName: productName,
+                            quantity: quantity,
+                            reason: reason,
+                            rate: Number(orderItem.rate || orderItem.price || 0)
+                        });
+                    }
+                }
+
+                if (parsedDamages.length > 0) {
+                    setDamages(parsedDamages);
+                }
+            }
+        } else if (!isEditing) {
+            // Clear returns and damages when exiting edit mode
+            setReturnItems([]);
+            setDamages([]);
+        }
+    }, [isEditing, order]);
+
     const calculateOriginalTotal = () => {
         if (!order?.items) return 0;
         // Always recalculate from items to ensure we have the true original total
