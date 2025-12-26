@@ -67,10 +67,11 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
         const status = (row.status || '').toLowerCase();
         const isFailed = status === 'cancelled' || status === 'failed';
         const isReturned = status === 'returned' || status === 'partially_returned';
+        const isRescheduled = status === 'approved' && (row.order as any).rescheduled_from;
         const hasReturns = row.salesReturn || row.hasReturnsInRemarks || (row.returnAmount && row.returnAmount > 0);
         const hasDamages = (row.order.remarks || '').includes('Damages:');
 
-        console.log(`Row ${idx}: ${row.invoiceNumber}, status=${status}, isFailed=${isFailed}, isReturned=${isReturned}, hasReturns=${hasReturns}, hasDamages=${hasDamages}`);
+        console.log(`Row ${idx}: ${row.invoiceNumber}, status=${status}, isFailed=${isFailed}, isReturned=${isReturned}, isRescheduled=${isRescheduled}, hasReturns=${hasReturns}, hasDamages=${hasDamages}`);
 
         if (!row.order || !row.order.items) {
             console.warn(`Row ${idx}: No order or items`);
@@ -100,6 +101,28 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
                     qtyFailed: qty,
                     qtyDamaged: 0,
                     reason: 'Delivery Failed',
+                    amount: total
+                });
+            });
+        } else if (isRescheduled) {
+            // Rescheduled order - all items come back (not delivered today)
+            row.order.items.forEach(item => {
+                if (!item) return;
+
+                const qty = Number(item.quantity || item.qty) || 0;
+                const rate = Number(item.price || item.rate) || 0;
+                const total = Number(item.amount || item.total) || (qty * rate);
+                const productName = item.tempProductName || item.productName || 'Unknown Product';
+
+                returnItems.push({
+                    invoiceNumber: row.invoiceNumber || 'N/A',
+                    customerName: row.customerName || 'Unknown',
+                    productName: productName,
+                    qtyOrdered: qty,
+                    qtyReturned: 0,
+                    qtyFailed: qty,
+                    qtyDamaged: 0,
+                    reason: `Rescheduled from ${(row.order as any).rescheduled_from}`,
                     amount: total
                 });
             });
