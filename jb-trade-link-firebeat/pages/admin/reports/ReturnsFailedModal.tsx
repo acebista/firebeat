@@ -69,10 +69,18 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
                 });
             });
         } else if (isReturned || hasReturns) {
+            // For partial returns, only include items that were actually returned
+            // Don't include all items from the order
             const netAmount = Number(row.netAmount) || 0;
             const returnAmount = Number(row.returnAmount) || 0;
 
-            if (netAmount <= 0) {
+            // Skip if this is a delivered order with no actual returns
+            if (status === 'delivered' && returnAmount === 0 && !row.salesReturn) {
+                console.log(`Row ${idx}: Delivered with no returns, skipping`);
+                return;
+            }
+
+            if (netAmount <= 0 && returnAmount === 0) {
                 console.warn(`Row ${idx}: Invalid netAmount: ${netAmount}`);
                 return;
             }
@@ -89,16 +97,17 @@ export const ReturnsFailedModal: React.FC<ReturnsFailedModalProps> = ({ rows, on
                 let estimatedReturnQty = 0;
 
                 // If we have return amount data, calculate proportionally
-                if (returnAmount > 0) {
+                if (returnAmount > 0 && netAmount > 0) {
                     const returnFraction = returnAmount / netAmount;
                     estimatedReturnQty = Math.round(qty * returnFraction);
-                } else {
-                    // If no return amount but status is returned, assume full return
+                } else if (status === 'returned') {
+                    // If status is fully returned, assume full return
                     estimatedReturnQty = qty;
                 }
 
                 console.log(`Row ${idx} Item: ${productName}, qty=${qty}, returnAmount=${returnAmount}, estimatedReturnQty=${estimatedReturnQty}`);
 
+                // CRITICAL: Only add items that were actually returned (estimatedReturnQty > 0)
                 if (estimatedReturnQty > 0) {
                     returnItems.push({
                         invoiceNumber: row.invoiceNumber || 'N/A',

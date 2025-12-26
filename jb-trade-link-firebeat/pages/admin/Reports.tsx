@@ -375,8 +375,27 @@ export const Reports: React.FC = () => {
         deliveryFilters.endDate
       );
 
+      // CRITICAL: Also fetch rescheduled orders by checking rescheduled_from date
+      // This ensures orders that were rescheduled FROM this date range still appear
+      const allOrdersInRange = await OrderService.getOrdersByDateRangePaged(
+        deliveryFilters.startDate,
+        deliveryFilters.endDate
+      );
+
+      // Find rescheduled orders where rescheduled_from falls in our date range
+      const rescheduledOrders = allOrdersInRange.filter(o => {
+        const rescheduledFrom = (o as any).rescheduled_from;
+        if (!rescheduledFrom) return false;
+        return rescheduledFrom >= deliveryFilters.startDate && rescheduledFrom <= deliveryFilters.endDate;
+      });
+
+      // Combine and deduplicate
+      const orderMap = new Map<string, Order>();
+      [...orders, ...rescheduledOrders].forEach(o => orderMap.set(o.id, o));
+      orders = Array.from(orderMap.values());
+
       // Include delivered, cancelled (failed), and any order that was assigned to a trip
-      const deliveryStatuses = ['delivered', 'completed', 'dispatched', 'partially_returned', 'returned', 'cancelled'];
+      const deliveryStatuses = ['delivered', 'completed', 'dispatched', 'partially_returned', 'returned', 'cancelled', 'approved'];
       orders = orders.filter(o =>
         deliveryStatuses.includes(o.status) ||
         (o as any).assignedTripId // Include rescheduled orders that were on a trip

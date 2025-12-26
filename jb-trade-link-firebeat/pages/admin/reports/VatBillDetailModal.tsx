@@ -103,6 +103,22 @@ export const VatBillDetailModal: React.FC<VatBillDetailModalProps> = ({ bill, on
                             </div>
                         </div>
 
+                        {/* Customer Info */}
+                        {bill.customerName && (
+                            <div style={{ marginBottom: '20px', padding: '12px', backgroundColor: '#f0fdf4', borderLeft: '4px solid #10b981', borderRadius: '4px' }}>
+                                <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#065f46', marginBottom: '8px' }}>CUSTOMER DETAILS</div>
+                                <div style={{ fontSize: '13px', color: '#047857' }}>
+                                    <strong>Name:</strong> {bill.customerName}
+                                    {bill.customerPAN && (
+                                        <>
+                                            <br />
+                                            <strong>PAN:</strong> {bill.customerPAN}
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
                         {bill.type === 'Combined' && (
                             <div style={{ marginBottom: '20px', padding: '10px', backgroundColor: '#f0f9ff', borderLeft: '4px solid #3b82f6' }}>
                                 <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#1e40af' }}>INVOICES INCLUDED</div>

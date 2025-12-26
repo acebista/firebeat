@@ -16,6 +16,8 @@ export interface VatBill {
     paymentMethod: string;
     invoiceIds: string[];
     invoiceNumbers: string[];
+    customerName?: string;  // Customer name from first invoice
+    customerPAN?: string;   // Customer PAN if available
     subtotal: number;       // Total before VAT
     discount: number;       // Discount amount
     vatAmount: number;      // VAT amount (13%)
@@ -106,7 +108,7 @@ const getDeliveredItems = (row: DeliveryReportRow, methodAmount: number): BillIt
 
         return {
             productName: item.tempProductName || item.productName || 'Unknown Product',
-            quantity: Number(billedQty.toFixed(2)),
+            quantity: Math.round(billedQty), // CRITICAL: Round to whole number to avoid decimals
             rateBeforeVat: Number(rateBeforeVat.toFixed(2)),
             rate: rate,
             total: Number(itemTotalBeforeVat.toFixed(2))
@@ -146,6 +148,8 @@ export const generateVatBills = (rows: DeliveryReportRow[]): VatBill[] => {
                     paymentMethod: method,
                     invoiceIds: [row.invoiceId],
                     invoiceNumbers: [row.invoiceNumber],
+                    customerName: row.customerName,
+                    customerPAN: row.order.customerPAN,
                     subtotal: Number(subtotal.toFixed(2)),
                     discount: Number(discount.toFixed(2)),
                     vatAmount: Number(vatAmount.toFixed(2)),
@@ -186,6 +190,8 @@ export const generateVatBills = (rows: DeliveryReportRow[]): VatBill[] => {
                         paymentMethod: 'cash/qr',
                         invoiceIds: [...currentBillInvoices],
                         invoiceNumbers: [...currentBillInvoiceNumbers],
+                        customerName: 'Multiple Customers',
+                        customerPAN: undefined,
                         subtotal: Number(subtotal.toFixed(2)),
                         discount: Number(discount.toFixed(2)),
                         vatAmount: Number(vatAmount.toFixed(2)),
@@ -232,6 +238,8 @@ export const generateVatBills = (rows: DeliveryReportRow[]): VatBill[] => {
                 paymentMethod: 'cash/qr',
                 invoiceIds: currentBillInvoices,
                 invoiceNumbers: currentBillInvoiceNumbers,
+                customerName: 'Multiple Customers',
+                customerPAN: undefined,
                 subtotal: Number(subtotal.toFixed(2)),
                 discount: Number(discount.toFixed(2)),
                 vatAmount: Number(vatAmount.toFixed(2)),
