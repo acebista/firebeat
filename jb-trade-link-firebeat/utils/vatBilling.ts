@@ -122,8 +122,13 @@ const getDeliveredItems = (row: DeliveryReportRow, methodAmount: number): BillIt
     const orderItems = row.order.items || [];
     const VAT_RATE = 0.13; // 13% VAT
 
-    console.log(`[getDeliveredItems] Invoice: ${row.invoiceNumber}, methodAmount: ${methodAmount}`);
-    console.log(`[getDeliveredItems] Status: ${row.status}, Order items:`, orderItems);
+    console.log(`\n========== [getDeliveredItems] START ==========`);
+    console.log(`[getDeliveredItems] Invoice: ${row.invoiceNumber}`);
+    console.log(`[getDeliveredItems] methodAmount: ₹${methodAmount}`);
+    console.log(`[getDeliveredItems] row.collectedAmount: ₹${row.collectedAmount}`);
+    console.log(`[getDeliveredItems] row.order.totalAmount: ₹${row.order.totalAmount}`);
+    console.log(`[getDeliveredItems] row.order.discount: ₹${row.order.discount}`);
+    console.log(`[getDeliveredItems] Status: ${row.status}, Order items count:`, orderItems.length);
 
     // Parse returns and damages from remarks
     const returnsFromRemarks = parseReturnsFromRemarks(row.order.remarks || '');
@@ -139,6 +144,8 @@ const getDeliveredItems = (row: DeliveryReportRow, methodAmount: number): BillIt
         const qty = Number(item.quantity || item.qty) || 0;
         const rate = Number(item.price || item.rate) || 0;
         const productName = item.tempProductName || item.productName || 'Unknown Product';
+
+        console.log(`[getDeliveredItems] Processing: ${productName}, qty=${qty}, rate=₹${rate}`);
 
         // Calculate actual delivered quantity
         let deliveredQty = qty;
@@ -165,6 +172,8 @@ const getDeliveredItems = (row: DeliveryReportRow, methodAmount: number): BillIt
             const rateBeforeVat = rate / (1 + VAT_RATE);
             const totalBeforeVat = deliveredQty * rateBeforeVat;
 
+            console.log(`[getDeliveredItems]   -> rateBeforeVat=₹${rateBeforeVat.toFixed(2)}, totalBeforeVat=₹${totalBeforeVat.toFixed(2)}`);
+
             deliveredItems.push({
                 productName: productName,
                 quantity: deliveredQty, // Exact delivered quantity - no rounding needed
@@ -175,6 +184,8 @@ const getDeliveredItems = (row: DeliveryReportRow, methodAmount: number): BillIt
         }
     });
 
+    console.log(`[getDeliveredItems] Delivered items count: ${deliveredItems.length}`);
+
     // CRITICAL: Only apply proportional scaling for TRUE partial payments (multiple payment methods)
     // NOT for discounts - discount is already reflected in the item totals
 
@@ -182,27 +193,41 @@ const getDeliveredItems = (row: DeliveryReportRow, methodAmount: number): BillIt
     const totalDeliveredAmountBeforeVat = deliveredItems.reduce((sum, i) => sum + i.total, 0);
     const totalDeliveredAmountWithVat = totalDeliveredAmountBeforeVat * (1 + VAT_RATE);
 
-    console.log(`[getDeliveredItems] Total delivered (before VAT): ${totalDeliveredAmountBeforeVat}, with VAT: ${totalDeliveredAmountWithVat}, methodAmount: ${methodAmount}`);
+    console.log(`[getDeliveredItems] Total delivered (before VAT): ₹${totalDeliveredAmountBeforeVat.toFixed(2)}`);
+    console.log(`[getDeliveredItems] Total delivered (with VAT): ₹${totalDeliveredAmountWithVat.toFixed(2)}`);
+    console.log(`[getDeliveredItems] methodAmount: ₹${methodAmount.toFixed(2)}`);
+    console.log(`[getDeliveredItems] Difference: ₹${(totalDeliveredAmountWithVat - methodAmount).toFixed(2)}`);
 
     // Only scale if methodAmount is significantly less than the total (indicating multiple payment methods)
     // Use a 1% tolerance to account for rounding
     const tolerance = totalDeliveredAmountWithVat * 0.01;
 
+    console.log(`[getDeliveredItems] Tolerance (1%): ₹${tolerance.toFixed(2)}`);
+    console.log(`[getDeliveredItems] Will scale? ${totalDeliveredAmountWithVat > 0 && methodAmount < (totalDeliveredAmountWithVat - tolerance)}`);
+
     if (totalDeliveredAmountWithVat > 0 && methodAmount < (totalDeliveredAmountWithVat - tolerance)) {
         // This is a TRUE partial payment (multiple payment methods)
         const paymentFraction = methodAmount / totalDeliveredAmountWithVat;
 
-        console.log(`[getDeliveredItems] Multiple payment methods detected. Payment fraction: ${paymentFraction.toFixed(4)}`);
+        console.log(`[getDeliveredItems] ⚠️  SCALING APPLIED! Payment fraction: ${paymentFraction.toFixed(4)} (${(paymentFraction * 100).toFixed(2)}%)`);
 
         // Scale quantities proportionally for this payment method
-        return deliveredItems.map(item => ({
+        const scaledItems = deliveredItems.map(item => ({
             ...item,
             quantity: Math.round(item.quantity * paymentFraction),
             total: Number((item.total * paymentFraction).toFixed(2))
         })).filter(i => i.quantity > 0);
+
+        console.log(`[getDeliveredItems] Scaled items:`, scaledItems.map(i => `${i.productName}: ${i.quantity}`));
+        console.log(`========== [getDeliveredItems] END (SCALED) ==========\n`);
+
+        return scaledItems;
     }
 
-    console.log(`[getDeliveredItems] Single payment method - returning ${deliveredItems.length} items with exact delivered quantities`);
+    console.log(`[getDeliveredItems] ✓ Single payment method - NO SCALING`);
+    console.log(`[getDeliveredItems] Final items:`, deliveredItems.map(i => `${i.productName}: ${i.quantity}`));
+    console.log(`========== [getDeliveredItems] END (NO SCALING) ==========\n`);
+
     return deliveredItems;
 };
 
