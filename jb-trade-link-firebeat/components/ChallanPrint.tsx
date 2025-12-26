@@ -4,217 +4,229 @@ import toast from 'react-hot-toast';
 import { Layout as LayoutIcon } from 'lucide-react';
 
 interface ChallanPrintProps {
-    order: Order;
-    customerLocation?: string; // lat,long format
-    orientation?: 'portrait' | 'landscape';
-    showOrientationToggle?: boolean;
+  order: Order;
+  customerLocation?: string; // lat,long format
+  orientation?: 'portrait' | 'landscape';
+  showOrientationToggle?: boolean;
 }
 
-export const ChallanPrint: React.FC<ChallanPrintProps> = ({ 
-    order, 
-    customerLocation,
-    orientation = 'portrait',
-    showOrientationToggle = false 
+export const ChallanPrint: React.FC<ChallanPrintProps> = ({
+  order,
+  customerLocation,
+  orientation = 'portrait',
+  showOrientationToggle = false
 }) => {
-    const [currentOrientation, setCurrentOrientation] = useState<'portrait' | 'landscape'>(orientation);
+  const [currentOrientation, setCurrentOrientation] = useState<'portrait' | 'landscape'>(orientation);
 
-    // Generate QR code URL for Google Maps location
-    const getQRCodeUrl = (location: string) => {
-        const parts = location.split(',').map(p => p.trim());
-        const lat = parts[0];
-        const lng = parts[1];
-        if (!lat || !lng) return undefined;
-        const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
-        return `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(mapsUrl)}`;
-    };
+  // Generate QR code URL for Google Maps location
+  const getQRCodeUrl = (location: string) => {
+    const parts = location.split(',').map(p => p.trim());
+    const lat = parts[0];
+    const lng = parts[1];
+    if (!lat || !lng) return undefined;
+    const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+    return `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(mapsUrl)}`;
+  };
 
-    const subtotal = order.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0;
-    const discountAmount = order.discount || 0;
-    const discountPct = subtotal > 0 ? ((discountAmount / subtotal) * 100).toFixed(2) : '0';
-    const grandTotal = order.totalAmount || 0;
-    const qrCodeUrl = customerLocation ? getQRCodeUrl(customerLocation) : undefined;
+  const subtotal = order.items?.reduce((sum, item) => {
+    const total = Number(item.total || item.amount) || 0;
+    return sum + total;
+  }, 0) || 0;
+  const discountAmount = order.discount || 0;
+  const discountPct = subtotal > 0 ? ((discountAmount / subtotal) * 100).toFixed(2) : '0';
+  const grandTotal = order.totalAmount || 0;
+  const qrCodeUrl = customerLocation ? getQRCodeUrl(customerLocation) : undefined;
 
-    // Dimension styles based on orientation
-    const pageStyle = currentOrientation === 'portrait' ? {
-        width: '210mm',
-        minHeight: '297mm',
-    } : {
-        width: '297mm',
-        minHeight: '210mm',
-    };
+  // Dimension styles based on orientation
+  const pageStyle = currentOrientation === 'portrait' ? {
+    width: '210mm',
+    minHeight: '297mm',
+  } : {
+    width: '297mm',
+    minHeight: '210mm',
+  };
 
-    const containerStyle = {
-        ...pageStyle,
-        padding: '15mm',
-        fontFamily: 'Arial, sans-serif',
-        fontSize: '11pt',
-        backgroundColor: 'white',
-        position: 'relative' as const,
-        border: '3px solid black'
-    };
+  const containerStyle = {
+    ...pageStyle,
+    padding: '15mm',
+    fontFamily: 'Arial, sans-serif',
+    fontSize: '11pt',
+    backgroundColor: 'white',
+    position: 'relative' as const,
+    border: '3px solid black'
+  };
 
-    const headerStyle = {
-        textAlign: 'center' as const,
-        marginBottom: '15px',
-        position: 'relative' as const,
-        paddingBottom: '10px',
-        borderBottom: '2px solid black',
-    };
+  const headerStyle = {
+    textAlign: 'center' as const,
+    marginBottom: '15px',
+    position: 'relative' as const,
+    paddingBottom: '10px',
+    borderBottom: '2px solid black',
+  };
 
-    const qrContainerStyle = {
-        position: 'absolute' as const,
-        top: '15mm',
-        right: '15mm',
-        display: 'flex',
-        flexDirection: 'column' as const,
-        alignItems: 'center',
-        gap: '4px'
-    };
+  const qrContainerStyle = {
+    position: 'absolute' as const,
+    top: '15mm',
+    right: '15mm',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    gap: '4px'
+  };
 
-    return (
-        <div style={containerStyle}>
-            {/* QR Code in top-right corner */}
-            {qrCodeUrl && (
-                <div style={qrContainerStyle}>
-                    <img 
-                        src={qrCodeUrl} 
-                        alt="Location QR Code" 
-                        style={{ width: '120px', height: '120px', border: '1px solid #ccc' }}
-                    />
-                    <small style={{ fontSize: '8pt', textAlign: 'center' }}>Customer Location</small>
-                </div>
-            )}
-
-            {/* Header */}
-            <div style={headerStyle}>
-                <h1 style={{ margin: '0 0 5px 0', fontSize: '18pt', fontWeight: 'bold' }}>J.B Trade Link Pvt. Ltd.</h1>
-                <h2 style={{ margin: '0 0 5px 0', fontSize: '14pt', fontWeight: 'normal' }}>Delivery Challan</h2>
-                <p style={{ margin: '5px 0', fontSize: '10pt' }}>Phone: 9802379658</p>
-                <p style={{ margin: '5px 0', fontSize: '10pt', fontWeight: 'bold' }}>Customer Copy</p>
-            </div>
-
-            {/* Invoice Details */}
-            <div style={{ marginBottom: '15px', fontSize: '11pt' }}>
-                <div style={{ marginBottom: '5px' }}>
-                    <strong>Invoice No:</strong> {order.id}
-                </div>
-                <div style={{ marginBottom: '5px' }}>
-                    <strong>Salesman:</strong> {order.salespersonName} &nbsp;&nbsp;&nbsp;
-                    <strong>Phone:</strong> {order.salespersonPhone || 'N/A'}
-                </div>
-                <div style={{ marginBottom: '5px' }}>
-                    <strong>Customer Name:</strong> {order.customerName} &nbsp;&nbsp;&nbsp;
-                    <strong>Phone:</strong> {order.customerPhone || 'N/A'}
-                </div>
-                <div style={{ marginBottom: '5px' }}>
-                    <strong>PAN Number:</strong> {order.customerPAN || 'N/A'}
-                </div>
-                <div style={{ marginBottom: '5px' }}>
-                    <strong>Payment Mode:</strong> {order.paymentMode || 'Cash'}
-                </div>
-                <div style={{ marginBottom: '10px' }}>
-                    <strong>Products Sold:</strong>
-                </div>
-            </div>
-
-            {/* Products Table */}
-            <table style={{
-                width: '100%',
-                borderCollapse: 'collapse',
-                marginBottom: '20px',
-                fontSize: '10pt'
-            }}>
-                <thead>
-                    <tr style={{ backgroundColor: '#f0f0f0' }}>
-                        <th style={{ border: '2px solid black', padding: '8px', textAlign: 'center', width: '40px' }}>#</th>
-                        <th style={{ border: '2px solid black', padding: '8px', textAlign: 'left' }}>Product</th>
-                        <th style={{ border: '2px solid black', padding: '8px', textAlign: 'center', width: '80px' }}>Qty</th>
-                        <th style={{ border: '2px solid black', padding: '8px', textAlign: 'right', width: '80px' }}>Rate</th>
-                        <th style={{ border: '2px solid black', padding: '8px', textAlign: 'right', width: '100px' }}>SubTotal</th>
-                        <th style={{ border: '2px solid black', padding: '8px', textAlign: 'right', width: '80px' }}>Disc</th>
-                        <th style={{ border: '2px solid black', padding: '8px', textAlign: 'right', width: '100px' }}>Total</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {order.items?.map((item, index) => {
-                        const itemDiscount = (item.discountPct || 0) > 0
-                            ? (item.total || 0) * ((item.discountPct || 0) / 100)
-                            : 0;
-                        return (
-                            <tr key={index}>
-                                <td style={{ border: '1px solid black', padding: '6px', textAlign: 'center' }}>{index + 1}</td>
-                                <td style={{ border: '1px solid black', padding: '6px' }}>{item.productName}</td>
-                                <td style={{ border: '1px solid black', padding: '6px', textAlign: 'center' }}>{item.qty}</td>
-                                <td style={{ border: '1px solid black', padding: '6px', textAlign: 'right' }}>{(item.rate || 0).toFixed(2)}</td>
-                                <td style={{ border: '1px solid black', padding: '6px', textAlign: 'right' }}>{(item.total || 0).toFixed(2)}</td>
-                                <td style={{ border: '1px solid black', padding: '6px', textAlign: 'right' }}>{itemDiscount.toFixed(2)}</td>
-                                <td style={{ border: '1px solid black', padding: '6px', textAlign: 'right', fontWeight: 'bold' }}>
-                                    {((item.total || 0) - itemDiscount).toFixed(2)}
-                                </td>
-                            </tr>
-                        );
-                    })}
-                </tbody>
-            </table>
-
-            {/* Totals */}
-            <div style={{ marginBottom: '30px', fontSize: '11pt' }}>
-                <div style={{ marginBottom: '8px' }}>
-                    <strong>Sub Total: Rs. {subtotal.toFixed(2)}</strong>
-                </div>
-                {discountAmount > 0 && (
-                    <div style={{ marginBottom: '8px' }}>
-                        <strong>Discount ({discountPct}%): Rs. {discountAmount.toFixed(2)}</strong>
-                    </div>
-                )}
-                <div style={{ fontSize: '14pt', fontWeight: 'bold', marginTop: '10px' }}>
-                    Grand Total: Rs. {grandTotal.toFixed(2)}
-                </div>
-            </div>
-
-            {/* Signatures */}
-            <div style={{ marginTop: '50px', fontSize: '11pt' }}>
-                <div style={{ marginBottom: '50px' }}>
-                    For J.B. Trade Link: _______________________
-                </div>
-                <div>
-                    Customer Signature: _______________________
-                </div>
-            </div>
+  return (
+    <div style={containerStyle}>
+      {/* QR Code in top-right corner */}
+      {qrCodeUrl && (
+        <div style={qrContainerStyle}>
+          <img
+            src={qrCodeUrl}
+            alt="Location QR Code"
+            style={{ width: '120px', height: '120px', border: '1px solid #ccc' }}
+          />
+          <small style={{ fontSize: '8pt', textAlign: 'center' }}>Customer Location</small>
         </div>
-    );
+      )}
+
+      {/* Header */}
+      <div style={headerStyle}>
+        <h1 style={{ margin: '0 0 5px 0', fontSize: '18pt', fontWeight: 'bold' }}>J.B Trade Link Pvt. Ltd.</h1>
+        <h2 style={{ margin: '0 0 5px 0', fontSize: '14pt', fontWeight: 'normal' }}>Delivery Challan</h2>
+        <p style={{ margin: '5px 0', fontSize: '10pt' }}>Phone: 9802379658</p>
+        <p style={{ margin: '5px 0', fontSize: '10pt', fontWeight: 'bold' }}>Customer Copy</p>
+      </div>
+
+      {/* Invoice Details */}
+      <div style={{ marginBottom: '15px', fontSize: '11pt' }}>
+        <div style={{ marginBottom: '5px' }}>
+          <strong>Invoice No:</strong> {order.id}
+        </div>
+        <div style={{ marginBottom: '5px' }}>
+          <strong>Salesman:</strong> {order.salespersonName} &nbsp;&nbsp;&nbsp;
+          <strong>Phone:</strong> {order.salespersonPhone || 'N/A'}
+        </div>
+        <div style={{ marginBottom: '5px' }}>
+          <strong>Customer Name:</strong> {order.customerName} &nbsp;&nbsp;&nbsp;
+          <strong>Phone:</strong> {order.customerPhone || 'N/A'}
+        </div>
+        <div style={{ marginBottom: '5px' }}>
+          <strong>PAN Number:</strong> {order.customerPAN || 'N/A'}
+        </div>
+        <div style={{ marginBottom: '5px' }}>
+          <strong>Payment Mode:</strong> {order.paymentMode || 'Cash'}
+        </div>
+        <div style={{ marginBottom: '10px' }}>
+          <strong>Products Sold:</strong>
+        </div>
+      </div>
+
+      {/* Products Table */}
+      <table style={{
+        width: '100%',
+        borderCollapse: 'collapse',
+        marginBottom: '20px',
+        fontSize: '10pt'
+      }}>
+        <thead>
+          <tr style={{ backgroundColor: '#f0f0f0' }}>
+            <th style={{ border: '2px solid black', padding: '8px', textAlign: 'center', width: '40px' }}>#</th>
+            <th style={{ border: '2px solid black', padding: '8px', textAlign: 'left' }}>Product</th>
+            <th style={{ border: '2px solid black', padding: '8px', textAlign: 'center', width: '80px' }}>Qty</th>
+            <th style={{ border: '2px solid black', padding: '8px', textAlign: 'right', width: '80px' }}>Rate</th>
+            <th style={{ border: '2px solid black', padding: '8px', textAlign: 'right', width: '100px' }}>SubTotal</th>
+            <th style={{ border: '2px solid black', padding: '8px', textAlign: 'right', width: '80px' }}>Disc</th>
+            <th style={{ border: '2px solid black', padding: '8px', textAlign: 'right', width: '100px' }}>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {order.items?.map((item, index) => {
+            // Handle both database field formats
+            const qty = Number(item.qty || item.quantity) || 0;
+            const rate = Number(item.rate || item.price) || 0;
+            const total = Number(item.total || item.amount) || (qty * rate);
+            const productName = item.productName || item.tempProductName || 'undefined';
+
+            const itemDiscount = (item.discountPct || 0) > 0
+              ? total * ((item.discountPct || 0) / 100)
+              : 0;
+            return (
+              <tr key={index}>
+                <td style={{ border: '1px solid black', padding: '6px', textAlign: 'center' }}>{index + 1}</td>
+                <td style={{ border: '1px solid black', padding: '6px' }}>{productName}</td>
+                <td style={{ border: '1px solid black', padding: '6px', textAlign: 'center' }}>{qty}</td>
+                <td style={{ border: '1px solid black', padding: '6px', textAlign: 'right' }}>{rate.toFixed(2)}</td>
+                <td style={{ border: '1px solid black', padding: '6px', textAlign: 'right' }}>{total.toFixed(2)}</td>
+                <td style={{ border: '1px solid black', padding: '6px', textAlign: 'right' }}>{itemDiscount.toFixed(2)}</td>
+                <td style={{ border: '1px solid black', padding: '6px', textAlign: 'right', fontWeight: 'bold' }}>
+                  {(total - itemDiscount).toFixed(2)}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+
+      {/* Totals */}
+      <div style={{ marginBottom: '30px', fontSize: '11pt' }}>
+        <div style={{ marginBottom: '8px' }}>
+          <strong>Sub Total: Rs. {subtotal.toFixed(2)}</strong>
+        </div>
+        {discountAmount > 0 && (
+          <div style={{ marginBottom: '8px' }}>
+            <strong>Discount ({discountPct}%): Rs. {discountAmount.toFixed(2)}</strong>
+          </div>
+        )}
+        <div style={{ fontSize: '14pt', fontWeight: 'bold', marginTop: '10px' }}>
+          Grand Total: Rs. {grandTotal.toFixed(2)}
+        </div>
+      </div>
+
+      {/* Signatures */}
+      <div style={{ marginTop: '50px', fontSize: '11pt' }}>
+        <div style={{ marginBottom: '50px' }}>
+          For J.B. Trade Link: _______________________
+        </div>
+        <div>
+          Customer Signature: _______________________
+        </div>
+      </div>
+    </div>
+  );
 };
 
 // Print function for individual challan
 export const printChallan = (order: Order, customerLocation?: string, orientation: 'portrait' | 'landscape' = 'portrait') => {
-    const printWindow = window.open('', '', 'height=800,width=600');
-    if (!printWindow) {
-        toast.error('Please allow popups to print');
-        return;
-    }
+  const printWindow = window.open('', '', 'height=800,width=600');
+  if (!printWindow) {
+    toast.error('Please allow popups to print');
+    return;
+  }
 
-    // Parse GPS coordinates and generate QR code
-    const getQRUrl = (location: string) => {
-        const parts = location.split(',').map(p => p.trim());
-        const lat = parts[0];
-        const lng = parts[1];
-        if (!lat || !lng) return '';
-        const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
-        return `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(mapsUrl)}`;
-    };
+  // Parse GPS coordinates and generate QR code
+  const getQRUrl = (location: string) => {
+    const parts = location.split(',').map(p => p.trim());
+    const lat = parts[0];
+    const lng = parts[1];
+    if (!lat || !lng) return '';
+    const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+    return `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(mapsUrl)}`;
+  };
 
-    const qrUrl = customerLocation ? getQRUrl(customerLocation) : '';
+  const qrUrl = customerLocation ? getQRUrl(customerLocation) : '';
 
-    const subtotal = order.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0;
-    const discountAmount = order.discount || 0;
-    const discountPct = subtotal > 0 ? ((discountAmount / subtotal) * 100).toFixed(2) : '0';
-    const grandTotal = order.totalAmount || 0;
+  const subtotal = order.items?.reduce((sum, item) => {
+    const total = Number(item.total || item.amount) || 0;
+    return sum + total;
+  }, 0) || 0;
+  const discountAmount = order.discount || 0;
+  const discountPct = subtotal > 0 ? ((discountAmount / subtotal) * 100).toFixed(2) : '0';
+  const grandTotal = order.totalAmount || 0;
 
-    const pageSize = orientation === 'portrait' 
-        ? { width: '210mm', height: '297mm' }
-        : { width: '297mm', height: '210mm' };
+  const pageSize = orientation === 'portrait'
+    ? { width: '210mm', height: '297mm' }
+    : { width: '297mm', height: '210mm' };
 
-    printWindow.document.write(`
+  printWindow.document.write(`
     <html>
       <head>
         <title>Delivery Challan - ${order.id}</title>
@@ -313,21 +325,25 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
             </thead>
             <tbody>
               ${order.items?.map((item, index) => {
-        const itemDiscount = (item.discountPct || 0) > 0
-            ? (item.total || 0) * ((item.discountPct || 0) / 100)
-            : 0;
-        return `
-                  <tr>
-                    <td style="text-align: center;">${index + 1}</td>
-                    <td>${item.productName}</td>
-                    <td style="text-align: center;">${item.qty}</td>
-                    <td style="text-align: right;">${(item.rate || 0).toFixed(2)}</td>
-                    <td style="text-align: right;">${(item.total || 0).toFixed(2)}</td>
-                    <td style="text-align: right;">${itemDiscount.toFixed(2)}</td>
-                    <td style="text-align: right; font-weight: bold;">${((item.total || 0) - itemDiscount).toFixed(2)}</td>
-                  </tr>
-                `;
-    }).join('')}
+    const qty = Number(item.qty || item.quantity) || 0;
+    const rate = Number(item.rate || item.price) || 0;
+    const total = Number(item.total || item.amount) || (qty * rate);
+    const productName = item.productName || item.tempProductName || 'undefined';
+    const itemDiscount = (item.discountPct || 0) > 0
+      ? total * ((item.discountPct || 0) / 100)
+      : 0;
+    return `
+                    <tr>
+                      <td style="text-align: center;">${index + 1}</td>
+                      <td>${productName}</td>
+                      <td style="text-align: center;">${qty}</td>
+                      <td style="text-align: right;">${rate.toFixed(2)}</td>
+                      <td style="text-align: right;">${total.toFixed(2)}</td>
+                      <td style="text-align: right;">${itemDiscount.toFixed(2)}</td>
+                      <td style="text-align: right; font-weight: bold;">${(total - itemDiscount).toFixed(2)}</td>
+                    </tr>
+                  `;
+  }).join('')}
             </tbody>
           </table>
 
@@ -346,52 +362,55 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
     </html>
   `);
 
-    printWindow.document.close();
+  printWindow.document.close();
 
-    // Wait for images (QR code) to load before printing
-    setTimeout(() => {
-        printWindow.focus();
-        printWindow.print();
-    }, 500);
+  // Wait for images (QR code) to load before printing
+  setTimeout(() => {
+    printWindow.focus();
+    printWindow.print();
+  }, 500);
 };
 
 // Batch print function for multiple challans with orientation support
 export const printChallans = (
-    orders: Order[],
-    orientation: 'portrait' | 'landscape' = 'portrait',
-    getCustomerLocation?: (order: Order) => string | undefined
+  orders: Order[],
+  orientation: 'portrait' | 'landscape' = 'portrait',
+  getCustomerLocation?: (order: Order) => string | undefined
 ) => {
-    const printWindow = window.open('', '', 'height=800,width=600');
-    if (!printWindow) {
-        toast.error('Please allow popups to print');
-        return;
+  const printWindow = window.open('', '', 'height=800,width=600');
+  if (!printWindow) {
+    toast.error('Please allow popups to print');
+    return;
+  }
+
+  const pageSize = orientation === 'portrait'
+    ? { width: '210mm', height: '297mm' }
+    : { width: '297mm', height: '210mm' };
+
+  const challanHtml = orders.map(order => {
+    const customerLocation = getCustomerLocation?.(order);
+
+    // Parse GPS coordinates for QR code
+    let qrUrl = '';
+    if (customerLocation) {
+      const parts = customerLocation.split(',').map(p => p.trim());
+      const lat = parts[0];
+      const lng = parts[1];
+      if (lat && lng) {
+        const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+        qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(mapsUrl)}`;
+      }
     }
 
-    const pageSize = orientation === 'portrait' 
-        ? { width: '210mm', height: '297mm' }
-        : { width: '297mm', height: '210mm' };
+    const subtotal = order.items?.reduce((sum, item) => {
+      const total = Number(item.total || item.amount) || 0;
+      return sum + total;
+    }, 0) || 0;
+    const discountAmount = order.discount || 0;
+    const discountPct = subtotal > 0 ? ((discountAmount / subtotal) * 100).toFixed(2) : '0';
+    const grandTotal = order.totalAmount || 0;
 
-    const challanHtml = orders.map(order => {
-        const customerLocation = getCustomerLocation?.(order);
-        
-        // Parse GPS coordinates for QR code
-        let qrUrl = '';
-        if (customerLocation) {
-            const parts = customerLocation.split(',').map(p => p.trim());
-            const lat = parts[0];
-            const lng = parts[1];
-            if (lat && lng) {
-                const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
-                qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(mapsUrl)}`;
-            }
-        }
-
-        const subtotal = order.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0;
-        const discountAmount = order.discount || 0;
-        const discountPct = subtotal > 0 ? ((discountAmount / subtotal) * 100).toFixed(2) : '0';
-        const grandTotal = order.totalAmount || 0;
-
-        return `
+    return `
           <div class="challan-page">
             <div class="container">
               ${qrUrl ? `
@@ -431,21 +450,25 @@ export const printChallans = (
                 </thead>
                 <tbody>
                   ${order.items?.map((item, index) => {
-            const itemDiscount = (item.discountPct || 0) > 0
-                ? (item.total || 0) * ((item.discountPct || 0) / 100)
-                : 0;
-            return `
+      const qty = Number(item.qty || item.quantity) || 0;
+      const rate = Number(item.rate || item.price) || 0;
+      const total = Number(item.total || item.amount) || (qty * rate);
+      const productName = item.productName || item.tempProductName || 'undefined';
+      const itemDiscount = (item.discountPct || 0) > 0
+        ? total * ((item.discountPct || 0) / 100)
+        : 0;
+      return `
                     <tr>
                       <td style="text-align: center;">${index + 1}</td>
-                      <td>${item.productName}</td>
-                      <td style="text-align: center;">${item.qty}</td>
-                      <td style="text-align: right;">${(item.rate || 0).toFixed(2)}</td>
-                      <td style="text-align: right;">${(item.total || 0).toFixed(2)}</td>
+                      <td>${productName}</td>
+                      <td style="text-align: center;">${qty}</td>
+                      <td style="text-align: right;">${rate.toFixed(2)}</td>
+                      <td style="text-align: right;">${total.toFixed(2)}</td>
                       <td style="text-align: right;">${itemDiscount.toFixed(2)}</td>
-                      <td style="text-align: right; font-weight: bold;">${((item.total || 0) - itemDiscount).toFixed(2)}</td>
+                      <td style="text-align: right; font-weight: bold;">${(total - itemDiscount).toFixed(2)}</td>
                     </tr>
                   `;
-        }).join('')}
+    }).join('')}
                 </tbody>
               </table>
 
@@ -462,9 +485,9 @@ export const printChallans = (
             </div>
           </div>
         `;
-    }).join('');
+  }).join('');
 
-    printWindow.document.write(`
+  printWindow.document.write(`
     <html>
       <head>
         <title>Delivery Challans - Batch Print</title>
@@ -575,11 +598,11 @@ export const printChallans = (
     </html>
   `);
 
-    printWindow.document.close();
+  printWindow.document.close();
 
-    // Wait for images (QR codes) to load before printing
-    setTimeout(() => {
-        printWindow.focus();
-        printWindow.print();
-    }, 1000);
+  // Wait for images (QR codes) to load before printing
+  setTimeout(() => {
+    printWindow.focus();
+    printWindow.print();
+  }, 1000);
 };
