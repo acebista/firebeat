@@ -147,13 +147,24 @@ export const DeliveryOrderDetails: React.FC = () => {
 
     // Parse existing returns and damages from remarks when entering edit mode
     useEffect(() => {
+        console.log('[DeliveryOrderDetails] Remarks parsing useEffect triggered', {
+            isEditing,
+            hasOrder: !!order,
+            hasRemarks: !!order?.remarks,
+            remarks: order?.remarks
+        });
+
         if (isEditing && order?.remarks) {
             const remarks = order.remarks;
+            console.log('[DeliveryOrderDetails] Parsing remarks:', remarks);
 
             // Parse Returns: ProductName(qty), ProductName2(qty)
             const returnsMatch = remarks.match(/Returns:\s*([^|]+)/);
+            console.log('[DeliveryOrderDetails] Returns match:', returnsMatch);
+
             if (returnsMatch) {
                 const returnsStr = returnsMatch[1].trim();
+                console.log('[DeliveryOrderDetails] Returns string:', returnsStr);
                 const returnRegex = /([^(]+)\((\d+)\)/g;
                 const parsedReturns: ReturnItem[] = [];
                 let match;
@@ -161,11 +172,14 @@ export const DeliveryOrderDetails: React.FC = () => {
                 while ((match = returnRegex.exec(returnsStr)) !== null) {
                     const productName = match[1].trim();
                     const returnQty = parseInt(match[2]);
+                    console.log('[DeliveryOrderDetails] Found return:', { productName, returnQty });
 
                     // Find the product in order items to get rate and original qty
                     const orderItem = order.items?.find(item =>
                         (item.productName || item.tempProductName || '').toLowerCase() === productName.toLowerCase()
                     );
+
+                    console.log('[DeliveryOrderDetails] Matched order item:', orderItem);
 
                     if (orderItem) {
                         parsedReturns.push({
@@ -178,15 +192,20 @@ export const DeliveryOrderDetails: React.FC = () => {
                     }
                 }
 
+                console.log('[DeliveryOrderDetails] Parsed returns:', parsedReturns);
                 if (parsedReturns.length > 0) {
                     setReturnItems(parsedReturns);
+                    console.log('[DeliveryOrderDetails] Set return items:', parsedReturns);
                 }
             }
 
             // Parse Damages: ProductName(qty) - reason, ProductName2(qty) - reason
             const damagesMatch = remarks.match(/Damages:\s*([^|]+)/);
+            console.log('[DeliveryOrderDetails] Damages match:', damagesMatch);
+
             if (damagesMatch) {
                 const damagesStr = damagesMatch[1].trim();
+                console.log('[DeliveryOrderDetails] Damages string:', damagesStr);
                 const damageRegex = /([^(]+)\((\d+)\)\s*-\s*([^,]+)/g;
                 const parsedDamages: DamageItem[] = [];
                 let match;
@@ -195,11 +214,14 @@ export const DeliveryOrderDetails: React.FC = () => {
                     const productName = match[1].trim();
                     const quantity = parseInt(match[2]);
                     const reason = match[3].trim();
+                    console.log('[DeliveryOrderDetails] Found damage:', { productName, quantity, reason });
 
                     // Find the product in order items to get rate and product ID
                     const orderItem = order.items?.find(item =>
                         (item.productName || item.tempProductName || '').toLowerCase() === productName.toLowerCase()
                     );
+
+                    console.log('[DeliveryOrderDetails] Matched order item:', orderItem);
 
                     if (orderItem) {
                         parsedDamages.push({
@@ -212,16 +234,17 @@ export const DeliveryOrderDetails: React.FC = () => {
                     }
                 }
 
+                console.log('[DeliveryOrderDetails] Parsed damages:', parsedDamages);
                 if (parsedDamages.length > 0) {
                     setDamages(parsedDamages);
+                    console.log('[DeliveryOrderDetails] Set damages:', parsedDamages);
                 }
             }
-        } else if (!isEditing) {
-            // Clear returns and damages when exiting edit mode
-            setReturnItems([]);
-            setDamages([]);
         }
+        // Note: Removed the clearing logic here - it was causing issues
+        // Returns and damages will be cleared when the component unmounts or when explicitly needed
     }, [isEditing, order]);
+
 
     const calculateOriginalTotal = () => {
         if (!order?.items) return 0;
