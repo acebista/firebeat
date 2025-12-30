@@ -336,9 +336,28 @@ export const TripSummaryModal: React.FC<TripSummaryModalProps> = ({
                                                             Tot: ₹{order.totalCollected.toFixed(2)}
                                                         </div>
                                                     )}
+                                                    {/* Show Short Amount if partial payment */}
+                                                    {Math.round(order.totalCollected) < Math.round(order.totalAmount) && (
+                                                        <div className="flex items-center gap-1.5 mt-1 animate-pulse">
+                                                            <Badge color="red">SHORT</Badge>
+                                                            <span className="text-xs font-bold text-red-600">
+                                                                ₹{(order.totalAmount - order.totalCollected).toFixed(2)}
+                                                            </span>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             ) : (
-                                                <span className="text-xs text-gray-400 italic">No payments</span>
+                                                // No payments found
+                                                (order.status === 'delivered' || order.status === 'completed') ? (
+                                                    <div className="flex flex-col gap-1">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <Badge color="red">CREDIT</Badge>
+                                                            <span className="text-xs font-bold text-gray-700">₹{order.totalAmount.toLocaleString()}</span>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-xs text-gray-400 italic">No payments</span>
+                                                )
                                             )}
                                         </td>
                                         <td className="px-4 py-4">
