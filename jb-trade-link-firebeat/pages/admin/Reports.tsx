@@ -560,7 +560,11 @@ export const Reports: React.FC = () => {
               breakdown[normalizedMethod] = { count: 0, amount: 0 };
             }
             breakdown[normalizedMethod].count++;
-            breakdown[normalizedMethod].amount += row.collectedAmount;
+
+            // For credit, use netAmount as the 'amount' (value of credit given)
+            // For cash/others, use collectedAmount (money received)
+            const amountToAdd = normalizedMethod === 'credit' ? row.netAmount : row.collectedAmount;
+            breakdown[normalizedMethod].amount += amountToAdd;
           }
           return breakdown;
         }, {} as Record<string, { count: number; amount: number }>)
