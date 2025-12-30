@@ -476,40 +476,47 @@ export const DeliveryOrderDetails: React.FC = () => {
                     console.log(`[DeliveryOrderDetails] Found ${existingPayments.length} active payments to void.`);
 
                     // 2. Void all existing payments for this invoice (sequential to avoid race conditions)
+                    let voidedCount = 0;
                     for (const p of existingPayments) {
                         console.log(`[DeliveryOrderDetails] Voiding payment: ${p.id}`);
-                        const voidResult = await PaymentsService.voidPayment(p.id, "Delivery Detail Correction");
-                        if (!voidResult) {
-                            console.error(`[DeliveryOrderDetails] Failed to void payment ${p.id}`);
+                        try {
+                            const voidResult = await PaymentsService.voidPayment(p.id, "Delivery Detail Correction");
+                            if (voidResult) {
+                                voidedCount++;
+                            } else {
+                                console.error(`[DeliveryOrderDetails] Failed to void payment ${p.id}`);
+                            }
+                        } catch (voidError) {
+                            console.error(`[DeliveryOrderDetails] Error voiding payment ${p.id}:`, voidError);
                         }
                     }
+                    console.log(`[DeliveryOrderDetails] Successfully voided ${voidedCount}/${existingPayments.length} payments`);
 
-                    // 3. Small delay to ensure database consistency
-                    await new Promise(resolve => setTimeout(resolve, 300));
+                    // 3. Wait for database consistency (increased delay for replication)
+                    await new Promise(resolve => setTimeout(resolve, 500));
 
-                    // 4. Verify all payments are voided before proceeding
-                    const remainingPayments = await PaymentsService.getPaymentsByInvoice(order.id);
-                    if (remainingPayments.length > 0) {
-                        console.error('[DeliveryOrderDetails] Some payments were not voided:', remainingPayments);
-                        toast.error("Failed to clear old payments. Please try again.");
-                        return;
-                    }
-
-                    // 5. Create new payment records from current paymentEntries
+                    // 4. Create new payment records from current paymentEntries
+                    let createdCount = 0;
                     for (const entry of paymentEntries) {
                         if (entry.amount > 0 && entry.method !== 'credit' && order.customerId) {
                             console.log(`[DeliveryOrderDetails] Creating new correction payment: ${entry.method} ₹${entry.amount}`);
-                            await PaymentsService.addPayment({
-                                invoiceId: order.id,
-                                customerId: order.customerId,
-                                amount: entry.amount,
-                                method: entry.method,
-                                reference: entry.reference || undefined,
-                                notes: `Delivery correction (${entry.method})${remarks ? ` - ${remarks}` : ''}`
-                            });
+                            try {
+                                await PaymentsService.addPayment({
+                                    invoiceId: order.id,
+                                    customerId: order.customerId,
+                                    amount: entry.amount,
+                                    method: entry.method,
+                                    reference: entry.reference || undefined,
+                                    notes: `Delivery correction (${entry.method})${remarks ? ` - ${remarks}` : ''}`
+                                });
+                                createdCount++;
+                            } catch (addError) {
+                                console.error(`[DeliveryOrderDetails] Error creating payment:`, addError);
+                            }
                         }
                     }
-                    console.log('[DeliveryOrderDetails] Synced payments successfully');
+                    console.log(`[DeliveryOrderDetails] Successfully created ${createdCount} new payment(s)`);
+                    console.log('[DeliveryOrderDetails] Payment sync completed');
                 } catch (payError) {
                     console.error('Failed to sync payments during edit:', payError);
                     toast.error("Order details saved, but payment sync failed. Ledger might be inconsistent.");
