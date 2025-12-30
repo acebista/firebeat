@@ -121,11 +121,12 @@ export const PaymentsService = {
      */
     deletePayment: async (paymentId: string): Promise<boolean> => {
         console.log('[PaymentsService] Attempting to DELETE payment:', paymentId);
-        const { data, error, count } = await supabase
+
+        // Use count: 'exact' to check if anything was actually deleted (bypass RLS select check)
+        const { error, count } = await supabase
             .from('invoice_payments')
-            .delete()
-            .eq('id', paymentId)
-            .select();
+            .delete({ count: 'exact' })
+            .eq('id', paymentId);
 
         if (error) {
             console.error('[PaymentsService] Error deleting payment:', error);
@@ -133,10 +134,11 @@ export const PaymentsService = {
             throw error;
         }
 
-        console.log('[PaymentsService] DELETE response - data:', data, 'count:', count);
+        console.log('[PaymentsService] DELETE response - count:', count);
 
-        if (!data || data.length === 0) {
-            console.warn('[PaymentsService] DELETE returned no data - payment may not exist or RLS policy blocked it');
+        // If count is 0, it means no rows were deleted (RLS blocked it or ID not found)
+        if (count === 0 || count === null) {
+            console.warn('[PaymentsService] DELETE returned count 0 - payment may not exist or RLS policy blocked it');
             return false;
         }
 

@@ -346,12 +346,14 @@ export const DeliveryOrderDetails: React.FC = () => {
             const existingPayments = await PaymentsService.getPaymentsByInvoice(order.id, true);
             console.log(`[DeliveryOrderDetails] Found ${existingPayments.length} existing payments to delete before delivery completion`);
             for (const p of existingPayments) {
-                try {
-                    await PaymentsService.deletePayment(p.id);
-                    console.log(`[DeliveryOrderDetails] Deleted existing payment: ${p.id}`);
-                } catch (delError) {
-                    console.error(`[DeliveryOrderDetails] Failed to delete payment ${p.id}:`, delError);
+                const success = await PaymentsService.deletePayment(p.id);
+                if (!success) {
+                    console.error(`[DeliveryOrderDetails] Failed to delete payment ${p.id}`);
+                    toast.error('Failed to cleanup old payments. Check permissions.');
+                    setProcessing(false);
+                    return;
                 }
+                console.log(`[DeliveryOrderDetails] Deleted existing payment: ${p.id}`);
             }
 
             // Create individual payment records in ledger
@@ -498,10 +500,19 @@ export const DeliveryOrderDetails: React.FC = () => {
                     for (const p of existingPayments) {
                         console.log(`[DeliveryOrderDetails] DELETING payment: ${p.id}`);
                         try {
-                            await PaymentsService.deletePayment(p.id);
-                            deletedCount++;
+                            const success = await PaymentsService.deletePayment(p.id);
+                            if (success) {
+                                deletedCount++;
+                            } else {
+                                console.error(`[DeliveryOrderDetails] Failed to delete payment ${p.id} (returned false)`);
+                                throw new Error("Deletion failed by policy");
+                            }
                         } catch (deleteError) {
                             console.error(`[DeliveryOrderDetails] Error deleting payment ${p.id}:`, deleteError);
+                            toast.error('Data consistency error: Cannot remove old payments. Operation aborted.');
+                            setProcessing(false);
+                            setPaymentSyncLock(false);
+                            return;
                         }
                     }
                     console.log(`[DeliveryOrderDetails] Successfully deleted ${deletedCount}/${existingPayments.length} payments`);
