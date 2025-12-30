@@ -42,8 +42,20 @@ export const TripSummaryModal: React.FC<TripSummaryModalProps> = ({
 }) => {
     const navigate = useNavigate();
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedSalesperson, setSelectedSalesperson] = useState<string>('all');
 
     const { trip, orders } = tripData;
+
+    // Unique salespeople for filter
+    const uniqueSalespeople = useMemo(() => {
+        const people = new Map<string, string>();
+        orders.forEach(o => {
+            if (o.salespersonId && o.salespersonName) {
+                people.set(o.salespersonId, o.salespersonName);
+            }
+        });
+        return Array.from(people.entries()).map(([id, name]) => ({ id, name }));
+    }, [orders]);
 
     // Use database-sourced payments
     const parsedOrders = useMemo(() => {
@@ -105,13 +117,25 @@ export const TripSummaryModal: React.FC<TripSummaryModalProps> = ({
     }, [orders, tripData.payments]);
 
     const filteredOrders = useMemo(() => {
-        if (!searchTerm.trim()) return parsedOrders;
-        const s = searchTerm.toLowerCase();
-        return parsedOrders.filter(o =>
-            o.customerName.toLowerCase().includes(s) ||
-            o.id.toLowerCase().includes(s)
-        );
-    }, [parsedOrders, searchTerm]);
+        let result = parsedOrders;
+
+        // Filter by Salesperson
+        if (selectedSalesperson !== 'all') {
+            result = result.filter(o => o.salespersonId === selectedSalesperson);
+        }
+
+        // Search term filter
+        if (searchTerm.trim()) {
+            const s = searchTerm.toLowerCase();
+            result = result.filter(o =>
+                o.customerName.toLowerCase().includes(s) ||
+                o.id.toLowerCase().includes(s) ||
+                (o.salespersonName || '').toLowerCase().includes(s)
+            );
+        }
+
+        return result;
+    }, [parsedOrders, searchTerm, selectedSalesperson]);
 
     const stats = useMemo(() => {
         return {
@@ -179,15 +203,27 @@ export const TripSummaryModal: React.FC<TripSummaryModalProps> = ({
                 {/* Search and Table */}
                 <div className="space-y-4">
                     <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-                        <div className="relative flex-1 w-full">
+                        <div className="relative flex-[2] w-full">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                             <input
                                 type="text"
-                                placeholder="Search shops or invoice numbers..."
+                                placeholder="Search shops, invoice or salesperson..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all shadow-sm"
                             />
+                        </div>
+                        <div className="flex-1 w-full">
+                            <select
+                                value={selectedSalesperson}
+                                onChange={(e) => setSelectedSalesperson(e.target.value)}
+                                className="w-full px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all shadow-sm"
+                            >
+                                <option value="all">All Salespeople</option>
+                                {uniqueSalespeople.map(p => (
+                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                ))}
+                            </select>
                         </div>
                         <div className="flex gap-2 shrink-0">
                             <Badge color="slate">Total: {orders.length} Stops</Badge>
@@ -217,7 +253,12 @@ export const TripSummaryModal: React.FC<TripSummaryModalProps> = ({
                                         </td>
                                         <td className="px-4 py-4">
                                             <div className="text-sm font-bold text-gray-900">{order.customerName}</div>
-                                            <div className="text-[10px] font-mono text-indigo-500 mt-0.5">{order.id.slice(0, 12)}</div>
+                                            <div className="flex items-center gap-2 mt-0.5">
+                                                <div className="text-[10px] font-mono text-indigo-500">{order.id.slice(0, 12)}</div>
+                                                <span className="text-[10px] bg-gray-100 text-gray-600 px-1 rounded font-medium">
+                                                    BY: {order.salespersonName}
+                                                </span>
+                                            </div>
                                         </td>
                                         <td className="px-4 py-4 text-right">
                                             <div className="text-sm font-bold text-gray-900">₹{order.totalAmount.toLocaleString()}</div>
