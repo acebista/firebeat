@@ -6,6 +6,7 @@ import { MapPin, CheckCircle, Clock, Navigation, Truck, ChevronDown, ChevronUp, 
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../services/auth';
 import { TripService, OrderService, UserService } from '../../services/db';
+import { PaymentsService, Payment } from '../../services/ledger/PaymentsService';
 import { getPackingProgress } from '../../services/packing/packingService';
 import { DispatchTrip, Order, User } from '../../types';
 import toast from 'react-hot-toast';
@@ -13,6 +14,7 @@ import toast from 'react-hot-toast';
 interface TripWithStats {
   trip: DispatchTrip;
   orders: Order[];
+  payments: Payment[];
   completedCount: number;
   pendingCount: number;
   totalValue: number;
@@ -28,6 +30,13 @@ interface UserTripsData {
   totalCompleted: number;
   totalPending: number;
   totalValue: number;
+  collections: {
+    cash: number;
+    qr: number;
+    cheque: number;
+    credit: number;
+    total: number;
+  };
 }
 
 export const DeliveryDashboard: React.FC = () => {
@@ -52,7 +61,14 @@ export const DeliveryDashboard: React.FC = () => {
     totalAssigned: 0,
     totalCompleted: 0,
     totalPending: 0,
-    totalValue: 0
+    totalValue: 0,
+    collections: {
+      cash: 0,
+      qr: 0,
+      cheque: 0,
+      credit: 0,
+      total: 0
+    }
   });
   const [allStats, setAllStats] = useState({
     totalTrips: 0,
@@ -60,7 +76,14 @@ export const DeliveryDashboard: React.FC = () => {
     totalAssigned: 0,
     totalCompleted: 0,
     totalPending: 0,
-    totalValue: 0
+    totalValue: 0,
+    collections: {
+      cash: 0,
+      qr: 0,
+      cheque: 0,
+      credit: 0,
+      total: 0
+    }
   });
 
   useEffect(() => {
@@ -118,6 +141,7 @@ export const DeliveryDashboard: React.FC = () => {
           let userCompleted = 0;
           let userValue = 0;
           let userActive = 0;
+          const userCollections = { cash: 0, qr: 0, cheque: 0, credit: 0, total: 0 };
 
           tripsWithStats.forEach(t => {
             userAssigned += t.orders.length;
@@ -126,6 +150,25 @@ export const DeliveryDashboard: React.FC = () => {
             if (t.trip.status === 'out_for_delivery' || t.trip.status === 'draft') {
               userActive++;
             }
+
+            // Sum collections for this user
+            t.payments.forEach(p => {
+              const method = (p.method || 'cash').toLowerCase();
+              if (method === 'cash') userCollections.cash += Number(p.amount);
+              else if (method === 'qr' || method === 'qr_code') userCollections.qr += Number(p.amount);
+              else if (method === 'cheque') userCollections.cheque += Number(p.amount);
+              userCollections.total += Number(p.amount);
+            });
+
+            // Calculate Credit for delivered orders
+            t.orders.forEach(o => {
+              if (o.status === 'delivered' || o.status === 'completed') {
+                const paid = t.payments.filter(p => p.invoice_id === o.id).reduce((s, p) => s + Number(p.amount), 0);
+                const credit = Math.max(0, o.totalAmount - paid);
+                if (credit > 0) userCollections.credit += credit;
+                userCollections.total += credit;
+              }
+            });
           });
 
           usersTripsData.push({
@@ -134,7 +177,8 @@ export const DeliveryDashboard: React.FC = () => {
             totalAssigned: userAssigned,
             totalCompleted: userCompleted,
             totalPending: userAssigned - userCompleted,
-            totalValue: userValue
+            totalValue: userValue,
+            collections: userCollections
           });
 
           grandTotalTrips += trips.length;
@@ -142,10 +186,21 @@ export const DeliveryDashboard: React.FC = () => {
           grandTotalAssigned += userAssigned;
           grandTotalCompleted += userCompleted;
           grandTotalValue += userValue;
+
         } catch (error) {
           console.error(`Failed to load trips for user ${deliveryUser.id}:`, error);
         }
       }
+
+      const allCollections = { cash: 0, qr: 0, cheque: 0, credit: 0, total: 0 };
+      // Note: Re-summing grand totals to include collections
+      usersTripsData.forEach(u => {
+        allCollections.cash += u.collections.cash;
+        allCollections.qr += u.collections.qr;
+        allCollections.cheque += u.collections.cheque;
+        allCollections.credit += u.collections.credit;
+        allCollections.total += u.collections.total;
+      });
 
       setAllUsersTrips(usersTripsData);
       setAllStats({
@@ -154,7 +209,8 @@ export const DeliveryDashboard: React.FC = () => {
         totalAssigned: grandTotalAssigned,
         totalCompleted: grandTotalCompleted,
         totalPending: grandTotalAssigned - grandTotalCompleted,
-        totalValue: grandTotalValue
+        totalValue: grandTotalValue,
+        collections: allCollections
       });
     } catch (e) {
       console.error("Failed to load all users trips", e);
@@ -167,6 +223,8 @@ export const DeliveryDashboard: React.FC = () => {
     for (const trip of trips) {
       if (trip.orderIds && trip.orderIds.length > 0) {
         const orders = await OrderService.getOrdersByIds(trip.orderIds);
+        const payments = await PaymentsService.getPaymentsByInvoices(trip.orderIds);
+
         // Count both delivered and failed/cancelled as completed (finalized)
         const completed = orders.filter(o =>
           o.status === 'delivered' || o.status === 'cancelled' || o.status === 'completed'
@@ -196,6 +254,7 @@ export const DeliveryDashboard: React.FC = () => {
         tripsWithStats.push({
           trip,
           orders,
+          payments,
           completedCount: completed,
           pendingCount: pending,
           totalValue: tripValue,
@@ -222,6 +281,7 @@ export const DeliveryDashboard: React.FC = () => {
     let totalCompleted = 0;
     let totalValue = 0;
     let activeCount = 0;
+    const collections = { cash: 0, qr: 0, cheque: 0, credit: 0, total: 0 };
 
     tripsData.forEach(t => {
       totalAssigned += t.orders.length;
@@ -230,6 +290,25 @@ export const DeliveryDashboard: React.FC = () => {
       if (t.trip.status === 'out_for_delivery' || t.trip.status === 'draft') {
         activeCount++;
       }
+
+      // Process payments for collections
+      t.payments.forEach(p => {
+        const method = (p.method || 'cash').toLowerCase();
+        if (method === 'cash') collections.cash += Number(p.amount);
+        else if (method === 'qr' || method === 'qr_code') collections.qr += Number(p.amount);
+        else if (method === 'cheque') collections.cheque += Number(p.amount);
+        collections.total += Number(p.amount);
+      });
+
+      // Calculate Credit
+      t.orders.forEach(o => {
+        if (o.status === 'delivered' || o.status === 'completed') {
+          const paid = t.payments.filter(p => p.invoice_id === o.id).reduce((s, p) => s + Number(p.amount), 0);
+          const credit = Math.max(0, o.totalAmount - paid);
+          if (credit > 0) collections.credit += credit;
+          collections.total += credit;
+        }
+      });
     });
 
     setMyStats({
@@ -238,7 +317,8 @@ export const DeliveryDashboard: React.FC = () => {
       totalAssigned,
       totalCompleted,
       totalPending: totalAssigned - totalCompleted,
-      totalValue
+      totalValue,
+      collections
     });
   };
 
@@ -394,27 +474,53 @@ export const DeliveryDashboard: React.FC = () => {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card className="p-3 bg-indigo-50 border-indigo-100">
-          <p className="text-xs text-indigo-600 font-medium">Active Trips</p>
-          <h3 className="text-2xl font-bold text-indigo-900">{myStats.activeTrips}</h3>
+          <p className="text-xs text-indigo-600 font-medium uppercase tracking-wider">Active Trips</p>
+          <h3 className="text-2xl font-black text-indigo-900">{myStats.activeTrips}</h3>
         </Card>
         <Card className="p-3 bg-blue-50 border-blue-100">
-          <p className="text-xs text-blue-600 font-medium">Total Assigned</p>
-          <h3 className="text-2xl font-bold text-blue-900">{myStats.totalAssigned}</h3>
+          <p className="text-xs text-blue-600 font-medium uppercase tracking-wider">Assigned</p>
+          <h3 className="text-2xl font-black text-blue-900">{myStats.totalAssigned}</h3>
         </Card>
         <Card className="p-3 bg-green-50 border-green-100">
-          <p className="text-xs text-green-600 font-medium">Completed</p>
-          <h3 className="text-2xl font-bold text-green-900">{myStats.totalCompleted}</h3>
+          <p className="text-xs text-green-600 font-medium uppercase tracking-wider">Completed</p>
+          <h3 className="text-2xl font-black text-green-900">{myStats.totalCompleted}</h3>
         </Card>
-        <Card className="p-3 bg-yellow-50 border-yellow-100">
-          <p className="text-xs text-yellow-600 font-medium">Pending</p>
-          <h3 className="text-2xl font-bold text-yellow-900">{myStats.totalPending}</h3>
+        <Card className="p-3 bg-red-50 border-red-100">
+          <p className="text-xs text-red-600 font-medium uppercase tracking-wider">Pending</p>
+          <h3 className="text-2xl font-black text-red-900">{myStats.totalPending}</h3>
         </Card>
-        <Card className="p-3 bg-purple-50 border-purple-100 col-span-2 md:col-span-1">
-          <p className="text-xs text-purple-600 font-medium">Total Value</p>
-          <h3 className="text-lg font-bold text-purple-900">₹{myStats.totalValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</h3>
-        </Card>
+      </div>
+
+      {/* Collection Split Grid */}
+      <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+        <div className="flex items-center gap-2 mb-3">
+          <TrendingUp className="h-4 w-4 text-emerald-600" />
+          <h3 className="text-sm font-bold text-gray-700 uppercase tracking-tight">Trip Collection Summary</h3>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
+            <p className="text-[10px] text-gray-500 font-bold uppercase">💵 Cash</p>
+            <p className="text-lg font-black text-gray-900">₹{myStats.collections.cash.toLocaleString()}</p>
+          </div>
+          <div className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
+            <p className="text-[10px] text-gray-500 font-bold uppercase">📱 QR Code</p>
+            <p className="text-lg font-black text-gray-900">₹{myStats.collections.qr.toLocaleString()}</p>
+          </div>
+          <div className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
+            <p className="text-[10px] text-gray-500 font-bold uppercase">📄 Cheque</p>
+            <p className="text-lg font-black text-gray-900">₹{myStats.collections.cheque.toLocaleString()}</p>
+          </div>
+          <div className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
+            <p className="text-[10px] text-gray-500 font-bold uppercase">💳 Credit</p>
+            <p className="text-lg font-black text-amber-600">₹{myStats.collections.credit.toLocaleString()}</p>
+          </div>
+          <div className="bg-emerald-600 p-3 rounded-lg border border-emerald-700 shadow-md col-span-2 md:col-span-1">
+            <p className="text-[10px] text-emerald-100 font-bold uppercase">Total Collected</p>
+            <p className="text-lg font-black text-white">₹{myStats.collections.total.toLocaleString()}</p>
+          </div>
+        </div>
       </div>
 
       {/* MY TRIPS VIEW */}

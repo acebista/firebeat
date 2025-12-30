@@ -111,6 +111,25 @@ export const PaymentsService = {
     },
 
     /**
+     * Get all payments for multiple invoices
+     */
+    getPaymentsByInvoices: async (invoiceIds: string[], includeVoided = false): Promise<Payment[]> => {
+        if (!invoiceIds || invoiceIds.length === 0) return [];
+        let query = supabase
+            .from('invoice_payments')
+            .select('*')
+            .in('invoice_id', invoiceIds);
+
+        if (!includeVoided) {
+            query = query.is('voided_at', null);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+        return data || [];
+    },
+
+    /**
      * Get all payments for a customer
      */
     getPaymentsByCustomer: async (customerId: string, includeVoided = false): Promise<Payment[]> => {

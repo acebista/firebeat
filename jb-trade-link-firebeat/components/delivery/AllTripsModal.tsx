@@ -20,6 +20,13 @@ interface UserTripsData {
   totalCompleted: number;
   totalPending: number;
   totalValue: number;
+  collections: {
+    cash: number;
+    qr: number;
+    cheque: number;
+    credit: number;
+    total: number;
+  };
 }
 
 interface AllTripsModalProps {
@@ -33,6 +40,13 @@ interface AllTripsModalProps {
     totalCompleted: number;
     totalPending: number;
     totalValue: number;
+    collections: {
+      cash: number;
+      qr: number;
+      cheque: number;
+      credit: number;
+      total: number;
+    };
   };
   onViewSummary?: (tripData: TripWithStats) => void;
 }
@@ -130,27 +144,53 @@ export const AllTripsModal: React.FC<AllTripsModalProps> = ({
     <Modal isOpen={isOpen} onClose={onClose} title="All Delivery Trips" size="xl">
       <div className="space-y-6">
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          <Card className="p-3 bg-indigo-50 border-indigo-100">
-            <p className="text-xs text-indigo-600 font-medium">Active Trips</p>
-            <h3 className="text-2xl font-bold text-indigo-900">{allStats.activeTrips}</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Card className="p-3 bg-indigo-50 border-indigo-100 text-center">
+            <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider">Active Trips</p>
+            <h3 className="text-xl font-black text-indigo-900">{allStats.activeTrips}</h3>
           </Card>
-          <Card className="p-3 bg-blue-50 border-blue-100">
-            <p className="text-xs text-blue-600 font-medium">Total Assigned</p>
-            <h3 className="text-2xl font-bold text-blue-900">{allStats.totalAssigned}</h3>
+          <Card className="p-3 bg-blue-50 border-blue-100 text-center">
+            <p className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">Assigned</p>
+            <h3 className="text-xl font-black text-blue-900">{allStats.totalAssigned}</h3>
           </Card>
-          <Card className="p-3 bg-green-50 border-green-100">
-            <p className="text-xs text-green-600 font-medium">Completed</p>
-            <h3 className="text-2xl font-bold text-green-900">{allStats.totalCompleted}</h3>
+          <Card className="p-3 bg-green-50 border-green-100 text-center">
+            <p className="text-[10px] text-green-600 font-bold uppercase tracking-wider">Completed</p>
+            <h3 className="text-xl font-black text-green-900">{allStats.totalCompleted}</h3>
           </Card>
-          <Card className="p-3 bg-yellow-50 border-yellow-100">
-            <p className="text-xs text-yellow-600 font-medium">Pending</p>
-            <h3 className="text-2xl font-bold text-yellow-900">{allStats.totalPending}</h3>
+          <Card className="p-3 bg-red-50 border-red-100 text-center">
+            <p className="text-[10px] text-red-600 font-bold uppercase tracking-wider">Pending</p>
+            <h3 className="text-xl font-black text-red-900">{allStats.totalPending}</h3>
           </Card>
-          <Card className="p-3 bg-purple-50 border-purple-100 col-span-2 md:col-span-1">
-            <p className="text-xs text-purple-600 font-medium">Total Value</p>
-            <h3 className="text-lg font-bold text-purple-900">₹{allStats.totalValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</h3>
-          </Card>
+        </div>
+
+        {/* Collection Split Grid */}
+        <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+          <div className="flex items-center gap-2 mb-3">
+            <TrendingUp className="h-4 w-4 text-emerald-600" />
+            <h3 className="text-sm font-bold text-gray-700 uppercase tracking-tight">System Collection Summary</h3>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="bg-white p-2 rounded-lg border border-gray-200 shadow-sm text-center">
+              <p className="text-[10px] text-gray-500 font-bold uppercase">Cash</p>
+              <p className="text-sm font-black text-gray-900">₹{allStats.collections.cash.toLocaleString()}</p>
+            </div>
+            <div className="bg-white p-2 rounded-lg border border-gray-200 shadow-sm text-center">
+              <p className="text-[10px] text-gray-500 font-bold uppercase">QR Code</p>
+              <p className="text-sm font-black text-gray-900">₹{allStats.collections.qr.toLocaleString()}</p>
+            </div>
+            <div className="bg-white p-2 rounded-lg border border-gray-200 shadow-sm text-center">
+              <p className="text-[10px] text-gray-500 font-bold uppercase">Cheque</p>
+              <p className="text-sm font-black text-gray-900">₹{allStats.collections.cheque.toLocaleString()}</p>
+            </div>
+            <div className="bg-white p-2 rounded-lg border border-gray-200 shadow-sm text-center">
+              <p className="text-[10px] text-gray-500 font-bold uppercase">Credit</p>
+              <p className="text-sm font-black text-amber-600">₹{allStats.collections.credit.toLocaleString()}</p>
+            </div>
+            <div className="bg-emerald-600 p-2 rounded-lg border border-emerald-700 shadow-md col-span-2 md:col-span-1 text-center flex flex-col justify-center">
+              <p className="text-[10px] text-emerald-100 font-bold uppercase">Total Collected</p>
+              <p className="text-sm font-black text-white">₹{allStats.collections.total.toLocaleString()}</p>
+            </div>
+          </div>
         </div>
 
         {/* Search Filter */}
