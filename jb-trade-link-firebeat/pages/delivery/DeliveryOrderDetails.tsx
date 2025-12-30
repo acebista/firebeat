@@ -248,9 +248,15 @@ export const DeliveryOrderDetails: React.FC = () => {
 
     const calculateOriginalTotal = () => {
         if (!order?.items) return 0;
-        // Always recalculate from items to ensure we have the true original total
-        // regardless of what might have been saved in order.totalAmount during previous partial updates
         return order.items.reduce((sum, item) => sum + ((Number(item.total) || (Number(item.qty) * Number(item.rate))) || 0), 0);
+    };
+
+    const calculateCurrentNetTotal = () => {
+        const gross = calculateOriginalTotal();
+        const discount = Number(order?.discount || 0);
+        const returns = calculateReturnTotal();
+        const damages = calculateDamageTotal();
+        return Math.max(0, gross - discount - returns - damages);
     };
 
     const calculateDamageTotal = () => damages.reduce((sum, d) => sum + (d.rate * d.quantity), 0);
@@ -258,8 +264,8 @@ export const DeliveryOrderDetails: React.FC = () => {
     const calculateReturnTotal = () => returnItems.reduce((sum, r) => sum + (r.rate * r.returnQty), 0);
 
     const addPaymentEntry = () => {
-        const remaining = (order?.totalAmount || 0) - calculateDamageTotal() - calculateReturnTotal() - paymentEntries.reduce((s, p) => s + p.amount, 0);
-        setPaymentEntries([...paymentEntries, { method: 'cash', amount: Math.max(0, remaining) }]);
+        const remaining = calculateCurrentNetTotal() - paymentEntries.reduce((s, p) => s + p.amount, 0);
+        setPaymentEntries([...paymentEntries, { method: 'cash', amount: Math.max(0, Number(remaining.toFixed(2))) }]);
     };
 
     const removePaymentEntry = (index: number) => {
@@ -276,7 +282,7 @@ export const DeliveryOrderDetails: React.FC = () => {
         if (!order) return;
 
         const totalCollected = paymentEntries.reduce((sum, p) => sum + (p.method !== 'credit' ? Number(p.amount) : 0), 0);
-        const netTotal = calculateOriginalTotal() - calculateReturnTotal() - calculateDamageTotal();
+        const netTotal = calculateCurrentNetTotal();
 
         if (paymentEntries.some(p => p.amount < 0)) {
             toast.error("Payment amounts cannot be negative");
@@ -417,7 +423,7 @@ export const DeliveryOrderDetails: React.FC = () => {
                 if (remarks) remarkText += ` | ${remarks}`;
 
                 const mainPaymentMethod = paymentEntries.length === 1 ? paymentEntries[0].method : 'Multiple';
-                const currentNetTotal = calculateOriginalTotal() - calculateReturnTotal() - calculateDamageTotal();
+                const currentNetTotal = calculateCurrentNetTotal();
 
                 updateData = {
                     remarks: remarkText,
@@ -590,8 +596,8 @@ export const DeliveryOrderDetails: React.FC = () => {
                     ))}
                 </div>
                 <div className="mt-4 pt-4 border-t border-gray-200 flex justify-between items-center">
-                    <span className="font-bold text-gray-900">Total</span>
-                    <span className="text-lg font-bold text-gray-900">₹{(Number(order.totalAmount) || 0).toFixed(2)}</span>
+                    <span className="font-bold text-gray-900">Items Gross Total</span>
+                    <span className="text-lg font-bold text-gray-900">₹{calculateOriginalTotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
             </Card>
 
@@ -600,7 +606,7 @@ export const DeliveryOrderDetails: React.FC = () => {
                 <Card className="p-5 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-xl shadow-sm mb-4">
                     <h3 className="font-bold text-gray-900 mb-4 flex items-center justify-between">
                         <span>Complete Delivery</span>
-                        <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded">₹{Math.max(0, order.totalAmount - calculateDamageTotal() - calculateReturnTotal()).toFixed(2)} Due</span>
+                        <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded">₹{calculateCurrentNetTotal().toFixed(2)} Due</span>
                     </h3>
 
                     {/* Multi-Payment Section */}
@@ -659,9 +665,16 @@ export const DeliveryOrderDetails: React.FC = () => {
                     {/* Summary Calculations */}
                     <div className="mb-6 p-4 bg-white rounded-lg border border-gray-200 shadow-sm space-y-3">
                         <div className="flex justify-between text-sm text-gray-500">
-                            <span>Order Total:</span>
+                            <span>Order Total (Gross):</span>
                             <span>₹{calculateOriginalTotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
+
+                        {(order.discount || 0) > 0 && (
+                            <div className="flex justify-between text-sm text-red-600 font-medium italic">
+                                <span>Invoice Discount (-) :</span>
+                                <span>₹{(order.discount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                        )}
 
                         {calculateReturnTotal() > 0 && (
                             <div className="flex justify-between text-sm text-purple-600">
@@ -679,7 +692,7 @@ export const DeliveryOrderDetails: React.FC = () => {
 
                         <div className="pt-2 border-t border-dashed border-gray-200 flex justify-between items-center bg-blue-50/50 p-2 rounded">
                             <span className="font-semibold text-gray-800">Order Net Total:</span>
-                            <span className="text-lg font-bold text-gray-900">₹{(calculateOriginalTotal() - calculateReturnTotal() - calculateDamageTotal()).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            <span className="text-lg font-bold text-gray-900">₹{calculateCurrentNetTotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
 
                         <div className="flex justify-between items-center pt-1 px-2">
