@@ -146,24 +146,19 @@ export const PaymentsService = {
      * Get all payments for an invoice
      */
     getPaymentsByInvoice: async (invoiceId: string, includeVoided = false): Promise<Payment[]> => {
-        let query = supabase
+        // Fetch all payments for this invoice
+        const { data, error } = await supabase
             .from('invoice_payments')
             .select('*')
             .eq('invoice_id', invoiceId)
             .order('occurred_at', { ascending: false });
 
-        // More explicit NULL check for non-voided payments
-        if (!includeVoided) {
-            query = query.or('voided_at.is.null,voided_at.eq.null');
-        }
-
-        const { data, error } = await query;
         if (error) {
             console.error('[PaymentsService] Error fetching payments:', error);
             throw error;
         }
 
-        // Additional client-side filter as safety net
+        // ALWAYS use client-side filter (database filter is unreliable)
         const result = data || [];
         if (!includeVoided) {
             const filtered = result.filter(p => !p.voided_at);
@@ -180,23 +175,19 @@ export const PaymentsService = {
      */
     getPaymentsByInvoices: async (invoiceIds: string[], includeVoided = false): Promise<Payment[]> => {
         if (!invoiceIds || invoiceIds.length === 0) return [];
-        let query = supabase
+
+        // Fetch all payments for these invoices
+        const { data, error } = await supabase
             .from('invoice_payments')
             .select('*')
             .in('invoice_id', invoiceIds);
 
-        // Try database filter (but don't rely on it)
-        if (!includeVoided) {
-            query = query.or('voided_at.is.null,voided_at.eq.null');
-        }
-
-        const { data, error } = await query;
         if (error) {
             console.error('[PaymentsService] Error fetching payments for invoices:', error);
             throw error;
         }
 
-        // CRITICAL: Client-side filter as safety net (database filter may not work)
+        // ALWAYS use client-side filter (database filter is unreliable)
         const result = data || [];
         if (!includeVoided) {
             const filtered = result.filter(p => !p.voided_at);
