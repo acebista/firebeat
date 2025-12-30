@@ -5,6 +5,8 @@
  * - Partial payments (multiple payments per invoice)
  * - Payment linking to both customer and invoice
  * - Payment voiding with reason tracking
+ * 
+ * UPDATED: 2025-12-30 - Fixed query syntax, using client-side filtering only
  */
 
 import { supabase } from '../../lib/supabase';
