@@ -37,6 +37,7 @@ export const DeliveryOrderDetails: React.FC = () => {
     const [customer, setCustomer] = useState<Customer | null>(null);
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
+    const [paymentSyncLock, setPaymentSyncLock] = useState(false); // Prevent concurrent payment syncs
 
     // Delivery Form State
     const [paymentMode, setPaymentMode] = useState<'cash' | 'qr' | 'cheque' | 'credit'>('cash');
@@ -459,19 +460,45 @@ export const DeliveryOrderDetails: React.FC = () => {
 
             // SYNC PAYMENTS: Update invoice_payments table to match edited entries
             if (editStatus === 'delivered') {
+                // Check if another sync is in progress
+                if (paymentSyncLock) {
+                    console.warn('[DeliveryOrderDetails] Payment sync already in progress, skipping...');
+                    toast.error("Please wait for the previous save to complete.");
+                    return;
+                }
+
                 try {
+                    setPaymentSyncLock(true);
+                    console.log('[DeliveryOrderDetails] Starting payment sync for invoice:', order.id);
+
                     // 1. Get existing non-voided payments for this invoice
                     const existingPayments = await PaymentsService.getPaymentsByInvoice(order.id);
+                    console.log(`[DeliveryOrderDetails] Found ${existingPayments.length} active payments to void.`);
 
-                    // 2. Void all existing payments for this invoice
+                    // 2. Void all existing payments for this invoice (sequential to avoid race conditions)
                     for (const p of existingPayments) {
                         console.log(`[DeliveryOrderDetails] Voiding payment: ${p.id}`);
-                        await PaymentsService.voidPayment(p.id, "Delivery Detail Correction");
+                        const voidResult = await PaymentsService.voidPayment(p.id, "Delivery Detail Correction");
+                        if (!voidResult) {
+                            console.error(`[DeliveryOrderDetails] Failed to void payment ${p.id}`);
+                        }
                     }
 
-                    // 3. Create new payment records from current paymentEntries
+                    // 3. Small delay to ensure database consistency
+                    await new Promise(resolve => setTimeout(resolve, 300));
+
+                    // 4. Verify all payments are voided before proceeding
+                    const remainingPayments = await PaymentsService.getPaymentsByInvoice(order.id);
+                    if (remainingPayments.length > 0) {
+                        console.error('[DeliveryOrderDetails] Some payments were not voided:', remainingPayments);
+                        toast.error("Failed to clear old payments. Please try again.");
+                        return;
+                    }
+
+                    // 5. Create new payment records from current paymentEntries
                     for (const entry of paymentEntries) {
                         if (entry.amount > 0 && entry.method !== 'credit' && order.customerId) {
+                            console.log(`[DeliveryOrderDetails] Creating new correction payment: ${entry.method} ₹${entry.amount}`);
                             await PaymentsService.addPayment({
                                 invoiceId: order.id,
                                 customerId: order.customerId,
@@ -482,10 +509,12 @@ export const DeliveryOrderDetails: React.FC = () => {
                             });
                         }
                     }
-                    console.log('[DeliveryOrderDetails] Synced payments for audit log');
+                    console.log('[DeliveryOrderDetails] Synced payments successfully');
                 } catch (payError) {
                     console.error('Failed to sync payments during edit:', payError);
                     toast.error("Order details saved, but payment sync failed. Ledger might be inconsistent.");
+                } finally {
+                    setPaymentSyncLock(false);
                 }
             } else if (editStatus === 'cancelled') {
                 // If marked as failed, void all existing payments
