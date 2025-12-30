@@ -105,7 +105,6 @@ export const TripSummaryModal: React.FC<TripSummaryModalProps> = ({
                     });
                 }
             }
-
             return {
                 ...order,
                 parsedPayments: uiPayments,
@@ -113,11 +112,48 @@ export const TripSummaryModal: React.FC<TripSummaryModalProps> = ({
                 parsedReturns: returns,
                 totalCollected: uiPayments.filter(p => p.method !== 'credit').reduce((sum, p) => sum + p.amount, 0)
             };
-        });
+        }).filter(Boolean);
     }, [orders, tripData.payments]);
 
+    // Defensively deduplicate payments for the same invoice just in case state is weird
+    const deduplicatedParsedOrders = useMemo(() => {
+        return parsedOrders.map(order => {
+            const seenIds = new Set();
+            const uniquePayments = [];
+
+            // Re-parse payments from the source to ensure we have the IDs
+            const rawPayments = (tripData.payments || []).filter(p => p.invoice_id === order.id && !p.voided_at);
+
+            for (const p of rawPayments) {
+                if (!seenIds.has(p.id)) {
+                    seenIds.add(p.id);
+                    uniquePayments.push({
+                        method: p.method,
+                        amount: Number(p.amount)
+                    });
+                }
+            }
+
+            // Re-calculate credit based on unique payments
+            const totalPaid = uniquePayments.reduce((s, p) => s + p.amount, 0);
+            const uiPayments = [...uniquePayments];
+            if ((order.status === 'delivered' || order.status === 'completed')) {
+                const credit = Math.max(0, order.totalAmount - totalPaid);
+                if (credit > 0) {
+                    uiPayments.push({ method: 'credit', amount: credit });
+                }
+            }
+
+            return {
+                ...order,
+                parsedPayments: uiPayments,
+                totalCollected: totalPaid
+            };
+        });
+    }, [parsedOrders, tripData.payments]);
+
     const filteredOrders = useMemo(() => {
-        let result = parsedOrders;
+        let result = deduplicatedParsedOrders;
 
         // Filter by Salesperson
         if (selectedSalesperson !== 'all') {

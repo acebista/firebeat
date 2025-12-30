@@ -67,7 +67,11 @@ export const PaymentsService = {
             .select()
             .single();
 
-        if (error) throw error;
+        if (error) {
+            console.error('[PaymentsService] Error adding payment:', error);
+            throw error;
+        }
+        console.log('[PaymentsService] Successfully added payment:', data.id);
         return data;
     },
 
@@ -78,16 +82,28 @@ export const PaymentsService = {
         const { data: { session } } = await supabase.auth.getSession();
         const userId = session?.user?.id;
 
-        const { error } = await supabase
+        console.log('[PaymentsService] Attempting to void payment:', paymentId);
+        const { data, error } = await supabase
             .from('invoice_payments')
             .update({
                 voided_at: new Date().toISOString(),
                 voided_by: userId || null,
                 void_reason: reason
             })
-            .eq('id', paymentId);
+            .eq('id', paymentId)
+            .select();
 
-        if (error) throw error;
+        if (error) {
+            console.error('[PaymentsService] Error voiding payment:', error);
+            throw error;
+        }
+
+        if (!data || data.length === 0) {
+            console.warn('[PaymentsService] No payment found with ID to void:', paymentId);
+            return false;
+        }
+
+        console.log('[PaymentsService] Successfully voided payment:', paymentId);
         return true;
     },
 
