@@ -450,8 +450,46 @@ export const DeliveryOrderDetails: React.FC = () => {
             // Update order record
             await OrderService.update(order.id, updateData);
 
-            // Note: We don't create new payment records here to avoid duplicates
-            // Payment corrections should be handled through the admin ledger module
+            // SYNC PAYMENTS: Update invoice_payments table to match edited entries
+            if (editStatus === 'delivered') {
+                try {
+                    // 1. Get existing non-voided payments for this invoice
+                    const existingPayments = await PaymentsService.getPaymentsByInvoice(order.id);
+
+                    // 2. Void all existing payments for this invoice
+                    for (const p of existingPayments) {
+                        await PaymentsService.voidPayment(p.id, "Delivery Detail Correction");
+                    }
+
+                    // 3. Create new payment records from current paymentEntries
+                    for (const entry of paymentEntries) {
+                        if (entry.amount > 0 && entry.method !== 'credit' && order.customerId) {
+                            await PaymentsService.addPayment({
+                                invoiceId: order.id,
+                                customerId: order.customerId,
+                                amount: entry.amount,
+                                method: entry.method,
+                                reference: entry.reference || undefined,
+                                notes: `Delivery correction (${entry.method})${remarks ? ` - ${remarks}` : ''}`
+                            });
+                        }
+                    }
+                    console.log('[DeliveryOrderDetails] Synced payments for audit log');
+                } catch (payError) {
+                    console.error('Failed to sync payments during edit:', payError);
+                    toast.error("Order details saved, but payment sync failed. Ledger might be inconsistent.");
+                }
+            } else if (editStatus === 'cancelled') {
+                // If marked as failed, void all existing payments
+                try {
+                    const existingPayments = await PaymentsService.getPaymentsByInvoice(order.id);
+                    for (const p of existingPayments) {
+                        await PaymentsService.voidPayment(p.id, "Order marked as FAILED after delivery");
+                    }
+                } catch (failError) {
+                    console.error('Failed to void payments on delivery failure:', failError);
+                }
+            }
 
             toast.success(editStatus === 'cancelled'
                 ? "Order marked as failed delivery!"
