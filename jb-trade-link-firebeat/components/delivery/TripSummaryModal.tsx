@@ -95,14 +95,9 @@ export const TripSummaryModal: React.FC<TripSummaryModalProps> = ({
                 amount: Number(p.amount)
             }));
 
-            // Calculate Credit if delivered
-            if ((order.status === 'delivered' || order.status === 'completed') && uiPayments.length >= 0) {
-                const totalPaid = uiPayments.reduce((s, p) => s + p.amount, 0);
-                const credit = Math.max(0, order.totalAmount - totalPaid);
-                if (credit > 0) {
-                    uiPayments.push({ method: 'credit', amount: credit });
-                }
-            }
+            // DON'T automatically add credit for underpayments
+            // If someone pays ₹320 for ₹323 invoice, that's a SHORT payment, not credit
+            // Credit should only be added if explicitly entered as a payment method
 
             // Parse Damages/Returns from remarks (still needed for item names)
             const remarks = order.remarks || '';
@@ -161,15 +156,10 @@ export const TripSummaryModal: React.FC<TripSummaryModalProps> = ({
                 }
             }
 
-            // Re-calculate credit based on unique payments
+            // Calculate total paid (don't add automatic credit for shorts)
             const totalPaid = uniquePayments.reduce((s, p) => s + p.amount, 0);
             const uiPayments = [...uniquePayments];
-            if ((order.status === 'delivered' || order.status === 'completed')) {
-                const credit = Math.max(0, order.totalAmount - totalPaid);
-                if (credit > 0) {
-                    uiPayments.push({ method: 'credit', amount: credit });
-                }
-            }
+
 
             return {
                 ...order,

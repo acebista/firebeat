@@ -176,13 +176,27 @@ export const PaymentsService = {
             .select('*')
             .in('invoice_id', invoiceIds);
 
+        // Try database filter (but don't rely on it)
         if (!includeVoided) {
-            query = query.is('voided_at', null);
+            query = query.or('voided_at.is.null,voided_at.eq.null');
         }
 
         const { data, error } = await query;
-        if (error) throw error;
-        return data || [];
+        if (error) {
+            console.error('[PaymentsService] Error fetching payments for invoices:', error);
+            throw error;
+        }
+
+        // CRITICAL: Client-side filter as safety net (database filter may not work)
+        const result = data || [];
+        if (!includeVoided) {
+            const filtered = result.filter(p => !p.voided_at);
+            console.log(`[PaymentsService] Fetched ${result.length} total, ${filtered.length} non-voided for ${invoiceIds.length} invoices`);
+            return filtered;
+        }
+
+        console.log(`[PaymentsService] Fetched ${result.length} payments (including voided) for ${invoiceIds.length} invoices`);
+        return result;
     },
 
     /**
