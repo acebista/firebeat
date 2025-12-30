@@ -119,14 +119,23 @@ export const PaymentsService = {
      */
     deletePayment: async (paymentId: string): Promise<boolean> => {
         console.log('[PaymentsService] Attempting to DELETE payment:', paymentId);
-        const { error } = await supabase
+        const { data, error, count } = await supabase
             .from('invoice_payments')
             .delete()
-            .eq('id', paymentId);
+            .eq('id', paymentId)
+            .select();
 
         if (error) {
             console.error('[PaymentsService] Error deleting payment:', error);
+            console.error('[PaymentsService] Error details:', JSON.stringify(error));
             throw error;
+        }
+
+        console.log('[PaymentsService] DELETE response - data:', data, 'count:', count);
+
+        if (!data || data.length === 0) {
+            console.warn('[PaymentsService] DELETE returned no data - payment may not exist or RLS policy blocked it');
+            return false;
         }
 
         console.log('[PaymentsService] Successfully DELETED payment:', paymentId);
