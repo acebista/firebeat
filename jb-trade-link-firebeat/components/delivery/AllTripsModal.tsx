@@ -187,7 +187,7 @@ export const AllTripsModal: React.FC<AllTripsModalProps> = ({
               <p className="text-sm font-black text-amber-600">₹{allStats.collections.credit.toLocaleString()}</p>
             </div>
             <div className="bg-emerald-600 p-2 rounded-lg border border-emerald-700 shadow-md col-span-2 md:col-span-1 text-center flex flex-col justify-center">
-              <p className="text-[10px] text-emerald-100 font-bold uppercase">Total Collected</p>
+              <p className="text-[10px] text-emerald-100 font-bold uppercase">Total Cash/QR/Cheque</p>
               <p className="text-sm font-black text-white">₹{allStats.collections.total.toLocaleString()}</p>
             </div>
           </div>

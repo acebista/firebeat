@@ -22,6 +22,7 @@ import { Order, OrderItem } from '../../types';
 interface TripWithStats {
     trip: any;
     orders: Order[];
+    payments: any[]; // Updated to match dashboard
     completedCount: number;
     pendingCount: number;
     totalValue: number;
@@ -44,43 +45,28 @@ export const TripSummaryModal: React.FC<TripSummaryModalProps> = ({
 
     const { trip, orders } = tripData;
 
-    // Parsing logic for payments, damages, and returns
+    // Use database-sourced payments
     const parsedOrders = useMemo(() => {
         return orders.map(order => {
-            const remarks = order.remarks || '';
+            const payments = (tripData.payments || []).filter(p => p.invoice_id === order.id && !p.voided_at);
 
-            // Parse Payments
-            const paymentsStr = remarks.match(/Payments:\s*([^|]+)/)?.[1] ||
-                remarks.match(/Payment:\s*([^|]+)/)?.[1];
+            // Format for UI
+            const uiPayments = payments.map(p => ({
+                method: p.method,
+                amount: Number(p.amount)
+            }));
 
-            const payments: { method: string; amount: number }[] = [];
-
-            if (paymentsStr) {
-                const regex = /(\w+):\s*₹?(\d+(?:\.\d+)?)/g;
-                let match;
-                while ((match = regex.exec(paymentsStr)) !== null) {
-                    payments.push({
-                        method: match[1],
-                        amount: parseFloat(match[2])
-                    });
+            // Calculate Credit if delivered
+            if ((order.status === 'delivered' || order.status === 'completed') && uiPayments.length >= 0) {
+                const totalPaid = uiPayments.reduce((s, p) => s + p.amount, 0);
+                const credit = Math.max(0, order.totalAmount - totalPaid);
+                if (credit > 0) {
+                    uiPayments.push({ method: 'credit', amount: credit });
                 }
             }
 
-            // Fallback: If no detailed payments parsed, check order level fields
-            if (payments.length === 0 && order.payment_collected && order.payment_collected > 0) {
-                payments.push({
-                    method: order.payment_method_at_delivery || 'Collected',
-                    amount: order.payment_collected
-                });
-            } else if (payments.length === 0 && paymentsStr && !paymentsStr.includes(':')) {
-                // Handle cases like "Payment: QR" where there's no amount in remarks but we have totalAmount
-                payments.push({
-                    method: paymentsStr.trim(),
-                    amount: order.payment_collected || order.totalAmount
-                });
-            }
-
-            // Parse Damages
+            // Parse Damages/Returns from remarks (still needed for item names)
+            const remarks = order.remarks || '';
             const damagesMatch = remarks.match(/Damages:\s*([^|]+)/);
             const damages: { name: string; qty: number; reason: string }[] = [];
             if (damagesMatch) {
@@ -95,7 +81,6 @@ export const TripSummaryModal: React.FC<TripSummaryModalProps> = ({
                 }
             }
 
-            // Parse Returns
             const returnsMatch = remarks.match(/Returns:\s*([^|]+)/);
             const returns: { name: string; qty: number }[] = [];
             if (returnsMatch) {
@@ -111,13 +96,13 @@ export const TripSummaryModal: React.FC<TripSummaryModalProps> = ({
 
             return {
                 ...order,
-                parsedPayments: payments,
+                parsedPayments: uiPayments,
                 parsedDamages: damages,
                 parsedReturns: returns,
-                totalCollected: payments.reduce((sum, p) => sum + p.amount, 0)
+                totalCollected: uiPayments.filter(p => p.method !== 'credit').reduce((sum, p) => sum + p.amount, 0)
             };
         });
-    }, [orders]);
+    }, [orders, tripData.payments]);
 
     const filteredOrders = useMemo(() => {
         if (!searchTerm.trim()) return parsedOrders;
@@ -163,40 +148,31 @@ export const TripSummaryModal: React.FC<TripSummaryModalProps> = ({
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={`Trip Summary: #${trip.id.slice(0, 8)}`} size="xl">
             <div className="space-y-6">
-                {/* Trip Header Info */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {/* Stats Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                     <Card className="p-3 bg-indigo-50 border-indigo-100">
-                        <p className="text-xs text-indigo-600 font-medium uppercase tracking-wider">Progress</p>
-                        <div className="flex items-end justify-between mt-1">
-                            <h3 className="text-2xl font-bold text-indigo-900">{stats.deliveredCount}/{orders.length}</h3>
-                            <p className="text-sm font-medium text-indigo-600 mb-1">
-                                {Math.round((stats.deliveredCount / orders.length) * 100)}%
-                            </p>
-                        </div>
-                        <div className="w-full bg-indigo-200 rounded-full h-1.5 mt-2">
-                            <div
-                                className="bg-indigo-600 h-full rounded-full transition-all duration-500"
-                                style={{ width: `${(stats.deliveredCount / orders.length) * 100}%` }}
-                            />
-                        </div>
+                        <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider">Orders</p>
+                        <h3 className="text-xl font-black text-indigo-900">{stats.deliveredCount}/{orders.length}</h3>
                     </Card>
 
                     <Card className="p-3 bg-emerald-50 border-emerald-100">
-                        <p className="text-xs text-emerald-600 font-medium uppercase tracking-wider">Collected</p>
-                        <h3 className="text-2xl font-bold text-emerald-900 mt-1">₹{stats.totalCollected.toLocaleString()}</h3>
-                        <p className="text-xs text-emerald-600 mt-1">of ₹{stats.totalAmount.toLocaleString()}</p>
+                        <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">Cash</p>
+                        <h3 className="text-xl font-black text-emerald-900">₹{parsedOrders.reduce((sum, o) => sum + o.parsedPayments.filter(p => p.method.toLowerCase() === 'cash').reduce((s, p) => s + p.amount, 0), 0).toLocaleString()}</h3>
+                    </Card>
+
+                    <Card className="p-3 bg-blue-50 border-blue-100">
+                        <p className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">QR Code</p>
+                        <h3 className="text-xl font-black text-blue-900">₹{parsedOrders.reduce((sum, o) => sum + o.parsedPayments.filter(p => (p.method.toLowerCase() === 'qr' || p.method.toLowerCase() === 'qr_code')).reduce((s, p) => s + p.amount, 0), 0).toLocaleString()}</h3>
                     </Card>
 
                     <Card className="p-3 bg-amber-50 border-amber-100">
-                        <p className="text-xs text-amber-600 font-medium uppercase tracking-wider">Pending</p>
-                        <h3 className="text-2xl font-bold text-amber-900 mt-1">{stats.pendingCount}</h3>
-                        <p className="text-xs text-amber-600 mt-1">Stops remaining</p>
+                        <p className="text-[10px] text-amber-600 font-bold uppercase tracking-wider">Credit</p>
+                        <h3 className="text-xl font-black text-amber-900">₹{parsedOrders.reduce((sum, o) => sum + o.parsedPayments.filter(p => p.method.toLowerCase() === 'credit').reduce((s, p) => s + p.amount, 0), 0).toLocaleString()}</h3>
                     </Card>
 
-                    <Card className="p-3 bg-red-50 border-red-100">
-                        <p className="text-xs text-red-600 font-medium uppercase tracking-wider">Failed / Returns</p>
-                        <h3 className="text-2xl font-bold text-red-900 mt-1">{stats.failedCount}</h3>
-                        <p className="text-xs text-red-600 mt-1">Orders failed</p>
+                    <Card className="p-3 bg-indigo-600 border-indigo-700 col-span-2 md:col-span-1">
+                        <p className="text-[10px] text-indigo-100 font-bold uppercase tracking-wider">Total Value</p>
+                        <h3 className="text-xl font-black text-white">₹{stats.totalAmount.toLocaleString()}</h3>
                     </Card>
                 </div>
 
