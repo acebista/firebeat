@@ -280,7 +280,7 @@ export const TripSummaryModal: React.FC<TripSummaryModalProps> = ({
                                                     ))}
                                                     {order.parsedPayments.length > 1 && (
                                                         <div className="text-[10px] font-bold text-emerald-600 border-t border-emerald-100 pt-0.5 mt-0.5">
-                                                            Tot: ₹{order.totalCollected.toLocaleString()}
+                                                            Tot: ₹{order.totalCollected.toFixed(2)}
                                                         </div>
                                                     )}
                                                 </div>

@@ -312,7 +312,7 @@ export const DeliveryOrderDetails: React.FC = () => {
             const userId = session?.user?.id;
 
             // Build remarks
-            let remarkText = `Payments: ${paymentEntries.map(p => `${p.method.toUpperCase()}: ₹${p.amount}${p.reference ? ` (${p.reference})` : ''}`).join(', ')}`;
+            let remarkText = `Payments: ${paymentEntries.map(p => `${p.method.toUpperCase()}: ₹${Number(p.amount).toFixed(2)}${p.reference ? ` (${p.reference})` : ''}`).join(', ')}`;
             if (remarks) remarkText += ` | ${remarks}`;
 
             if (damages.length > 0) {
@@ -335,10 +335,17 @@ export const DeliveryOrderDetails: React.FC = () => {
                 payment_method_at_delivery: mainPaymentMethod as any
             } as any);
 
+            // 0. CLEANUP: Ensure no active payments exist before adding (to prevent duplicates)
+            const existingPayments = await PaymentsService.getPaymentsByInvoice(order.id);
+            for (const p of existingPayments) {
+                await PaymentsService.voidPayment(p.id, "Auto-cleanup before fresh capture");
+            }
+
             // Create individual payment records in ledger
             for (const entry of paymentEntries) {
                 if (entry.amount > 0 && entry.method !== 'credit' && order.customerId) {
                     try {
+                        console.log(`[DeliveryOrderDetails] Adding payment: ${entry.method} ₹${entry.amount}`);
                         await PaymentsService.addPayment({
                             invoiceId: order.id,
                             customerId: order.customerId,
@@ -422,7 +429,7 @@ export const DeliveryOrderDetails: React.FC = () => {
                 };
             } else {
                 // Regular update - keep as delivered
-                remarkText = `[EDITED] Payments: ${paymentEntries.map(p => `${p.method.toUpperCase()}: ₹${p.amount}${p.reference ? ` (${p.reference})` : ''}`).join(', ')}`;
+                remarkText = `[EDITED] Payments: ${paymentEntries.map(p => `${p.method.toUpperCase()}: ₹${Number(p.amount).toFixed(2)}${p.reference ? ` (${p.reference})` : ''}`).join(', ')}`;
 
                 // Add returns info if any
                 if (returnItems.length > 0) {
@@ -458,6 +465,7 @@ export const DeliveryOrderDetails: React.FC = () => {
 
                     // 2. Void all existing payments for this invoice
                     for (const p of existingPayments) {
+                        console.log(`[DeliveryOrderDetails] Voiding payment: ${p.id}`);
                         await PaymentsService.voidPayment(p.id, "Delivery Detail Correction");
                     }
 
@@ -832,7 +840,7 @@ export const DeliveryOrderDetails: React.FC = () => {
                         </div>
                         <div className="flex justify-between">
                             <span className="text-gray-600">Amount Collected:</span>
-                            <span className="font-semibold text-emerald-600">₹{((order as any).payment_collected || order.totalAmount || 0).toLocaleString()}</span>
+                            <span className="font-semibold text-emerald-600">₹{Number((order as any).payment_collected || order.totalAmount || 0).toFixed(2)}</span>
                         </div>
                         {(order as any).delivered_at && (
                             <div className="flex justify-between">
@@ -954,6 +962,7 @@ export const DeliveryOrderDetails: React.FC = () => {
                                                 </select>
                                                 <input
                                                     type="number"
+                                                    step="0.01"
                                                     value={entry.amount}
                                                     onChange={(e) => updatePaymentEntry(idx, 'amount', parseFloat(e.target.value) || 0)}
                                                     placeholder="Amount"
