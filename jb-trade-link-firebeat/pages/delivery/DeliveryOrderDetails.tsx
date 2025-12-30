@@ -953,27 +953,34 @@ export const DeliveryOrderDetails: React.FC = () => {
                             {/* Summary Calculations (Breakdown) */}
                             <div className="mb-6 p-4 bg-white rounded-lg border border-gray-200 shadow-sm space-y-2">
                                 <div className="flex justify-between text-xs text-gray-500">
-                                    <span>Original Order Total:</span>
+                                    <span>Original Order Total (Gross):</span>
                                     <span>₹{calculateOriginalTotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                 </div>
 
+                                {(order.discount || 0) > 0 && (
+                                    <div className="flex justify-between text-xs text-red-600 font-medium italic">
+                                        <span>Invoice Discount (-) :</span>
+                                        <span>₹{(order.discount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                    </div>
+                                )}
+
                                 {calculateReturnTotal() > 0 && (
                                     <div className="flex justify-between text-xs text-purple-600">
-                                        <span>Returns (-) :</span>
+                                        <span>Returns (Net) (-) :</span>
                                         <span>₹{calculateReturnTotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                     </div>
                                 )}
 
                                 {calculateDamageTotal() > 0 && (
                                     <div className="flex justify-between text-xs text-orange-600">
-                                        <span>Damages (-) :</span>
+                                        <span>Damages (Net) (-) :</span>
                                         <span>₹{calculateDamageTotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                     </div>
                                 )}
 
-                                <div className="pt-1 border-t border-dashed border-gray-200 flex justify-between items-center mt-1">
+                                <div className="pt-2 border-t border-dashed border-gray-200 flex justify-between items-center mt-1">
                                     <span className="font-semibold text-gray-800 text-sm">Revised Net Total:</span>
-                                    <span className="font-bold text-gray-900">₹{(calculateOriginalTotal() - calculateReturnTotal() - calculateDamageTotal()).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                    <span className="font-bold text-gray-900">₹{calculateCurrentNetTotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                 </div>
 
                                 <div className="flex justify-between text-emerald-600 font-bold text-sm pt-1">
