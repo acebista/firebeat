@@ -259,9 +259,23 @@ export const DeliveryOrderDetails: React.FC = () => {
         return Math.max(0, gross - discount - returns - damages);
     };
 
-    const calculateDamageTotal = () => damages.reduce((sum, d) => sum + (d.rate * d.quantity), 0);
+    const calculateDamageTotal = () => {
+        const raw = damages.reduce((sum, d) => sum + (d.rate * d.quantity), 0);
+        const gross = calculateOriginalTotal();
+        const discount = Number(order?.discount || 0);
+        if (gross <= 0 || discount <= 0) return raw;
+        // Apply pro-rated invoice discount to damage value
+        return raw * (1 - (discount / gross));
+    };
 
-    const calculateReturnTotal = () => returnItems.reduce((sum, r) => sum + (r.rate * r.returnQty), 0);
+    const calculateReturnTotal = () => {
+        const raw = returnItems.reduce((sum, r) => sum + (r.rate * r.returnQty), 0);
+        const gross = calculateOriginalTotal();
+        const discount = Number(order?.discount || 0);
+        if (gross <= 0 || discount <= 0) return raw;
+        // Apply pro-rated invoice discount to return value
+        return raw * (1 - (discount / gross));
+    };
 
     const addPaymentEntry = () => {
         const remaining = calculateCurrentNetTotal() - paymentEntries.reduce((s, p) => s + p.amount, 0);
@@ -678,14 +692,14 @@ export const DeliveryOrderDetails: React.FC = () => {
 
                         {calculateReturnTotal() > 0 && (
                             <div className="flex justify-between text-sm text-purple-600">
-                                <span>Returns (-) :</span>
+                                <span>Returns (Net) (-) :</span>
                                 <span>₹{calculateReturnTotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                             </div>
                         )}
 
                         {calculateDamageTotal() > 0 && (
                             <div className="flex justify-between text-sm text-orange-600">
-                                <span>Damages (-) :</span>
+                                <span>Damages (Net) (-) :</span>
                                 <span>₹{calculateDamageTotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                             </div>
                         )}
