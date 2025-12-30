@@ -7,6 +7,8 @@ import { Order, SalesReturn } from '../../../types';
 import { PaymentMode } from '../../../types/delivery-order';
 import { ReturnsFailedModal } from './ReturnsFailedModal';
 import { VatBillDetailModal } from './VatBillDetailModal';
+import { VatTallyModal } from '../../../components/delivery/VatTallyModal';
+import { CheckSquare } from 'lucide-react';
 
 export interface DeliveryReportRow {
     invoiceId: string;
@@ -55,6 +57,8 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
     const [generatedBills, setGeneratedBills] = useState<VatBill[]>([]);
     const [showReturnsModal, setShowReturnsModal] = useState(false);
     const [selectedVatBill, setSelectedVatBill] = useState<VatBill | null>(null);
+    const [showTallyModal, setShowTallyModal] = useState(false);
+    const [forcedIndividualIds, setForcedIndividualIds] = useState<string[]>([]);
 
     const handlePrint = () => {
         printContent('Delivery Report', 'delivery-report-print');
@@ -124,11 +128,19 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
 
     // Effect to generate bills when modal opens
     React.useEffect(() => {
-        if (showVatModal && rows.length > 0) {
-            const bills = generateVatBills(rows);
+        if ((showVatModal || showTallyModal) && rows.length > 0) {
+            const bills = generateVatBills(rows, forcedIndividualIds);
             setGeneratedBills(bills);
         }
-    }, [showVatModal, rows]);
+    }, [showVatModal, showTallyModal, rows, forcedIndividualIds]);
+
+    const toggleBillingMode = (invoiceId: string) => {
+        setForcedIndividualIds(prev =>
+            prev.includes(invoiceId)
+                ? prev.filter(id => id !== invoiceId)
+                : [...prev, invoiceId]
+        );
+    };
 
     return (
         <div className="space-y-6">
@@ -141,6 +153,14 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => setShowVatModal(true)}>
                         <FileText className="mr-2 h-4 w-4" /> VAT Bills
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowTallyModal(true)}
+                        className="border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                    >
+                        <CheckSquare className="mr-2 h-4 w-4" /> Billing Tally
                     </Button>
                     <Button variant="outline" size="sm" onClick={handlePrint}>
                         <Printer className="mr-2 h-4 w-4" /> Print
@@ -272,6 +292,7 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
                                 <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Net Amount</th>
                                 <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>
                                 <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Collected</th>
+                                <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Billing</th>
                                 <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
@@ -343,6 +364,23 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
                                         </td>
                                         <td className="px-3 py-2 text-right font-bold text-emerald-600">
                                             ₹{row.collectedAmount.toFixed(2)}
+                                        </td>
+                                        <td className="px-3 py-2 text-center">
+                                            {['cash', 'qr'].includes(row.paymentMethod.toLowerCase()) ? (
+                                                <Button
+                                                    size="sm" // Changed from "xs" to "sm"
+                                                    variant={forcedIndividualIds.includes(row.invoiceId) ? 'outline' : 'ghost'}
+                                                    className={`text-[10px] h-6 px-1.5 rounded-md ${forcedIndividualIds.includes(row.invoiceId)
+                                                        ? 'border-purple-200 text-purple-700 hover:bg-purple-50'
+                                                        : 'text-blue-600 hover:bg-blue-50'
+                                                        }`}
+                                                    onClick={() => toggleBillingMode(row.invoiceId)}
+                                                >
+                                                    {forcedIndividualIds.includes(row.invoiceId) ? 'Individual' : 'Combined'}
+                                                </Button>
+                                            ) : (
+                                                <span className="text-[10px] text-gray-400 font-medium uppercase tracking-tight">System Forced</span>
+                                            )}
                                         </td>
                                         <td className="px-3 py-2 text-center">
                                             <button
@@ -550,6 +588,16 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
                 <VatBillDetailModal
                     bill={selectedVatBill}
                     onClose={() => setSelectedVatBill(null)}
+                />
+            )}
+
+            {/* VAT Tally Modal */}
+            {showTallyModal && (
+                <VatTallyModal
+                    isOpen={showTallyModal}
+                    onClose={() => setShowTallyModal(false)}
+                    rows={rows}
+                    generatedBills={generatedBills}
                 />
             )}
         </div>

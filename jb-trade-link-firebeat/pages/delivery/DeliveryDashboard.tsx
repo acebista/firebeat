@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Card, Button } from '../../components/ui/Elements';
 import { AllTripsModal } from '../../components/delivery/AllTripsModal';
-import { MapPin, CheckCircle, Clock, Navigation, Truck, ChevronDown, ChevronUp, TrendingUp, Users, Zap, Search, Package, AlertCircle, X } from 'lucide-react';
+import { TripSummaryModal } from '../../components/delivery/TripSummaryModal';
+import { MapPin, CheckCircle, Clock, Navigation, Truck, ChevronDown, ChevronUp, TrendingUp, Users, Zap, Search, Package, AlertCircle, X, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../services/auth';
 import { TripService, OrderService, UserService } from '../../services/db';
@@ -43,6 +44,7 @@ export const DeliveryDashboard: React.FC = () => {
   const [selectedStatus, setSelectedStatus] = useState<string>(''); // Status filter: all, pending, completed, failed
   const [finishingTrip, setFinishingTrip] = useState<TripWithStats | null>(null); // Trip being finished
   const [isFinishing, setIsFinishing] = useState(false); // Processing state
+  const [summaryTripData, setSummaryTripData] = useState<TripWithStats | null>(null); // Trip for summary modal
 
   const [myStats, setMyStats] = useState({
     totalTrips: 0,
@@ -478,8 +480,9 @@ export const DeliveryDashboard: React.FC = () => {
               )}
 
               {/* Packing List Button & Finish Trip Button */}
+              {/* Packing List Button, Summary & Finish Trip Button */}
               {expandedTripId === tripData.trip.id && (
-                <div className="px-4 py-2 bg-white bg-opacity-50 border-t border-opacity-20 border-current flex gap-2">
+                <div className="px-4 py-2 bg-white bg-opacity-50 border-t border-opacity-20 border-current flex flex-wrap gap-2">
                   <Button
                     size="sm"
                     className={`flex-1 ${!tripData.isPackingComplete ? 'animate-pulse ring-2 ring-amber-400' : ''}`}
@@ -487,12 +490,21 @@ export const DeliveryDashboard: React.FC = () => {
                   >
                     📦 {tripData.isPackingComplete ? 'Packing List' : 'Start Packing'}
                   </Button>
-                  {tripData.trip.status === 'out_for_delivery' && tripData.isPackingComplete && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1 bg-white"
+                    onClick={() => setSummaryTripData(tripData)}
+                  >
+                    📊 Summary
+                  </Button>
+                  {tripData.trip.status === 'out_for_delivery' && (
                     <Button
                       size="sm"
                       className="flex-1 bg-green-600 hover:bg-green-700 text-white"
                       onClick={() => handleFinishTripClick(tripData)}
-                      disabled={isFinishing}
+                      disabled={isFinishing || !tripData.isPackingComplete}
+                      title={!tripData.isPackingComplete ? "Finish packing first" : ""}
                     >
                       ✓ Finish Trip
                     </Button>
@@ -735,12 +747,22 @@ export const DeliveryDashboard: React.FC = () => {
         </div>
       )}
 
+      {/* Modal for Trip Summary */}
+      {summaryTripData && (
+        <TripSummaryModal
+          isOpen={!!summaryTripData}
+          onClose={() => setSummaryTripData(null)}
+          tripData={summaryTripData}
+        />
+      )}
+
       {/* All Trips Modal */}
       <AllTripsModal
         isOpen={isAllTripsModalOpen}
         onClose={() => setIsAllTripsModalOpen(false)}
         allUsersTrips={allUsersTrips}
         allStats={allStats}
+        onViewSummary={(data) => setSummaryTripData(data as any)}
       />
 
       {/* Finish Trip Modal - when there are pending orders */}

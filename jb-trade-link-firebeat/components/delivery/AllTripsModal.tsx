@@ -34,13 +34,15 @@ interface AllTripsModalProps {
     totalPending: number;
     totalValue: number;
   };
+  onViewSummary?: (tripData: TripWithStats) => void;
 }
 
 export const AllTripsModal: React.FC<AllTripsModalProps> = ({
   isOpen,
   onClose,
   allUsersTrips,
-  allStats
+  allStats,
+  onViewSummary
 }) => {
   const navigate = useNavigate();
   const [expandedTripId, setExpandedTripId] = useState<string | null>(null);
@@ -249,6 +251,28 @@ export const AllTripsModal: React.FC<AllTripsModalProps> = ({
                             </div>
                           </button>
 
+                          {/* Action Buttons for Trip */}
+                          {expandedTripId === tripData.trip.id && onViewSummary && (
+                            <div className="px-4 pb-2 flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="flex-1 text-xs py-1"
+                                onClick={() => onViewSummary(tripData as any)}
+                              >
+                                📊 View Summary
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="flex-1 text-xs py-1"
+                                onClick={() => navigate(`/delivery/packing-list/${tripData.trip.id}`)}
+                              >
+                                📋 Packing List
+                              </Button>
+                            </div>
+                          )}
+
                           {/* Progress Bar */}
                           <div className="px-4 pb-3">
                             <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
@@ -316,10 +340,10 @@ export const AllTripsModal: React.FC<AllTripsModalProps> = ({
                                       <div
                                         key={order.id}
                                         className={`p-3 rounded-lg text-sm transition-all ${order.status === 'delivered'
-                                            ? 'bg-white bg-opacity-40'
-                                            : isMatch
-                                              ? 'bg-yellow-50 border-2 border-yellow-400 shadow-md'
-                                              : 'bg-white'
+                                          ? 'bg-white bg-opacity-40'
+                                          : isMatch
+                                            ? 'bg-yellow-50 border-2 border-yellow-400 shadow-md'
+                                            : 'bg-white'
                                           }`}
                                       >
                                         <div className="flex items-start justify-between gap-2">

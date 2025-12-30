@@ -7,7 +7,7 @@ interface BillItem {
     quantity: number;
     rateBeforeVat: number;  // Price before VAT
     rate: number;           // Price after VAT (from DB)
-    total: number;          // Line total before VAT
+    total: number;          // Line total before VAT (qty * rateBeforeVat)
 }
 
 export interface VatBill {
@@ -16,385 +16,163 @@ export interface VatBill {
     paymentMethod: string;
     invoiceIds: string[];
     invoiceNumbers: string[];
-    customerName?: string;  // Customer name from first invoice
-    customerPAN?: string;   // Customer PAN if available
-    subtotal: number;       // Total before VAT
-    discount: number;       // Discount amount
-    vatAmount: number;      // VAT amount (13%)
-    totalAmount: number;    // Final total with VAT
+    customerName?: string;
+    customerPAN?: string;
+    subtotal: number;       // Sum of all items (Pre-tax)
+    discount: number;       // Pre-tax discount to reach target totalAmount
+    vatAmount: number;      // 13% of (subtotal - discount)
+    totalAmount: number;    // Exactly equal to total collected (Post-tax)
     date: string;
     items: BillItem[];
 }
 
-const parseBreakdown = (row: DeliveryReportRow): { method: string; amount: number }[] => {
-    const rawMethod = (row.paymentMethod || 'cash').toString().toLowerCase();
-
-    // If explicitly single method, return full amount
-    if (rawMethod !== 'multiple') {
-        return [{ method: rawMethod, amount: row.collectedAmount }];
-    }
-
-    // If multiple, try to parse remarks
-    const remarks = row.order.remarks || '';
-    const paymentMatch = remarks.match(/Payments:\s*([^|]+)/);
-
-    if (!paymentMatch) {
-        // Fallback: treat whole amount as multiple if parsing fails
-        return [{ method: 'multiple', amount: row.collectedAmount }];
-    }
-
-    const paymentsStr = paymentMatch[1];
-    const regex = /(\w+):\s*₹?(\d+(?:\.\d+)?)/g;
-    const results: { method: string; amount: number }[] = [];
-    let match;
-
-    while ((match = regex.exec(paymentsStr)) !== null) {
-        results.push({
-            method: match[1].toLowerCase(),
-            amount: parseFloat(match[2])
-        });
-    }
-
-    return results.length > 0 ? results : [{ method: 'multiple', amount: row.collectedAmount }];
-};
-
-/**
- * Parse return quantities from order remarks
- * Format: "Returns: ProductName(qty), ProductName2(qty)"
- */
-const parseReturnsFromRemarks = (remarks: string): Map<string, number> => {
+export const parseReturnsFromRemarks = (remarks: string): Map<string, number> => {
     const returnMap = new Map<string, number>();
+    if (!remarks || !remarks.includes('Returns:')) return returnMap;
+    const match = remarks.match(/Returns:\s*([^|]+)/);
+    if (!match) return returnMap;
 
-    if (!remarks || !remarks.includes('Returns:')) {
-        return returnMap;
-    }
-
-    const returnsMatch = remarks.match(/Returns:\s*([^|]+)/);
-    if (!returnsMatch) return returnMap;
-
-    const returnsStr = returnsMatch[1];
-    // Match patterns like "Product Name(5)" or "Product Name (5)"
-    const regex = /([^(]+)\((\d+)\)/g;
-    let match;
-
-    while ((match = regex.exec(returnsStr)) !== null) {
-        const productName = match[1].trim();
-        const qty = parseInt(match[2]);
-        returnMap.set(productName, qty);
-    }
-
+    const parts = match[1].split(',').map(p => p.trim());
+    parts.forEach(part => {
+        const m = part.match(/(.+)\((\d+)\)/);
+        if (m) returnMap.set(m[1].trim(), parseInt(m[2]));
+    });
     return returnMap;
 };
 
-/**
- * Parse damage quantities from order remarks
- * Format: "Damages: ProductName(qty) - reason, ProductName2(qty) - reason"
- */
-const parseDamagesFromRemarks = (remarks: string): Map<string, number> => {
+export const parseDamagesFromRemarks = (remarks: string): Map<string, number> => {
     const damageMap = new Map<string, number>();
+    if (!remarks || !remarks.includes('Damages:')) return damageMap;
+    const match = remarks.match(/Damages:\s*([^|]+)/);
+    if (!match) return damageMap;
 
-    if (!remarks || !remarks.includes('Damages:')) {
-        return damageMap;
-    }
-
-    const damagesMatch = remarks.match(/Damages:\s*([^|]+)/);
-    if (!damagesMatch) return damageMap;
-
-    const damagesStr = damagesMatch[1];
-    // Match patterns like "Product Name(5) - reason"
-    const regex = /([^(]+)\((\d+)\)/g;
-    let match;
-
-    while ((match = regex.exec(damagesStr)) !== null) {
-        const productName = match[1].trim();
-        const qty = parseInt(match[2]);
-        damageMap.set(productName, qty);
-    }
-
+    const parts = match[1].split(',').map(p => p.trim());
+    parts.forEach(part => {
+        const m = part.match(/(.+)\((\d+)\)/);
+        if (m) damageMap.set(m[1].trim(), parseInt(m[2]));
+    });
     return damageMap;
 };
 
-/**
- * Calculate ACTUAL delivered items using real delivery data.
- * This is 100% accurate - no proportional scaling or estimation.
- */
-const getDeliveredItems = (row: DeliveryReportRow, methodAmount: number): { items: BillItem[], discount: number } => {
+const getDeliveredItemsForRow = (row: DeliveryReportRow): { items: BillItem[], grossAmount: number } => {
+    const VAT_RATE = 0.13;
     const orderItems = row.order.items || [];
-    const VAT_RATE = 0.13; // 13% VAT
+    const returns = parseReturnsFromRemarks(row.order.remarks || '');
+    const damages = parseDamagesFromRemarks(row.order.remarks || '');
 
-    console.log(`\n========== [getDeliveredItems] START ==========`);
-    console.log(`[getDeliveredItems] Invoice: ${row.invoiceNumber}`);
-    console.log(`[getDeliveredItems] methodAmount: ₹${methodAmount}`);
-    console.log(`[getDeliveredItems] row.collectedAmount: ₹${row.collectedAmount}`);
-    console.log(`[getDeliveredItems] row.order.totalAmount: ₹${row.order.totalAmount}`);
-    console.log(`[getDeliveredItems] row.order.discount: ₹${row.order.discount}`);
-    console.log(`[getDeliveredItems] Status: ${row.status}, Order items count:`, orderItems.length);
-
-    // Parse returns and damages from remarks
-    const returnsFromRemarks = parseReturnsFromRemarks(row.order.remarks || '');
-    const damagesFromRemarks = parseDamagesFromRemarks(row.order.remarks || '');
-
-    console.log(`[getDeliveredItems] Returns from remarks:`, Array.from(returnsFromRemarks.entries()));
-    console.log(`[getDeliveredItems] Damages from remarks:`, Array.from(damagesFromRemarks.entries()));
-
-    // Build a map of actual delivered quantities
-    const deliveredItems: BillItem[] = [];
+    const items: BillItem[] = [];
+    let grossAmount = 0;
 
     orderItems.forEach(item => {
+        const name = item.tempProductName || item.productName || 'Unknown';
         const qty = Number(item.quantity || item.qty) || 0;
         const rate = Number(item.price || item.rate) || 0;
-        const productName = item.tempProductName || item.productName || 'Unknown Product';
 
-        console.log(`[getDeliveredItems] Processing: ${productName}, qty=${qty}, rate=₹${rate}`);
+        const retQty = returns.get(name) || 0;
+        const dmgQty = damages.get(name) || 0;
+        const delQty = Math.max(0, qty - retQty - dmgQty);
 
-        // Calculate actual delivered quantity
-        let deliveredQty = qty;
-
-        // Subtract returns (check both exact match and partial match)
-        const returnQty = returnsFromRemarks.get(productName) ||
-            Array.from(returnsFromRemarks.entries())
-                .find(([key]) => key.toLowerCase().includes(productName.toLowerCase()) ||
-                    productName.toLowerCase().includes(key.toLowerCase()))?.[1] || 0;
-
-        // Subtract damages (check both exact match and partial match)
-        const damageQty = damagesFromRemarks.get(productName) ||
-            Array.from(damagesFromRemarks.entries())
-                .find(([key]) => key.toLowerCase().includes(productName.toLowerCase()) ||
-                    productName.toLowerCase().includes(key.toLowerCase()))?.[1] || 0;
-
-        deliveredQty = deliveredQty - returnQty - damageQty;
-
-        console.log(`[getDeliveredItems] ${productName}: ordered=${qty}, returned=${returnQty}, damaged=${damageQty}, delivered=${deliveredQty}`);
-
-        // Only include items that were actually delivered
-        if (deliveredQty > 0) {
-            // Calculate amounts before VAT
+        if (delQty > 0) {
             const rateBeforeVat = rate / (1 + VAT_RATE);
-            const totalBeforeVat = deliveredQty * rateBeforeVat;
-
-            console.log(`[getDeliveredItems]   -> rateBeforeVat=₹${rateBeforeVat.toFixed(2)}, totalBeforeVat=₹${totalBeforeVat.toFixed(2)}`);
-
-            deliveredItems.push({
-                productName: productName,
-                quantity: deliveredQty, // Exact delivered quantity - no rounding needed
+            items.push({
+                productName: name,
+                quantity: delQty,
                 rateBeforeVat: Number(rateBeforeVat.toFixed(2)),
                 rate: rate,
-                total: Number(totalBeforeVat.toFixed(2))
+                total: Number((delQty * rateBeforeVat).toFixed(2))
             });
+            grossAmount += delQty * rate;
         }
     });
 
-    console.log(`[getDeliveredItems] Delivered items count: ${deliveredItems.length}`);
-
-    // Calculate totals
-    const totalDeliveredAmountBeforeVat = deliveredItems.reduce((sum, i) => sum + i.total, 0);
-    const totalDeliveredAmountWithVat = totalDeliveredAmountBeforeVat * (1 + VAT_RATE);
-    const orderDiscount = Number(row.order.discount) || 0;
-
-    console.log(`[getDeliveredItems] Total delivered (before VAT): ₹${totalDeliveredAmountBeforeVat.toFixed(2)}`);
-    console.log(`[getDeliveredItems] Total delivered (with VAT): ₹${totalDeliveredAmountWithVat.toFixed(2)}`);
-    console.log(`[getDeliveredItems] Order discount: ₹${orderDiscount.toFixed(2)}`);
-    console.log(`[getDeliveredItems] methodAmount: ₹${methodAmount.toFixed(2)}`);
-    console.log(`[getDeliveredItems] Expected (with VAT - discount): ₹${(totalDeliveredAmountWithVat - orderDiscount).toFixed(2)}`);
-
-    // Check if this is a multiple payment method scenario
-    const expectedAmount = totalDeliveredAmountWithVat - orderDiscount;
-    const tolerance = Math.max(totalDeliveredAmountWithVat * 0.02, 5); // 2% or ₹5, whichever is larger
-
-    console.log(`[getDeliveredItems] Tolerance: ₹${tolerance.toFixed(2)}`);
-    console.log(`[getDeliveredItems] Difference from expected: ₹${Math.abs(methodAmount - expectedAmount).toFixed(2)}`);
-
-    if (Math.abs(methodAmount - expectedAmount) > tolerance) {
-        // This is a TRUE partial payment (multiple payment methods)
-        // Calculate what fraction this payment represents
-        const paymentFraction = methodAmount / expectedAmount;
-
-        console.log(`[getDeliveredItems] ⚠️  MULTIPLE PAYMENT METHODS! Payment fraction: ${paymentFraction.toFixed(4)} (${(paymentFraction * 100).toFixed(2)}%)`);
-
-        // Scale both items AND discount proportionally
-        const scaledItems = deliveredItems.map(item => ({
-            ...item,
-            quantity: Math.round(item.quantity * paymentFraction),
-            total: Number((item.total * paymentFraction).toFixed(2))
-        })).filter(i => i.quantity > 0);
-
-        const scaledDiscount = Number((orderDiscount * paymentFraction).toFixed(2));
-
-        console.log(`[getDeliveredItems] Scaled items:`, scaledItems.map(i => `${i.productName}: ${i.quantity}`));
-        console.log(`[getDeliveredItems] Scaled discount: ₹${scaledDiscount.toFixed(2)}`);
-        console.log(`========== [getDeliveredItems] END (SCALED) ==========\n`);
-
-        return { items: scaledItems, discount: scaledDiscount };
-    }
-
-    console.log(`[getDeliveredItems] ✓ Single payment method - NO SCALING`);
-    console.log(`[getDeliveredItems] Final items:`, deliveredItems.map(i => `${i.productName}: ${i.quantity}`));
-    console.log(`[getDeliveredItems] Discount: ₹${orderDiscount.toFixed(2)}`);
-    console.log(`========== [getDeliveredItems] END (NO SCALING) ==========\n`);
-
-    return { items: deliveredItems, discount: orderDiscount };
+    return { items, grossAmount };
 };
 
-
-export const generateVatBills = (rows: DeliveryReportRow[]): VatBill[] => {
+export const generateVatBills = (rows: DeliveryReportRow[], forcedIndividualIds: string[] = []): VatBill[] => {
     const bills: VatBill[] = [];
     const THRESHOLD = 50000;
+    const VAT_RATE = 0.13;
 
-    console.log(`[generateVatBills] Processing ${rows.length} delivery rows`);
+    let combinedItems: BillItem[] = [];
+    let combinedInvoices: string[] = [];
+    let combinedNumbers: string[] = [];
+    let combinedTargetCollection = 0;
 
-    const methodBuckets: Record<string, { rows: DeliveryReportRow[], amount: number }[]> = {
-        'cash': [],
-        'qr': [],
-        'credit': [],
-        'cheque': []
+    const flushCombined = () => {
+        if (combinedTargetCollection <= 0) return;
+
+        const subtotal = combinedItems.reduce((s, i) => s + i.total, 0);
+        // Pre-tax taxable base must be target / 1.13
+        const targetTaxable = combinedTargetCollection / (1 + VAT_RATE);
+        const preTaxDiscount = Math.max(0, subtotal - targetTaxable);
+        const vat = (subtotal - preTaxDiscount) * VAT_RATE;
+
+        bills.push({
+            id: `VAT-COMB-${bills.length + 1}`,
+            type: 'Combined',
+            paymentMethod: 'cash/qr',
+            invoiceIds: [...combinedInvoices],
+            invoiceNumbers: [...combinedNumbers],
+            customerName: 'Multiple Customers',
+            subtotal: Number(subtotal.toFixed(2)),
+            discount: Number(preTaxDiscount.toFixed(2)),
+            vatAmount: Number(vat.toFixed(2)),
+            totalAmount: Number(combinedTargetCollection.toFixed(2)),
+            date: new Date().toISOString().split('T')[0],
+            items: [...combinedItems]
+        });
+        combinedItems = []; combinedInvoices = []; combinedNumbers = []; combinedTargetCollection = 0;
     };
 
     rows.forEach(row => {
-        console.log(`[generateVatBills] Processing invoice ${row.invoiceNumber}, status: ${row.status}, payment: ${row.paymentMethod}, amount: ${row.collectedAmount}`);
+        if (row.collectedAmount <= 0) return;
 
-        const breakdowns = parseBreakdown(row);
-        console.log(`[generateVatBills] Payment breakdown for ${row.invoiceNumber}:`, breakdowns);
+        const method = (row.paymentMethod || 'cash').toString().toLowerCase();
+        const { items } = getDeliveredItemsForRow(row);
+        const targetPayment = row.collectedAmount;
 
-        breakdowns.forEach(bd => {
-            const method = bd.method.toLowerCase();
+        const isCombinedCandidate = (method === 'cash' || method === 'qr') && !forcedIndividualIds.includes(row.invoiceId);
 
-            if (method === 'credit' || method === 'cheque') {
-                // INDIVIDUAL
-                console.log(`[generateVatBills] Creating individual ${method} bill for ${row.invoiceNumber}`);
-                const { items, discount } = getDeliveredItems(row, bd.amount);
-                const subtotal = items.reduce((sum, i) => sum + i.total, 0);
-                const vatAmount = subtotal * 0.13;
-
-                console.log(`[generateVatBills] Individual bill items:`, items);
-                console.log(`[generateVatBills] Subtotal: ${subtotal}, Discount: ${discount}, VAT: ${vatAmount}, Total: ${subtotal - discount + vatAmount}`);
-
-                bills.push({
-                    id: `VAT-${method.toUpperCase()}-${row.invoiceNumber}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-                    type: 'Individual',
-                    paymentMethod: method,
-                    invoiceIds: [row.invoiceId],
-                    invoiceNumbers: [row.invoiceNumber],
-                    customerName: row.customerName,
-                    customerPAN: row.order.customerPAN,
-                    subtotal: Number(subtotal.toFixed(2)),
-                    discount: Number(discount.toFixed(2)),
-                    vatAmount: Number(vatAmount.toFixed(2)),
-                    totalAmount: Number((subtotal - discount + vatAmount).toFixed(2)),
-                    date: new Date().toISOString().split('T')[0],
-                    items
-                });
-            } else {
-                // COMBINED - Treat both cash and QR as "cash"
-                const combinedMethod = (method === 'qr' || method === 'cash') ? 'cash' : method;
-                if (!methodBuckets[combinedMethod]) methodBuckets[combinedMethod] = [];
-                methodBuckets[combinedMethod].push({ rows: [row], amount: bd.amount });
-                console.log(`[generateVatBills] Added to ${combinedMethod} bucket: ${row.invoiceNumber}, amount: ${bd.amount}`);
-            }
-        });
-    });
-
-    // Only process 'cash' bucket (which now includes QR)
-    ['cash'].forEach(method => {
-        const itemsList = methodBuckets[method] || [];
-        if (itemsList.length === 0) return;
-
-        console.log(`[generateVatBills] Processing ${itemsList.length} ${method} items for combined bills`);
-
-        let currentBillAmount = 0;
-        let currentBillInvoices: string[] = [];
-        let currentBillInvoiceNumbers: string[] = [];
-        let currentBillItems: BillItem[] = [];
-        let currentBillDiscount = 0;
-
-        itemsList.forEach((item, idx) => {
-            if (currentBillAmount + item.amount > THRESHOLD) {
-                if (currentBillAmount > 0) {
-                    // Calculate VAT breakdown
-                    const subtotal = currentBillItems.reduce((sum, i) => sum + i.total, 0);
-                    const vatAmount = subtotal * 0.13;
-
-                    console.log(`[generateVatBills] Creating combined bill with ${currentBillInvoices.length} invoices, subtotal: ${subtotal}, discount: ${currentBillDiscount}`);
-
-                    bills.push({
-                        id: `VAT-CASH-COMB-${bills.length + 1}`,
-                        type: 'Combined',
-                        paymentMethod: 'cash/qr',
-                        invoiceIds: [...currentBillInvoices],
-                        invoiceNumbers: [...currentBillInvoiceNumbers],
-                        customerName: 'Multiple Customers',
-                        customerPAN: undefined,
-                        subtotal: Number(subtotal.toFixed(2)),
-                        discount: Number(currentBillDiscount.toFixed(2)),
-                        vatAmount: Number(vatAmount.toFixed(2)),
-                        totalAmount: Number((subtotal - currentBillDiscount + vatAmount).toFixed(2)),
-                        date: new Date().toISOString().split('T')[0],
-                        items: currentBillItems
-                    });
-                }
-                currentBillAmount = 0;
-                currentBillInvoices = [];
-                currentBillInvoiceNumbers = [];
-                currentBillItems = [];
-                currentBillDiscount = 0;
-            }
-
-            currentBillAmount += item.amount;
-            const row = item.rows[0];
-
-            if (!currentBillInvoices.includes(row.invoiceId)) {
-                currentBillInvoices.push(row.invoiceId);
-                currentBillInvoiceNumbers.push(row.invoiceNumber);
-            }
-
-            // Aggregate items
-            const { items: rowItems, discount: rowDiscount } = getDeliveredItems(row, item.amount);
-            console.log(`[generateVatBills] Adding items from ${row.invoiceNumber}:`, rowItems);
-            console.log(`[generateVatBills] Discount from ${row.invoiceNumber}: ₹${rowDiscount}`);
-
-            // Add discount to current bill
-            currentBillDiscount += rowDiscount;
-
-            rowItems.forEach(newItem => {
-                const existing = currentBillItems.find(i => i.productName === newItem.productName && Math.abs(i.rateBeforeVat - newItem.rateBeforeVat) < 0.01);
-                if (existing) {
-                    console.log(`[generateVatBills] Aggregating ${newItem.productName}: ${existing.quantity} + ${newItem.quantity}`);
-                    existing.quantity += newItem.quantity;
-                    existing.total += newItem.total;
-                } else {
-                    console.log(`[generateVatBills] Adding new item: ${newItem.productName}, qty: ${newItem.quantity}`);
-                    currentBillItems.push({ ...newItem });
-                }
-            });
-        });
-
-        if (currentBillAmount > 0) {
-            const subtotal = currentBillItems.reduce((sum, i) => sum + i.total, 0);
-            const vatAmount = subtotal * 0.13;
-
-            console.log(`[generateVatBills] Creating final combined bill with ${currentBillInvoices.length} invoices, subtotal: ${subtotal}, discount: ${currentBillDiscount}`);
+        if (!isCombinedCandidate) {
+            const subtotal = items.reduce((s, i) => s + i.total, 0);
+            const targetTaxable = targetPayment / (1 + VAT_RATE);
+            const preTaxDiscount = Math.max(0, subtotal - targetTaxable);
+            const vat = (subtotal - preTaxDiscount) * VAT_RATE;
 
             bills.push({
-                id: `VAT-CASH-COMB-${bills.length + 1}`,
-                type: 'Combined',
-                paymentMethod: 'cash/qr',
-                invoiceIds: currentBillInvoices,
-                invoiceNumbers: currentBillInvoiceNumbers,
-                customerName: 'Multiple Customers',
-                customerPAN: undefined,
+                id: `VAT-INDV-${row.invoiceNumber}-${Date.now()}`,
+                type: 'Individual',
+                paymentMethod: method,
+                invoiceIds: [row.invoiceId],
+                invoiceNumbers: [row.invoiceNumber],
+                customerName: row.customerName,
+                customerPAN: row.order.customerPAN,
                 subtotal: Number(subtotal.toFixed(2)),
-                discount: Number(currentBillDiscount.toFixed(2)),
-                vatAmount: Number(vatAmount.toFixed(2)),
-                totalAmount: Number((subtotal - currentBillDiscount + vatAmount).toFixed(2)),
+                discount: Number(preTaxDiscount.toFixed(2)),
+                vatAmount: Number(vat.toFixed(2)),
+                totalAmount: Number(targetPayment.toFixed(2)),
                 date: new Date().toISOString().split('T')[0],
-                items: currentBillItems
+                items
+            });
+        } else {
+            if (combinedTargetCollection + targetPayment > THRESHOLD && combinedTargetCollection > 0) flushCombined();
+            combinedTargetCollection += targetPayment;
+            if (!combinedInvoices.includes(row.invoiceId)) {
+                combinedInvoices.push(row.invoiceId);
+                combinedNumbers.push(row.invoiceNumber);
+            }
+            items.forEach(ni => {
+                const ex = combinedItems.find(i => i.productName === ni.productName && Math.abs(i.rate - ni.rate) < 0.01);
+                if (ex) {
+                    ex.quantity += ni.quantity;
+                    ex.total += ni.total;
+                } else {
+                    combinedItems.push({ ...ni });
+                }
             });
         }
     });
 
-    console.log(`[generateVatBills] Generated ${bills.length} VAT bills`);
-    bills.forEach(bill => {
-        console.log(`[generateVatBills] Bill ${bill.id}: ${bill.invoiceNumbers.length} invoices, ${bill.items.length} items, total: ₹${bill.totalAmount}`);
-    });
-
+    flushCombined();
     return bills;
 };

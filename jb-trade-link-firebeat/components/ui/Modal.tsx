@@ -26,8 +26,8 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, subtitle, 
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex min-h-screen items-center justify-center p-4 sm:p-0">
         {/* Backdrop with blur */}
-        <div 
-          className="fixed inset-0 bg-slate-900 bg-opacity-40 backdrop-blur-sm transition-opacity duration-300" 
+        <div
+          className="fixed inset-0 bg-slate-900 bg-opacity-40 backdrop-blur-sm transition-opacity duration-300"
           onClick={onClose}
         ></div>
 
@@ -39,8 +39,8 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, subtitle, 
               <h2 className="text-xl font-bold text-slate-900">{title}</h2>
               {subtitle && <p className="text-sm text-slate-600 mt-1">{subtitle}</p>}
             </div>
-            <button 
-              onClick={onClose} 
+            <button
+              onClick={onClose}
               className="ml-4 p-2 rounded-lg hover:bg-slate-200 transition-colors duration-200 text-slate-500 hover:text-slate-700"
             >
               <X className="h-5 w-5" />
@@ -48,7 +48,7 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, subtitle, 
           </div>
 
           {/* Content */}
-          <div className="p-6 max-h-[calc(100vh-300px)] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+          <div className="p-6 max-h-[calc(100vh-200px)] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
             {children}
           </div>
 
