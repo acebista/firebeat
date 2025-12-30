@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Card, Button, Badge } from '../ui/Elements';
 import { Modal } from '../ui/Modal';
 import {
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Order, OrderItem } from '../../types';
+import { PaymentsService } from '../../services/ledger/PaymentsService';
 
 interface TripWithStats {
     trip: any;
@@ -43,8 +44,34 @@ export const TripSummaryModal: React.FC<TripSummaryModalProps> = ({
     const navigate = useNavigate();
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedSalesperson, setSelectedSalesperson] = useState<string>('all');
+    const [freshPayments, setFreshPayments] = useState<any[]>([]);
+    const [loadingPayments, setLoadingPayments] = useState(false);
 
     const { trip, orders } = tripData;
+
+    // Refresh payments when modal opens to get latest data
+    useEffect(() => {
+        if (isOpen && trip.orderIds && trip.orderIds.length > 0) {
+            const refreshPayments = async () => {
+                setLoadingPayments(true);
+                try {
+                    const payments = await PaymentsService.getPaymentsByInvoices(trip.orderIds);
+                    console.log('[TripSummaryModal] Refreshed payments:', payments.length);
+                    setFreshPayments(payments);
+                } catch (error) {
+                    console.error('[TripSummaryModal] Failed to refresh payments:', error);
+                    // Fall back to stale data
+                    setFreshPayments(tripData.payments || []);
+                } finally {
+                    setLoadingPayments(false);
+                }
+            };
+            refreshPayments();
+        }
+    }, [isOpen, trip.orderIds]);
+
+    // Use fresh payments if available, otherwise fall back to tripData.payments
+    const currentPayments = freshPayments.length > 0 ? freshPayments : (tripData.payments || []);
 
     // Unique salespeople for filter
     const uniqueSalespeople = useMemo(() => {
@@ -60,7 +87,7 @@ export const TripSummaryModal: React.FC<TripSummaryModalProps> = ({
     // Use database-sourced payments
     const parsedOrders = useMemo(() => {
         return orders.map(order => {
-            const payments = (tripData.payments || []).filter(p => p.invoice_id === order.id && !p.voided_at);
+            const payments = currentPayments.filter(p => p.invoice_id === order.id && !p.voided_at);
 
             // Format for UI
             const uiPayments = payments.map(p => ({
@@ -113,7 +140,7 @@ export const TripSummaryModal: React.FC<TripSummaryModalProps> = ({
                 totalCollected: uiPayments.filter(p => p.method !== 'credit').reduce((sum, p) => sum + p.amount, 0)
             };
         }).filter(Boolean);
-    }, [orders, tripData.payments]);
+    }, [orders, currentPayments]);
 
     // Defensively deduplicate payments for the same invoice just in case state is weird
     const deduplicatedParsedOrders = useMemo(() => {
@@ -122,7 +149,7 @@ export const TripSummaryModal: React.FC<TripSummaryModalProps> = ({
             const uniquePayments = [];
 
             // Re-parse payments from the source to ensure we have the IDs
-            const rawPayments = (tripData.payments || []).filter(p => p.invoice_id === order.id && !p.voided_at);
+            const rawPayments = currentPayments.filter(p => p.invoice_id === order.id && !p.voided_at);
 
             for (const p of rawPayments) {
                 if (!seenIds.has(p.id)) {
@@ -150,7 +177,7 @@ export const TripSummaryModal: React.FC<TripSummaryModalProps> = ({
                 totalCollected: totalPaid
             };
         });
-    }, [parsedOrders, tripData.payments]);
+    }, [parsedOrders, currentPayments]);
 
     const filteredOrders = useMemo(() => {
         let result = deduplicatedParsedOrders;
