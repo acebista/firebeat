@@ -296,6 +296,12 @@ export const DeliveryOrderDetails: React.FC = () => {
     const handleMarkDelivered = async () => {
         if (!order) return;
 
+        // Prevent double-clicks
+        if (processing) {
+            console.warn('[DeliveryOrderDetails] Delivery already in progress, ignoring click');
+            return;
+        }
+
         const totalCollected = paymentEntries.reduce((sum, p) => sum + (p.method !== 'credit' ? Number(p.amount) : 0), 0);
         const netTotal = calculateCurrentNetTotal();
 
@@ -390,6 +396,12 @@ export const DeliveryOrderDetails: React.FC = () => {
     // Handler for updating already delivered orders
     const handleUpdateDelivery = async () => {
         if (!order) return;
+
+        // Prevent double-clicks
+        if (processing || paymentSyncLock) {
+            console.warn('[DeliveryOrderDetails] Update already in progress, ignoring click');
+            return;
+        }
 
         // Validate if marking as failed
         if (editStatus === 'cancelled' && !editFailReason.trim()) {

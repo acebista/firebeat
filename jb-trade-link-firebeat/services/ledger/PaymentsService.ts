@@ -103,7 +103,14 @@ export const PaymentsService = {
             return false;
         }
 
-        console.log('[PaymentsService] Successfully voided payment:', paymentId);
+        // Verify the payment was actually voided
+        const voidedPayment = data[0];
+        if (!voidedPayment.voided_at) {
+            console.error('[PaymentsService] Payment update succeeded but voided_at was not set:', paymentId);
+            return false;
+        }
+
+        console.log('[PaymentsService] Successfully voided payment:', paymentId, 'voided_at:', voidedPayment.voided_at);
         return true;
     },
 
@@ -117,13 +124,27 @@ export const PaymentsService = {
             .eq('invoice_id', invoiceId)
             .order('occurred_at', { ascending: false });
 
+        // More explicit NULL check for non-voided payments
         if (!includeVoided) {
-            query = query.is('voided_at', null);
+            query = query.or('voided_at.is.null,voided_at.eq.null');
         }
 
         const { data, error } = await query;
-        if (error) throw error;
-        return data || [];
+        if (error) {
+            console.error('[PaymentsService] Error fetching payments:', error);
+            throw error;
+        }
+
+        // Additional client-side filter as safety net
+        const result = data || [];
+        if (!includeVoided) {
+            const filtered = result.filter(p => !p.voided_at);
+            console.log(`[PaymentsService] Fetched ${result.length} total, ${filtered.length} non-voided for invoice ${invoiceId}`);
+            return filtered;
+        }
+
+        console.log(`[PaymentsService] Fetched ${result.length} payments (including voided) for invoice ${invoiceId}`);
+        return result;
     },
 
     /**
