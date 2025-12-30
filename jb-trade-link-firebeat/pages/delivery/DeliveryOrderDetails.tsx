@@ -342,10 +342,16 @@ export const DeliveryOrderDetails: React.FC = () => {
                 payment_method_at_delivery: mainPaymentMethod as any
             } as any);
 
-            // 0. CLEANUP: Ensure no active payments exist before adding (to prevent duplicates)
-            const existingPayments = await PaymentsService.getPaymentsByInvoice(order.id);
+            // 0. CLEANUP: Delete any existing payments before adding new ones
+            const existingPayments = await PaymentsService.getPaymentsByInvoice(order.id, true);
+            console.log(`[DeliveryOrderDetails] Found ${existingPayments.length} existing payments to delete before delivery completion`);
             for (const p of existingPayments) {
-                await PaymentsService.voidPayment(p.id, "Auto-cleanup before fresh capture");
+                try {
+                    await PaymentsService.deletePayment(p.id);
+                    console.log(`[DeliveryOrderDetails] Deleted existing payment: ${p.id}`);
+                } catch (delError) {
+                    console.error(`[DeliveryOrderDetails] Failed to delete payment ${p.id}:`, delError);
+                }
             }
 
             // Create individual payment records in ledger
@@ -483,26 +489,22 @@ export const DeliveryOrderDetails: React.FC = () => {
                     setPaymentSyncLock(true);
                     console.log('[DeliveryOrderDetails] Starting payment sync for invoice:', order.id);
 
-                    // 1. Get existing non-voided payments for this invoice
-                    const existingPayments = await PaymentsService.getPaymentsByInvoice(order.id);
-                    console.log(`[DeliveryOrderDetails] Found ${existingPayments.length} active payments to void.`);
+                    // 1. Get ALL payments for this invoice (including any voided ones)
+                    const existingPayments = await PaymentsService.getPaymentsByInvoice(order.id, true);
+                    console.log(`[DeliveryOrderDetails] Found ${existingPayments.length} total payments to DELETE.`);
 
-                    // 2. Void all existing payments for this invoice (sequential to avoid race conditions)
-                    let voidedCount = 0;
+                    // 2. DELETE all existing payments (more reliable than voiding)
+                    let deletedCount = 0;
                     for (const p of existingPayments) {
-                        console.log(`[DeliveryOrderDetails] Voiding payment: ${p.id}`);
+                        console.log(`[DeliveryOrderDetails] DELETING payment: ${p.id}`);
                         try {
-                            const voidResult = await PaymentsService.voidPayment(p.id, "Delivery Detail Correction");
-                            if (voidResult) {
-                                voidedCount++;
-                            } else {
-                                console.error(`[DeliveryOrderDetails] Failed to void payment ${p.id}`);
-                            }
-                        } catch (voidError) {
-                            console.error(`[DeliveryOrderDetails] Error voiding payment ${p.id}:`, voidError);
+                            await PaymentsService.deletePayment(p.id);
+                            deletedCount++;
+                        } catch (deleteError) {
+                            console.error(`[DeliveryOrderDetails] Error deleting payment ${p.id}:`, deleteError);
                         }
                     }
-                    console.log(`[DeliveryOrderDetails] Successfully voided ${voidedCount}/${existingPayments.length} payments`);
+                    console.log(`[DeliveryOrderDetails] Successfully deleted ${deletedCount}/${existingPayments.length} payments`);
 
                     // 3. Wait for database consistency (increased delay for replication)
                     await new Promise(resolve => setTimeout(resolve, 500));

@@ -115,6 +115,25 @@ export const PaymentsService = {
     },
 
     /**
+     * Delete a payment (use when voiding doesn't work due to DB constraints)
+     */
+    deletePayment: async (paymentId: string): Promise<boolean> => {
+        console.log('[PaymentsService] Attempting to DELETE payment:', paymentId);
+        const { error } = await supabase
+            .from('invoice_payments')
+            .delete()
+            .eq('id', paymentId);
+
+        if (error) {
+            console.error('[PaymentsService] Error deleting payment:', error);
+            throw error;
+        }
+
+        console.log('[PaymentsService] Successfully DELETED payment:', paymentId);
+        return true;
+    },
+
+    /**
      * Get all payments for an invoice
      */
     getPaymentsByInvoice: async (invoiceId: string, includeVoided = false): Promise<Payment[]> => {
