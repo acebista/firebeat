@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { Card, Button } from '../../components/ui/Elements';
 import { AllTripsModal } from '../../components/delivery/AllTripsModal';
 import { TripSummaryModal } from '../../components/delivery/TripSummaryModal';
-import { MapPin, CheckCircle, Clock, Navigation, Truck, ChevronDown, ChevronUp, TrendingUp, Users, Zap, Search, Package, AlertCircle, X, FileText } from 'lucide-react';
+import { MapPin, CheckCircle, Clock, Navigation, Truck, ChevronDown, ChevronUp, TrendingUp, Users, Zap, Search, Package, AlertCircle, X, FileText, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../services/auth';
 import { TripService, OrderService, UserService } from '../../services/db';
@@ -90,6 +90,14 @@ export const DeliveryDashboard: React.FC = () => {
     if (user) {
       loadMyTrips();
       loadAllUsersTrips();
+
+      const handleFocus = () => {
+        loadMyTrips();
+        loadAllUsersTrips();
+      };
+
+      window.addEventListener('focus', handleFocus);
+      return () => window.removeEventListener('focus', handleFocus);
     }
   }, [user]);
 
@@ -455,6 +463,16 @@ export const DeliveryDashboard: React.FC = () => {
           My Delivery Trips
         </h2>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              loadMyTrips();
+              loadAllUsersTrips();
+            }}
+            className="p-2 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+            title="Refresh data"
+          >
+            <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
+          </button>
           <button
             onClick={() => setIsAllTripsModalOpen(true)}
             className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition whitespace-nowrap"
