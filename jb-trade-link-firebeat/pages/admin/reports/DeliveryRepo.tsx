@@ -5,7 +5,6 @@ import { Download, Printer, Eye, X, TrendingUp, TrendingDown, DollarSign, Packag
 import { printContent } from '../../../lib/printUtils';
 import { Order, SalesReturn } from '../../../types';
 import { PaymentMode } from '../../../types/delivery-order';
-import { ReturnsFailedModal } from './ReturnsFailedModal';
 import { VatBillDetailModal } from './VatBillDetailModal';
 import { VatTallyModal } from '../../../components/delivery/VatTallyModal';
 import { CheckSquare } from 'lucide-react';
@@ -55,7 +54,6 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
     const [showVatModal, setShowVatModal] = useState(false);
     const [generatedBills, setGeneratedBills] = useState<VatBill[]>([]);
-    const [showReturnsModal, setShowReturnsModal] = useState(false);
     const [selectedVatBill, setSelectedVatBill] = useState<VatBill | null>(null);
     const [showTallyModal, setShowTallyModal] = useState(false);
     const [forcedIndividualIds, setForcedIndividualIds] = useState<string[]>([]);
@@ -148,9 +146,6 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
             <div className="flex justify-between items-center">
                 <h3 className="text-lg font-bold text-gray-800">Delivery Performance Report</h3>
                 <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setShowReturnsModal(true)}>
-                        <PackageX className="mr-2 h-4 w-4" /> Returns/Failed
-                    </Button>
                     <Button variant="outline" size="sm" onClick={() => setShowVatModal(true)}>
                         <FileText className="mr-2 h-4 w-4" /> VAT Bills
                     </Button>
@@ -573,14 +568,6 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
                         </div>
                     </div>
                 </div>
-            )}
-
-            {/* Returns/Failed Deliveries Modal */}
-            {showReturnsModal && (
-                <ReturnsFailedModal
-                    rows={rows}
-                    onClose={() => setShowReturnsModal(false)}
-                />
             )}
 
             {/* VAT Bill Detail Modal */}

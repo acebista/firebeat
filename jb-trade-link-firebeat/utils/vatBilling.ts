@@ -54,22 +54,45 @@ export const parseDamagesFromRemarks = (remarks: string): Map<string, number> =>
     return damageMap;
 };
 
-const getDeliveredItemsForRow = (row: DeliveryReportRow): { items: BillItem[], grossAmount: number } => {
+const getDeliveredItemsForRow = (
+    row: DeliveryReportRow,
+    globalReturns: Map<string, number>,
+    globalDamages: Map<string, number>
+): { items: BillItem[], grossAmount: number } => {
     const VAT_RATE = 0.13;
     const orderItems = row.order.items || [];
-    const returns = parseReturnsFromRemarks(row.order.remarks || '');
-    const damages = parseDamagesFromRemarks(row.order.remarks || '');
 
     const items: BillItem[] = [];
     let grossAmount = 0;
+
+    const findAndSubtractQty = (map: Map<string, number>, targetName: string, requestedQty: number): number => {
+        const normTarget = targetName.toLowerCase().trim();
+        let totalSubtracted = 0;
+        let stillNeeded = requestedQty;
+
+        // Try exact/partial matches in the map
+        for (const [key, val] of map.entries()) {
+            const kNorm = key.toLowerCase().trim();
+            if (kNorm === normTarget || kNorm.includes(normTarget) || normTarget.includes(kNorm)) {
+                const canTake = Math.min(val, stillNeeded);
+                if (canTake > 0) {
+                    map.set(key, val - canTake);
+                    totalSubtracted += canTake;
+                    stillNeeded -= canTake;
+                }
+            }
+            if (stillNeeded <= 0) break;
+        }
+        return totalSubtracted;
+    };
 
     orderItems.forEach(item => {
         const name = item.tempProductName || item.productName || 'Unknown';
         const qty = Number(item.quantity || item.qty) || 0;
         const rate = Number(item.price || item.rate) || 0;
 
-        const retQty = returns.get(name) || 0;
-        const dmgQty = damages.get(name) || 0;
+        const retQty = findAndSubtractQty(globalReturns, name, qty);
+        const dmgQty = findAndSubtractQty(globalDamages, name, qty - retQty);
         const delQty = Math.max(0, qty - retQty - dmgQty);
 
         if (delQty > 0) {
@@ -92,6 +115,22 @@ export const generateVatBills = (rows: DeliveryReportRow[], forcedIndividualIds:
     const bills: VatBill[] = [];
     const THRESHOLD = 50000;
     const VAT_RATE = 0.13;
+
+    // 1. Create global adjustment pools for the entire set of rows
+    const globalReturns = new Map<string, number>();
+    const globalDamages = new Map<string, number>();
+
+    rows.forEach(row => {
+        const rowReturns = parseReturnsFromRemarks(row.order.remarks || '');
+        const rowDamages = parseDamagesFromRemarks(row.order.remarks || '');
+
+        rowReturns.forEach((qty, name) => {
+            globalReturns.set(name, (globalReturns.get(name) || 0) + qty);
+        });
+        rowDamages.forEach((qty, name) => {
+            globalDamages.set(name, (globalDamages.get(name) || 0) + qty);
+        });
+    });
 
     let combinedItems: BillItem[] = [];
     let combinedInvoices: string[] = [];
@@ -128,10 +167,14 @@ export const generateVatBills = (rows: DeliveryReportRow[], forcedIndividualIds:
         if (row.collectedAmount <= 0) return;
 
         const method = (row.paymentMethod || 'cash').toString().toLowerCase();
-        const { items } = getDeliveredItemsForRow(row);
+        // Use the global adjustment pools
+        const { items } = getDeliveredItemsForRow(row, globalReturns, globalDamages);
         const targetPayment = row.collectedAmount;
 
-        const isCombinedCandidate = (method === 'cash' || method === 'qr') && !forcedIndividualIds.includes(row.invoiceId);
+        const isCombinedCandidate =
+            method !== 'cheque' &&
+            method !== 'credit' &&
+            !forcedIndividualIds.includes(row.invoiceId);
 
         if (!isCombinedCandidate) {
             const subtotal = items.reduce((s, i) => s + i.total, 0);
