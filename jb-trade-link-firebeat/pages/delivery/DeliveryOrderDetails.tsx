@@ -1499,13 +1499,56 @@ const ReturnModal: React.FC<{
 }> = ({ isOpen, onClose, order, returnItems, setReturnItems }) => {
     const [selectedProduct, setSelectedProduct] = useState('');
     const [returnQty, setReturnQty] = useState('1');
+    const [allProducts, setAllProducts] = useState<any[]>([]);
+    const [filteredProducts, setFilteredProducts] = useState<any[]>([]);
+    const [loadingProducts, setLoadingProducts] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [showDropdown, setShowDropdown] = useState(false);
+
+    // Load all products when modal opens
+    useEffect(() => {
+        if (isOpen) {
+            loadAllProducts();
+        }
+    }, [isOpen]);
+
+    // Filter products based on search term
+    useEffect(() => {
+        if (searchTerm.trim() === '') {
+            setFilteredProducts([]);
+            setShowDropdown(false);
+        } else {
+            const filtered = allProducts.filter(p =>
+                (p.name || p.productName || '').toLowerCase().includes(searchTerm.toLowerCase())
+            ).slice(0, 10);
+            setFilteredProducts(filtered);
+            setShowDropdown(filtered.length > 0);
+        }
+    }, [searchTerm, allProducts]);
+
+    const loadAllProducts = async () => {
+        try {
+            setLoadingProducts(true);
+            const products = await ProductService.getAll();
+            setAllProducts(products || []);
+        } catch (e) {
+            console.error('Failed to load products', e);
+            toast.error('Failed to load products');
+        } finally {
+            setLoadingProducts(false);
+        }
+    };
 
     if (!isOpen) return null;
 
-    const selectedOrderItem = order.items.find(i => i.productId === selectedProduct);
-    const maxReturnQty = selectedOrderItem?.qty || 0;
     const returnQtyNum = parseInt(returnQty) || 0;
-    const isReturnQtyValid = returnQtyNum > 0 && returnQtyNum <= maxReturnQty;
+    const isReturnQtyValid = returnQtyNum > 0;
+
+    const handleSelectProduct = (product: any) => {
+        setSelectedProduct(product.id);
+        setSearchTerm(product.name || product.productName || '');
+        setShowDropdown(false);
+    };
 
     const handleAddReturn = () => {
         if (!selectedProduct || !returnQty) {
@@ -1513,33 +1556,30 @@ const ReturnModal: React.FC<{
             return;
         }
 
-        const product = order.items.find(i => i.productId === selectedProduct);
+        const product = allProducts.find(p => p.id === selectedProduct);
         if (!product) return;
 
-        // Validate return quantity doesn't exceed invoice quantity
         const returnQtyNum = parseInt(returnQty);
-        if (returnQtyNum <= 0 || returnQtyNum > product.qty) {
-            toast.error(`Return quantity must be between 1 and ${product.qty} (available in invoice)`);
+        if (returnQtyNum <= 0) {
+            toast.error('Return quantity must be at least 1');
             return;
         }
 
-        // Check if already returning this product
-        const existing = returnItems.findIndex(r => r.productId === selectedProduct);
-        const currentReturnQty = existing >= 0 ? returnItems[existing].returnQty : 0;
+        // Find product in invoice to get rate if available
+        const productInInvoice = order.items.find(i => i.productId === selectedProduct) ||
+            order.items.find(i => (i.productName || '').toLowerCase() === (product.name || product.productName || '').toLowerCase());
 
-        if (currentReturnQty + returnQtyNum > product.qty) {
-            toast.error(`Total return quantity cannot exceed ${product.qty}. Currently returning: ${currentReturnQty}, Trying to add: ${returnQtyNum}`);
-            return;
-        }
+        const rate = productInInvoice ? Number(productInInvoice.rate) : (Number(product.discountedRate) || Number(product.baseRate) || Number(product.price) || Number(product.rate) || 0);
 
         const newReturn: ReturnItem = {
             productId: selectedProduct,
-            productName: product.productName,
-            originalQty: product.qty,
+            productName: product.name || product.productName || 'Unknown Product',
+            originalQty: productInInvoice ? productInInvoice.qty : 0,
             returnQty: returnQtyNum,
-            rate: product.rate
+            rate: rate
         };
 
+        const existing = returnItems.findIndex(r => r.productId === selectedProduct);
         if (existing >= 0) {
             const updated = [...returnItems];
             updated[existing].returnQty += returnQtyNum;
@@ -1550,6 +1590,7 @@ const ReturnModal: React.FC<{
 
         setSelectedProduct('');
         setReturnQty('1');
+        setSearchTerm('');
         toast.success('Return item added ✓');
     };
 
@@ -1564,157 +1605,147 @@ const ReturnModal: React.FC<{
                 </div>
 
                 <div className="space-y-4 mb-6">
-                    {/* Product Selection */}
-                    <div>
-                        <label className="block text-sm font-semibold text-gray-900 mb-3">Select Product</label>
-                        <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto">
-                            {order.items.length > 0 ? (
-                                order.items.map(item => {
-                                    const alreadyReturning = returnItems.find(r => r.productId === item.productId);
-                                    const remainingQty = item.qty - (alreadyReturning?.returnQty || 0);
-                                    const isSelected = selectedProduct === item.productId;
-
-                                    return (
-                                        <button
-                                            key={item.productId}
-                                            onClick={() => {
-                                                setSelectedProduct(item.productId);
-                                                setReturnQty('1');
-                                            }}
-                                            className={`text-left p-3 rounded-lg border-2 transition-all ${isSelected
-                                                ? 'bg-purple-50 border-purple-500'
-                                                : 'bg-gray-50 border-gray-200 hover:border-purple-300'
-                                                }`}
-                                        >
-                                            <div className="font-medium text-gray-900">{item.productName}</div>
-                                            <div className="text-xs text-gray-600 mt-1 space-y-0.5">
-                                                <p>💰 Rate: ₹{item.rate.toFixed(2)}</p>
-                                                <p>📦 Ordered: {item.qty} unit{item.qty !== 1 ? 's' : ''}</p>
-                                                <p className={remainingQty === 0 ? 'text-red-600 font-medium' : 'text-green-600 font-medium'}>
-                                                    ✅ Available: {remainingQty} unit{remainingQty !== 1 ? 's' : ''}
-                                                </p>
-                                            </div>
-                                        </button>
-                                    );
-                                })
-                            ) : (
-                                <div className="text-center py-6 text-gray-600">
-                                    <p className="text-sm">No items in this order</p>
-                                </div>
+                    {/* Product Search with Autocomplete */}
+                    <div className="relative">
+                        <label className="block text-sm font-semibold text-gray-900 mb-2">Product</label>
+                        <div className="relative">
+                            <input
+                                type="text"
+                                value={searchTerm}
+                                onChange={(e) => {
+                                    setSearchTerm(e.target.value);
+                                    if (e.target.value === '') {
+                                        setSelectedProduct('');
+                                    }
+                                }}
+                                onFocus={() => searchTerm && setShowDropdown(filteredProducts.length > 0)}
+                                placeholder={loadingProducts ? 'Loading products...' : 'Search products to return...'}
+                                disabled={loadingProducts}
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 transition-all font-medium"
+                            />
+                            {selectedProduct && (
+                                <button
+                                    onClick={() => {
+                                        setSelectedProduct('');
+                                        setSearchTerm('');
+                                    }}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
                             )}
                         </div>
-                        <p className="text-xs text-gray-600 mt-2">💡 Returns are limited to items in this invoice</p>
+
+                        {/* Dropdown Results */}
+                        {showDropdown && filteredProducts.length > 0 && (
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto">
+                                {filteredProducts.map(product => {
+                                    const inInvoice = order.items.some(i => i.productId === product.id);
+                                    return (
+                                        <button
+                                            key={product.id}
+                                            onClick={() => handleSelectProduct(product)}
+                                            className={`w-full text-left px-4 py-3 hover:bg-purple-50 border-b border-gray-100 last:border-b-0 transition-colors ${selectedProduct === product.id ? 'bg-purple-100 font-medium' : ''
+                                                }`}
+                                        >
+                                            <div className="flex justify-between items-center">
+                                                <div className="font-medium text-gray-900">{product.name || product.productName}</div>
+                                                {inInvoice && <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold">IN INVOICE</span>}
+                                            </div>
+                                            <div className="text-xs text-gray-600">SKU: {product.sku || 'N/A'}</div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        <p className="text-xs text-gray-600 mt-2">
+                            🔄 Search from catalog (not limited to invoice items)
+                        </p>
                     </div>
 
                     {/* Quantity Selection */}
-                    {selectedOrderItem && (
-                        <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
-                            <label className="block text-sm font-semibold text-gray-900 mb-3">
+                    {selectedProduct && (
+                        <div className="p-4 bg-purple-50 rounded-lg border border-purple-200 animate-in fade-in zoom-in duration-200">
+                            <label className="block text-sm font-semibold text-gray-900 mb-3 text-center">
                                 Quantity to Return
                             </label>
-                            <div className="flex items-center gap-3 mb-4">
+                            <div className="flex items-center gap-3 mb-2">
                                 <button
                                     onClick={() => setReturnQty(Math.max(1, returnQtyNum - 1).toString())}
-                                    className="p-2 rounded-lg bg-purple-200 hover:bg-purple-300 transition-all disabled:opacity-50"
-                                    disabled={returnQtyNum <= 1}
+                                    className="p-3 rounded-xl bg-white border border-purple-200 shadow-sm hover:bg-purple-100 transition-all text-purple-700"
                                 >
-                                    <Minus className="h-4 w-4 text-purple-700" />
+                                    <Minus className="h-5 w-5" />
                                 </button>
                                 <input
                                     type="number"
                                     min="1"
-                                    max={maxReturnQty}
                                     value={returnQty}
                                     onChange={(e) => setReturnQty(e.target.value)}
-                                    className={`flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 text-center font-bold text-lg ${selectedProduct && !isReturnQtyValid
-                                        ? 'border-red-500 focus:ring-red-500 bg-red-50'
-                                        : 'border-purple-300 focus:ring-purple-500 bg-white'
-                                        }`}
+                                    className="flex-1 px-4 py-3 border border-purple-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-center font-black text-2xl bg-white shadow-inner"
                                 />
                                 <button
-                                    onClick={() => setReturnQty(Math.min(maxReturnQty, returnQtyNum + 1).toString())}
-                                    className="p-2 rounded-lg bg-purple-200 hover:bg-purple-300 transition-all disabled:opacity-50"
-                                    disabled={returnQtyNum >= maxReturnQty}
+                                    onClick={() => setReturnQty((returnQtyNum + 1).toString())}
+                                    className="p-3 rounded-xl bg-white border border-purple-200 shadow-sm hover:bg-purple-100 transition-all text-purple-700"
                                 >
-                                    <Plus className="h-4 w-4 text-purple-700" />
+                                    <Plus className="h-5 w-5" />
                                 </button>
                             </div>
-
-                            {/* Validation Feedback */}
-                            {selectedProduct && returnQtyNum > 0 && (
-                                <div className="space-y-2">
-                                    {!isReturnQtyValid ? (
-                                        <div className="p-2 bg-red-50 rounded border border-red-200">
-                                            <p className="text-xs text-red-700 font-medium">
-                                                ❌ Return quantity must be 1 to {maxReturnQty}
-                                            </p>
-                                        </div>
-                                    ) : (
-                                        <div className="p-2 bg-green-50 rounded border border-green-200">
-                                            <p className="text-xs text-green-700 font-medium">
-                                                ✅ Valid return: {returnQtyNum} × ₹{selectedOrderItem.rate.toFixed(2)} = ₹{(returnQtyNum * selectedOrderItem.rate).toFixed(2)}
-                                            </p>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
+                            <p className="text-[10px] text-center text-purple-600 font-medium mt-1">Enter total return quantity</p>
                         </div>
                     )}
 
                     <button
                         onClick={handleAddReturn}
                         disabled={!selectedProduct || !isReturnQtyValid}
-                        className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all shadow-md"
+                        className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-black py-4 rounded-xl flex items-center justify-center gap-3 transition-all shadow-lg active:scale-95"
                     >
-                        <Plus className="h-4 w-4" /> Add Item to Return
+                        <Plus className="h-5 w-5" /> ADD TO RETURN LIST
                     </button>
                 </div>
 
                 {/* Return Items List */}
                 {returnItems.length > 0 && (
                     <div className="border-t pt-6">
-                        <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
                             <Package className="h-5 w-5 text-purple-600" />
-                            Return Items ({returnItems.length})
+                            Return Summary ({returnItems.length})
                         </h3>
                         <div className="space-y-3">
                             {returnItems.map((item, idx) => (
-                                <div key={idx} className="p-4 bg-purple-50 rounded-lg border border-purple-200 hover:border-purple-300 transition-all">
+                                <div key={idx} className="p-4 bg-white rounded-xl border-2 border-purple-100 hover:border-purple-300 transition-all shadow-sm">
                                     <div className="flex items-start justify-between mb-2">
-                                        <p className="font-medium text-gray-900">{item.productName}</p>
+                                        <div>
+                                            <p className="font-bold text-gray-900">{item.productName}</p>
+                                            <p className="text-[10px] text-gray-500 mt-0.5">Rate: ₹{item.rate.toFixed(2)}</p>
+                                        </div>
                                         <button
                                             onClick={() => setReturnItems(returnItems.filter((_, i) => i !== idx))}
-                                            className="text-red-600 hover:text-red-700 hover:bg-red-50 p-1.5 rounded transition-all"
-                                            title="Remove return"
+                                            className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-all"
+                                            title="Remove item"
                                         >
-                                            <Trash2 className="h-4 w-4" />
+                                            <Trash2 className="h-5 w-5" />
                                         </button>
                                     </div>
-                                    <div className="text-sm text-gray-700 space-y-1">
-                                        <p className="flex justify-between">
-                                            <span className="text-gray-600">Return Qty:</span>
-                                            <span className="font-semibold text-purple-700">{item.returnQty} / {item.originalQty}</span>
-                                        </p>
-                                        <p className="flex justify-between">
-                                            <span className="text-gray-600">Rate:</span>
-                                            <span className="font-semibold">₹{item.rate.toFixed(2)}</span>
-                                        </p>
-                                        <div className="pt-2 border-t border-purple-300 flex justify-between font-bold text-purple-700">
-                                            <span>Return Value:</span>
-                                            <span>₹{(item.returnQty * item.rate).toFixed(2)}</span>
-                                        </div>
+                                    <div className="flex justify-between items-center pt-2 border-t border-dashed border-gray-100">
+                                        <span className="text-sm font-bold text-purple-700">Qty: {item.returnQty}</span>
+                                        <span className="text-sm font-black text-purple-900">₹{(item.returnQty * item.rate).toFixed(2)}</span>
                                     </div>
                                 </div>
                             ))}
+                            <div className="p-4 bg-purple-900 rounded-xl text-white flex justify-between items-center shadow-lg transform hover:scale-[1.01] transition-all">
+                                <span className="font-bold">Total Return Value</span>
+                                <span className="text-xl font-black">₹{returnItems.reduce((s, i) => s + (i.returnQty * i.rate), 0).toFixed(2)}</span>
+                            </div>
                         </div>
                     </div>
                 )}
 
                 <button
                     onClick={onClose}
-                    className="w-full mt-6 bg-gray-100 hover:bg-gray-200 text-gray-900 font-medium py-2 rounded-lg transition-all"
+                    className="w-full mt-6 bg-gray-100 hover:bg-gray-200 text-gray-900 font-bold py-3 rounded-xl transition-all"
                 >
-                    Close
+                    Done
                 </button>
             </div>
         </div>
