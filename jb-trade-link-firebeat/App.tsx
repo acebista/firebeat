@@ -1,61 +1,54 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { HashRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth, getDashboardPath } from './services/auth';
 import { useUserStore } from './services/auth/userStore';
 import { DashboardLayout } from './components/layout/DashboardLayout';
 import { LoadingOverlay } from './components/auth/LoadingOverlay';
+import { SuspenseLoader } from './components/shared/SuspenseLoader';
 import { Login } from './pages/Login';
 import { ResetPassword } from './pages/ResetPassword';
 import { UserRole } from './types';
 
-// Admin Pages
-import { AdminDashboard } from './pages/admin/AdminDashboard';
-import { UserManagement } from './pages/admin/Users';
-import { CustomerManagement } from './pages/admin/Customers';
-import { CompanyManagement } from './pages/admin/Companies';
-import { UnknownProductCleanup } from './pages/admin/UnknownProductCleanup';
-import { ProductManagement } from './pages/admin/Products';
-import { OrderManagement } from './pages/admin/Orders';
-import { DispatchPlanner } from './pages/admin/Dispatch';
-import { DispatchTripDetails } from './pages/admin/DispatchTripDetails';
-import { TripsOverview } from './pages/admin/TripsOverview';
-import { VehicleManagement } from './pages/admin/Vehicles';
-import { Purchases } from './pages/admin/Purchases';
-import { Reports } from './pages/admin/Reports';
-import { SystemHealth } from './pages/admin/SystemHealth';
-import HRPanel from './components/admin/HRPanel';
-import { CustomerLedgerPage } from './pages/admin/CustomerLedgerPage';
-import { AllCreditsPage } from './pages/admin/AllCreditsPage';
+// Lazy Load Admin Pages
+const AdminDashboard = React.lazy(() => import('./pages/admin/AdminDashboard').then(module => ({ default: module.AdminDashboard })));
+const UserManagement = React.lazy(() => import('./pages/admin/Users').then(module => ({ default: module.UserManagement })));
+const CustomerManagement = React.lazy(() => import('./pages/admin/Customers').then(module => ({ default: module.CustomerManagement })));
+const CompanyManagement = React.lazy(() => import('./pages/admin/Companies').then(module => ({ default: module.CompanyManagement })));
+const UnknownProductCleanup = React.lazy(() => import('./pages/admin/UnknownProductCleanup').then(module => ({ default: module.UnknownProductCleanup })));
+const ProductManagement = React.lazy(() => import('./pages/admin/Products').then(module => ({ default: module.ProductManagement })));
+const OrderManagement = React.lazy(() => import('./pages/admin/Orders').then(module => ({ default: module.OrderManagement })));
+const DispatchPlanner = React.lazy(() => import('./pages/admin/Dispatch').then(module => ({ default: module.DispatchPlanner })));
+const DispatchTripDetails = React.lazy(() => import('./pages/admin/DispatchTripDetails').then(module => ({ default: module.DispatchTripDetails })));
+const TripsOverview = React.lazy(() => import('./pages/admin/TripsOverview').then(module => ({ default: module.TripsOverview })));
+const VehicleManagement = React.lazy(() => import('./pages/admin/Vehicles').then(module => ({ default: module.VehicleManagement })));
+const Purchases = React.lazy(() => import('./pages/admin/Purchases').then(module => ({ default: module.Purchases })));
+const Reports = React.lazy(() => import('./pages/admin/Reports').then(module => ({ default: module.Reports })));
+const SystemHealth = React.lazy(() => import('./pages/admin/SystemHealth').then(module => ({ default: module.SystemHealth })));
+const HRPanel = React.lazy(() => import('./components/admin/HRPanel')); // Default export
+const CustomerLedgerPage = React.lazy(() => import('./pages/admin/CustomerLedgerPage').then(module => ({ default: module.CustomerLedgerPage })));
+const AllCreditsPage = React.lazy(() => import('./pages/admin/AllCreditsPage').then(module => ({ default: module.AllCreditsPage })));
 
-// Returns & Damages
-import { ReturnsList } from './pages/admin/Returns';
-import { CreateReturn } from './pages/admin/CreateReturn';
-import { DamagedGoodsReport } from './pages/admin/DamagedGoods';
-import { Migration } from './pages/admin/Migration';
-import { SupabaseTest } from './pages/admin/SupabaseTest';
-import { InventoryPage } from './pages/inventory/InventoryPage';
+// Lazy Load Returns & Damages
+const ReturnsList = React.lazy(() => import('./pages/admin/Returns').then(module => ({ default: module.ReturnsList })));
+const CreateReturn = React.lazy(() => import('./pages/admin/CreateReturn').then(module => ({ default: module.CreateReturn })));
+const DamagedGoodsReport = React.lazy(() => import('./pages/admin/DamagedGoods').then(module => ({ default: module.DamagedGoodsReport })));
+const Migration = React.lazy(() => import('./pages/admin/Migration').then(module => ({ default: module.Migration })));
+const SupabaseTest = React.lazy(() => import('./pages/admin/SupabaseTest').then(module => ({ default: module.SupabaseTest })));
+const InventoryPage = React.lazy(() => import('./pages/inventory/InventoryPage').then(module => ({ default: module.InventoryPage })));
 
-// Sales Pages
-import { SalesDashboard } from './pages/sales/SalesDashboard';
-import { CreateOrder } from './pages/sales/CreateOrder';
-import { EditOrder } from './pages/sales/EditOrder';
-import { MyOrders } from './pages/sales/MyOrders';
-import { PerformanceDashboard } from './pages/sales/PerformanceDashboard';
+// Lazy Load Sales Pages
+const SalesDashboard = React.lazy(() => import('./pages/sales/SalesDashboard').then(module => ({ default: module.SalesDashboard })));
+const CreateOrder = React.lazy(() => import('./pages/sales/CreateOrder').then(module => ({ default: module.CreateOrder })));
+const EditOrder = React.lazy(() => import('./pages/sales/EditOrder').then(module => ({ default: module.EditOrder })));
+const MyOrders = React.lazy(() => import('./pages/sales/MyOrders').then(module => ({ default: module.MyOrders })));
+const PerformanceDashboard = React.lazy(() => import('./pages/sales/PerformanceDashboard').then(module => ({ default: module.PerformanceDashboard })));
 
-// Delivery Pages
-import { DeliveryDashboard } from './pages/delivery/DeliveryDashboard';
-import { DeliveryOrderDetails } from './pages/delivery/DeliveryOrderDetails';
-import { RouteMap } from './pages/delivery/RouteMap';
-import { PackingListPage } from './pages/delivery/PackingListPage';
-
-// Placeholder for missing pages
-const Placeholder = ({ title }: { title: string }) => (
-  <div className="p-8 text-center text-gray-500">
-    <h2 className="text-2xl font-bold mb-2">{title}</h2>
-    <p>This module is under development.</p>
-  </div>
-);
+// Lazy Load Delivery Pages
+const DeliveryDashboard = React.lazy(() => import('./pages/delivery/DeliveryDashboard').then(module => ({ default: module.DeliveryDashboard })));
+const DeliveryOrderDetails = React.lazy(() => import('./pages/delivery/DeliveryOrderDetails').then(module => ({ default: module.DeliveryOrderDetails })));
+const RouteMap = React.lazy(() => import('./pages/delivery/RouteMap').then(module => ({ default: module.RouteMap })));
+const PackingListPage = React.lazy(() => import('./pages/delivery/PackingListPage').then(module => ({ default: module.PackingListPage })));
 
 // Protected Route Wrapper
 const ProtectedRoute = ({ allowedRoles }: { allowedRoles: UserRole[] }) => {
@@ -109,7 +102,9 @@ const ProtectedRoute = ({ allowedRoles }: { allowedRoles: UserRole[] }) => {
 
   return (
     <DashboardLayout>
-      <Outlet />
+      <Suspense fallback={<SuspenseLoader />}>
+        <Outlet />
+      </Suspense>
     </DashboardLayout>
   );
 };
@@ -141,7 +136,7 @@ const App: React.FC = () => {
       />
       <HashRouter>
         <Routes>
-          <Route path="/test" element={<SupabaseTest />} />
+          <Route path="/test" element={<Suspense fallback={<SuspenseLoader />}><SupabaseTest /></Suspense>} />
           <Route path="/login" element={<Login />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/" element={<Navigate to="/login" replace />} />
