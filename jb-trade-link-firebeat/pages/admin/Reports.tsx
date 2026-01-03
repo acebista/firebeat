@@ -458,15 +458,12 @@ export const Reports: React.FC = () => {
         // Get payment method from the delivery capture field
         const paymentMethod = order.payment_method_at_delivery || order.paymentMode || 'cash';
 
-        // Calculate collected amount - cap at netAmount to account for returns
-        // If order.totalAmount is 0 (full return), collected should be 0
+        // Calculate collected amount
         let collectedAmount = 0;
         if (order.status === 'delivered' || order.status === 'completed') {
-          const rawCollected = (order.payment_collected !== undefined && order.payment_collected !== null)
+          collectedAmount = (order.payment_collected !== undefined && order.payment_collected !== null)
             ? Number(order.payment_collected)
             : order.totalAmount;
-          // Cap collected amount at the net amount (after returns)
-          collectedAmount = Math.min(rawCollected, order.totalAmount);
         }
 
         return {
@@ -561,10 +558,17 @@ export const Reports: React.FC = () => {
             }
             breakdown[normalizedMethod].count++;
 
-            // For credit, use netAmount as the 'amount' (value of credit given)
-            // For cash/others, use collectedAmount (money received)
-            const amountToAdd = normalizedMethod === 'credit' ? row.netAmount : row.collectedAmount;
-            breakdown[normalizedMethod].amount += amountToAdd;
+            // For cash/others, add the collected amount
+            breakdown[normalizedMethod].amount += row.collectedAmount;
+
+            // CRITICAL: Any shortfall in a delivered order should be counted as credit
+            if ((row.status === 'delivered' || row.status === 'completed') && row.netAmount > row.collectedAmount) {
+              const shortfall = row.netAmount - row.collectedAmount;
+              if (!breakdown['credit']) {
+                breakdown['credit'] = { count: 0, amount: 0 };
+              }
+              breakdown['credit'].amount += shortfall;
+            }
           }
           return breakdown;
         }, {} as Record<string, { count: number; amount: number }>)
@@ -610,7 +614,7 @@ export const Reports: React.FC = () => {
     } else if (activeTab !== 'damage') {
       fetchData();
     }
-  }, [filters, activeTab, deliveryFilters]);
+  }, [activeTab]);
 
   const tabs = [
     { id: 'sales', label: 'Sales Report', icon: FileText },

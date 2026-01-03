@@ -191,9 +191,36 @@ export const TripSummaryModal: React.FC<TripSummaryModalProps> = ({
     }, [parsedOrders, searchTerm, selectedSalesperson]);
 
     const stats = useMemo(() => {
+        const totalAmount = orders.reduce((sum, o) => sum + o.totalAmount, 0);
+        const deliveredOrders = parsedOrders.filter(o => o.status === 'delivered' || o.status === 'completed');
+
+        // Cash/QR/Cheque - Only money in hand
+        const cash = parsedOrders.reduce((sum, o) => sum + o.parsedPayments.filter(p => p.method.toLowerCase() === 'cash').reduce((s, p) => s + p.amount, 0), 0);
+        const qr = parsedOrders.reduce((sum, o) => sum + o.parsedPayments.filter(p => (p.method.toLowerCase() === 'qr' || p.method.toLowerCase() === 'qr_code')).reduce((s, p) => s + p.amount, 0), 0);
+        const cheque = parsedOrders.reduce((sum, o) => sum + o.parsedPayments.filter(p => p.method.toLowerCase() === 'cheque').reduce((s, p) => s + p.amount, 0), 0);
+
+        // Credit Calculation: Explicit credit payments OR delivered orders with unpaid balance
+        const credit = deliveredOrders.reduce((sum, o) => {
+            const explicitCredit = o.parsedPayments.filter(p => p.method.toLowerCase() === 'credit').reduce((s, p) => s + p.amount, 0);
+            if (explicitCredit > 0) return sum + explicitCredit;
+
+            // Fallback: If marked as credit or has unpaid balance
+            if ((o as any).payment_method_at_delivery?.toLowerCase() === 'credit' || (o as any).paymentMode?.toLowerCase() === 'credit') {
+                return sum + o.totalAmount;
+            }
+
+            // Also count "Shorts" as credit
+            const paid = o.totalCollected || 0;
+            return sum + Math.max(0, o.totalAmount - paid);
+        }, 0);
+
         return {
-            totalAmount: orders.reduce((sum, o) => sum + o.totalAmount, 0),
-            totalCollected: parsedOrders.reduce((sum, o) => sum + o.totalCollected, 0),
+            totalAmount,
+            totalCollected: cash + qr + cheque,
+            cash,
+            qr,
+            cheque,
+            credit,
             deliveredCount: orders.filter(o => o.status === 'delivered' || o.status === 'completed').length,
             failedCount: orders.filter(o => o.status === 'cancelled').length,
             pendingCount: orders.filter(o => o.status !== 'delivered' && o.status !== 'completed' && o.status !== 'cancelled').length,
@@ -226,7 +253,7 @@ export const TripSummaryModal: React.FC<TripSummaryModalProps> = ({
         <Modal isOpen={isOpen} onClose={onClose} title={`Trip Summary: #${trip.id.slice(0, 8)}`} size="xl">
             <div className="space-y-6">
                 {/* Stats Grid */}
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
                     <Card className="p-3 bg-indigo-50 border-indigo-100">
                         <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider">Orders</p>
                         <h3 className="text-xl font-black text-indigo-900">{stats.deliveredCount}/{orders.length}</h3>
@@ -234,20 +261,25 @@ export const TripSummaryModal: React.FC<TripSummaryModalProps> = ({
 
                     <Card className="p-3 bg-emerald-50 border-emerald-100">
                         <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">Cash</p>
-                        <h3 className="text-xl font-black text-emerald-900">₹{parsedOrders.reduce((sum, o) => sum + o.parsedPayments.filter(p => p.method.toLowerCase() === 'cash').reduce((s, p) => s + p.amount, 0), 0).toLocaleString()}</h3>
+                        <h3 className="text-xl font-black text-emerald-900">₹{stats.cash.toLocaleString()}</h3>
                     </Card>
 
                     <Card className="p-3 bg-blue-50 border-blue-100">
                         <p className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">QR Code</p>
-                        <h3 className="text-xl font-black text-blue-900">₹{parsedOrders.reduce((sum, o) => sum + o.parsedPayments.filter(p => (p.method.toLowerCase() === 'qr' || p.method.toLowerCase() === 'qr_code')).reduce((s, p) => s + p.amount, 0), 0).toLocaleString()}</h3>
+                        <h3 className="text-xl font-black text-blue-900">₹{stats.qr.toLocaleString()}</h3>
                     </Card>
 
                     <Card className="p-3 bg-amber-50 border-amber-100">
                         <p className="text-[10px] text-amber-600 font-bold uppercase tracking-wider">Credit</p>
-                        <h3 className="text-xl font-black text-amber-900">₹{parsedOrders.reduce((sum, o) => sum + o.parsedPayments.filter(p => p.method.toLowerCase() === 'credit').reduce((s, p) => s + p.amount, 0), 0).toLocaleString()}</h3>
+                        <h3 className="text-xl font-black text-amber-900">₹{stats.credit.toLocaleString()}</h3>
                     </Card>
 
-                    <Card className="p-3 bg-indigo-600 border-indigo-700 col-span-2 md:col-span-1">
+                    <Card className="p-3 bg-purple-600 border-purple-700">
+                        <p className="text-[10px] text-purple-100 font-bold uppercase tracking-wider">Total Collected</p>
+                        <h3 className="text-xl font-black text-white">₹{stats.totalCollected.toLocaleString()}</h3>
+                    </Card>
+
+                    <Card className="p-3 bg-indigo-600 border-indigo-700">
                         <p className="text-[10px] text-indigo-100 font-bold uppercase tracking-wider">Total Value</p>
                         <h3 className="text-xl font-black text-white">₹{stats.totalAmount.toLocaleString()}</h3>
                     </Card>

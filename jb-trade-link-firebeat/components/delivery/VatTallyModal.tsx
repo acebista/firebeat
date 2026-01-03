@@ -54,13 +54,17 @@ export const VatTallyModal: React.FC<VatTallyModalProps> = ({ isOpen, onClose, r
 
         // 1. Initialize Product Map with Trip Data
         rows.forEach(row => {
-            const orderItems = row.order.items || [];
+            const rawItems = row.order.items || [];
+            const orderItems = Array.isArray(rawItems) ? rawItems : [];
+
             // "Not Billed" = Cancelled, Failed, Returned, or still Dispatched/Rescheduled
+            // These items are not expected to be in a VAT bill yet
             const isNotBilled = ['cancelled', 'failed', 'returned', 'dispatched', 'approved'].includes(row.status.toLowerCase());
 
-            orderItems.forEach(item => {
-                const name = item.tempProductName || item.productName || 'Unknown';
-                const qty = Number(item.quantity || item.qty) || 0;
+            orderItems.forEach((item: any) => {
+                // Robust name/qty resolution for various DB formats
+                const name = item.tempProductName || item.productName || item.product_name || item.name || 'Unknown';
+                const qty = Number(item.quantity || item.qty || item.quantity) || 0;
 
                 if (!productMap.has(name)) {
                     productMap.set(name, { original: 0, returns: 0, damages: 0, vat: 0, failed: 0 });
@@ -73,7 +77,9 @@ export const VatTallyModal: React.FC<VatTallyModalProps> = ({ isOpen, onClose, r
 
         // Helper for robust matching
         const findMatch = (rawName: string) => {
+            if (!rawName) return null;
             if (productMap.has(rawName)) return rawName;
+
             const norm = rawName.toLowerCase().trim();
             // Try normalized match
             for (const key of productMap.keys()) {
@@ -82,24 +88,53 @@ export const VatTallyModal: React.FC<VatTallyModalProps> = ({ isOpen, onClose, r
             // Try partial match
             for (const key of productMap.keys()) {
                 const kNorm = key.toLowerCase().trim();
+                // Match if one contains the other (e.g. "Nutrivrunch 200g" vs "Nutrivrunch Digestive 200g")
                 if (kNorm.includes(norm) || norm.includes(kNorm)) return key;
             }
             return null;
         };
 
-        // 2. Add Returns/Damages from Remarks
+        // 2. Add Returns/Damages from Remarks (Only for Delivered orders to avoid double-counting with "Failed")
         rows.forEach(row => {
+            const isDelivered = ['delivered', 'completed', 'partially_returned'].includes(row.status.toLowerCase());
+            if (!isDelivered) return; // For failed orders, we already count the whole qty in 'stats.failed'
+
             const returns = parseReturnsFromRemarks(row.order.remarks || '');
             const damages = parseDamagesFromRemarks(row.order.remarks || '');
 
+            // Get the set of product names actually in THIS invoice
+            const orderItemNames = new Set((row.order.items || []).map((i: any) =>
+                (i.tempProductName || i.productName || i.product_name || i.name || '').toLowerCase().trim()
+            ));
+
             returns.forEach((qty, name) => {
                 const match = findMatch(name);
-                if (match) productMap.get(match)!.returns += qty;
+                if (match) {
+                    const normMatch = match.toLowerCase().trim();
+                    // Does this invoice actually contain this product?
+                    const hasProduct = Array.from(orderItemNames).some(oname =>
+                        oname === normMatch || oname.includes(normMatch) || normMatch.includes(oname)
+                    );
+
+                    if (hasProduct) {
+                        productMap.get(match)!.returns += qty;
+                    }
+                }
             });
 
             damages.forEach((qty, name) => {
                 const match = findMatch(name);
-                if (match) productMap.get(match)!.damages += qty;
+                if (match) {
+                    const normMatch = match.toLowerCase().trim();
+                    // Does this invoice actually contain this product?
+                    const hasProduct = Array.from(orderItemNames).some(oname =>
+                        oname === normMatch || oname.includes(normMatch) || normMatch.includes(oname)
+                    );
+
+                    if (hasProduct) {
+                        productMap.get(match)!.damages += qty;
+                    }
+                }
             });
         });
 

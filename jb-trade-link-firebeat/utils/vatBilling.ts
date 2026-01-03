@@ -121,14 +121,38 @@ export const generateVatBills = (rows: DeliveryReportRow[], forcedIndividualIds:
     const globalDamages = new Map<string, number>();
 
     rows.forEach(row => {
+        const isDelivered = ['delivered', 'completed', 'partially_returned'].includes(row.status.toLowerCase());
+        if (!isDelivered) return;
+
         const rowReturns = parseReturnsFromRemarks(row.order.remarks || '');
         const rowDamages = parseDamagesFromRemarks(row.order.remarks || '');
 
+        // Only include returns/damages for products that were actually in this invoice
+        const orderItemNames = new Set((row.order.items || []).map(i =>
+            (i.tempProductName || i.productName || '').toLowerCase().trim()
+        ));
+
         rowReturns.forEach((qty, name) => {
-            globalReturns.set(name, (globalReturns.get(name) || 0) + qty);
+            const normName = name.toLowerCase().trim();
+            // Basic matching: if invoice has this product name (or it's a partial match)
+            const hasProduct = Array.from(orderItemNames).some(oname =>
+                oname === normName || oname.includes(normName) || normName.includes(oname)
+            );
+
+            if (hasProduct) {
+                globalReturns.set(name, (globalReturns.get(name) || 0) + qty);
+            }
         });
+
         rowDamages.forEach((qty, name) => {
-            globalDamages.set(name, (globalDamages.get(name) || 0) + qty);
+            const normName = name.toLowerCase().trim();
+            const hasProduct = Array.from(orderItemNames).some(oname =>
+                oname === normName || oname.includes(normName) || normName.includes(oname)
+            );
+
+            if (hasProduct) {
+                globalDamages.set(name, (globalDamages.get(name) || 0) + qty);
+            }
         });
     });
 
@@ -164,17 +188,25 @@ export const generateVatBills = (rows: DeliveryReportRow[], forcedIndividualIds:
     };
 
     rows.forEach(row => {
-        if (row.collectedAmount <= 0) return;
+        const isDelivered = row.status.toLowerCase() === 'delivered' || row.status.toLowerCase() === 'completed';
+
+        // ONLY skip if net amount is non-positive (full return) or status isn't delivered
+        if (row.netAmount <= 0 || !isDelivered) return;
 
         const method = (row.paymentMethod || 'cash').toString().toLowerCase();
         // Use the global adjustment pools
         const { items } = getDeliveredItemsForRow(row, globalReturns, globalDamages);
-        const targetPayment = row.collectedAmount;
+
+        // For billing purposes:
+        // 1. If we have a collected amount, that's our target (matches money in hand)
+        // 2. If collected is 0 (Credit), the target is the full net amount
+        const targetPayment = row.collectedAmount > 0 ? row.collectedAmount : row.netAmount;
 
         const isCombinedCandidate =
             method !== 'cheque' &&
             method !== 'credit' &&
-            !forcedIndividualIds.includes(row.invoiceId);
+            !forcedIndividualIds.includes(row.invoiceId) &&
+            row.collectedAmount > 0; // Credit must be individual to show full amount
 
         if (!isCombinedCandidate) {
             const subtotal = items.reduce((s, i) => s + i.total, 0);
