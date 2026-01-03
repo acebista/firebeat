@@ -92,7 +92,7 @@ describe('ProtectedRouteV2 - Auth Gating', () => {
       company_id: 'company-1',
       is_active: true,
       created_at: new Date().toISOString(),
-    };
+    } as any;
 
     // Set authenticated state
     useUserStore.setState({
@@ -127,7 +127,7 @@ describe('ProtectedRouteV2 - Auth Gating', () => {
       company_id: 'company-1',
       is_active: true,
       created_at: new Date().toISOString(),
-    };
+    } as any;
 
     // Set authenticated but non-admin user
     useUserStore.setState({
@@ -220,7 +220,7 @@ describe('ProtectedRouteV2 - Auth Gating', () => {
       company_id: 'company-1',
       is_active: true,
       created_at: new Date().toISOString(),
-    };
+    } as any;
 
     useUserStore.setState({
       bootStatus: 'ready',
@@ -260,7 +260,7 @@ describe('ProtectedRoute - Role-Based Access Control', () => {
       company_id: 'company-1',
       is_active: true,
       created_at: new Date().toISOString(),
-    };
+    } as any;
 
     useUserStore.setState({
       bootStatus: 'ready',
@@ -291,7 +291,7 @@ describe('ProtectedRoute - Role-Based Access Control', () => {
       company_id: 'company-1',
       is_active: true,
       created_at: new Date().toISOString(),
-    };
+    } as any;
 
     useUserStore.setState({
       bootStatus: 'ready',
@@ -323,7 +323,7 @@ describe('ProtectedRoute - Role-Based Access Control', () => {
       company_id: 'company-1',
       is_active: true,
       created_at: new Date().toISOString(),
-    };
+    } as any;
 
     useUserStore.setState({
       bootStatus: 'ready',
@@ -361,7 +361,7 @@ describe('ProtectedRoute - Inactive User Handling', () => {
       company_id: 'company-1',
       is_active: false, // Inactive
       created_at: new Date().toISOString(),
-    };
+    } as any;
 
     useUserStore.setState({
       bootStatus: 'ready',
