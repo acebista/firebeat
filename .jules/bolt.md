@@ -1,0 +1,3 @@
+## 2026-01-03 - [Route-Based Code Splitting Implementation]
+**Learning:** `App.tsx` contained mixed export styles (default vs named) which complicated the `React.lazy` implementation. Named exports require the pattern `React.lazy(() => import('./path').then(module => ({ default: module.NamedExport })))`. Additionally, `Suspense` placement is crucial; nesting a `Suspense` boundary inside the layout component (within `ProtectedRoute`) ensures the dashboard layout persists while the page content loads, providing a smoother UX than a full-page spinner.
+**Action:** When implementing code splitting in legacy codebases, always verify export types first. Use nested `Suspense` boundaries to preserve layout context during transitions.
