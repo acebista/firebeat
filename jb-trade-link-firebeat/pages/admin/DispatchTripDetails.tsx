@@ -72,33 +72,10 @@ export const DispatchTripDetails: React.FC = () => {
     }
   };
 
-  // TEMPORARY: Toggle all orders between completed/unfinished
-  const handleToggleAllOrdersCompletion = async () => {
-    if (orders.length === 0) {
-      toast.error("No orders to toggle");
-      return;
-    }
+  // Function removed: handleToggleAllOrdersCompletion
+  // This was causing data integrity issues by allowing bulk status changes without proper validation
 
-    const allDelivered = orders.every(o => o.status === 'delivered');
-    const newStatus = allDelivered ? 'dispatched' : 'delivered';
-
-    try {
-      await Promise.all(
-        orders.map(o => OrderService.updateStatus(o.id, newStatus))
-      );
-
-      // Refresh orders to reflect new status
-      const updatedOrders = await OrderService.getOrdersByIds(orders.map(o => o.id));
-      setOrders(updatedOrders as Order[]);
-
-      toast.success(`${updatedOrders.length} orders marked as ${newStatus === 'delivered' ? 'COMPLETED' : 'UNFINISHED'}`);
-    } catch (e) {
-      console.error(e);
-      toast.error("Failed to toggle order completion");
-    }
-  };
-
-  // TEMPORARY: Toggle individual order completion
+  // Individual order actions
   const handleToggleOrderCompletion = async (orderId: string) => {
     const order = orders.find(o => o.id === orderId);
     if (!order) return;
@@ -107,20 +84,39 @@ export const DispatchTripDetails: React.FC = () => {
 
     try {
       await OrderService.updateStatus(orderId, newStatus);
-
-      // Update local state with proper type casting
       const updatedOrders = orders.map(o =>
         o.id === orderId ? { ...o, status: newStatus as Order['status'] } : o
       );
       setOrders(updatedOrders);
-
       toast.success(`Order marked as ${newStatus === 'delivered' ? 'COMPLETED' : 'UNFINISHED'}`);
     } catch (e) {
       console.error(e);
-      toast.error("Failed to toggle order");
+      toast.error("Failed to update order");
     }
   };
 
+  const handleMarkOrderFailed = async (orderId: string) => {
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+
+    const reason = prompt("Enter reason for failure:", "Shop Closed");
+    if (!reason) return;
+
+    try {
+      await OrderService.update(orderId, {
+        status: 'cancelled',
+        remarks: `Manually marked as FAILED by Admin: ${reason} | ${order.remarks || ''}`
+      });
+      const updatedOrders = orders.map(o =>
+        o.id === orderId ? { ...o, status: 'cancelled' as Order['status'] } : o
+      );
+      setOrders(updatedOrders);
+      toast.success("Order marked as FAILED");
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to update order");
+    }
+  };
   // Handle finish trip button click
   const handleFinishTripClick = () => {
     const pendingOrders = orders.filter(o => o.status !== 'delivered');
@@ -132,22 +128,26 @@ export const DispatchTripDetails: React.FC = () => {
   };
 
   // Complete trip with specified action for pending orders
-  const completeTrip = async (action: 'direct' | 'sr' | 'reschedule') => {
+  const completeTrip = async (action: 'direct' | 'failed' | 'reschedule') => {
     if (!trip) return;
+    const pendingOrders = orders.filter(o => o.status !== 'delivered');
+    if (action === 'failed' && !window.confirm(`Are you sure you want to mark all ${pendingOrders.length} pending orders as FAILED?`)) {
+      return;
+    }
     setIsFinishing(true);
     const toastId = toast.loading('Finishing trip...');
 
     try {
       const pendingOrders = orders.filter(o => o.status !== 'delivered');
 
-      if (action === 'sr') {
+      if (action === 'failed') {
         for (const order of pendingOrders) {
           await OrderService.update(order.id, {
             status: 'cancelled',
-            remarks: `Sales Return - Trip finished with order pending. ${order.remarks || ''}`
+            remarks: `Delivery Failed - Trip finished with order pending. ${order.remarks || ''}`
           });
         }
-        toast.success(`${pendingOrders.length} orders marked as Sales Return`, { id: toastId });
+        toast.success(`${pendingOrders.length} orders marked as Failed`, { id: toastId });
       } else if (action === 'reschedule') {
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
@@ -231,7 +231,7 @@ export const DispatchTripDetails: React.FC = () => {
           {trip.status === 'packed' && (
             <Button onClick={() => handleStatusChange('out_for_delivery')}>Mark Out for Delivery</Button>
           )}
-          {trip.status === 'out_for_delivery' && (
+          {(trip.status === 'out_for_delivery' || trip.status === 'packed') && (
             <Button
               onClick={handleFinishTripClick}
               disabled={isFinishing}
@@ -281,17 +281,6 @@ export const DispatchTripDetails: React.FC = () => {
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <h3 className="font-bold text-gray-800">Assigned Orders</h3>
-            {orders.length > 0 && trip.status !== 'draft' && (
-              <Button
-                size="sm"
-                onClick={handleToggleAllOrdersCompletion}
-                className={orders.every(o => o.status === 'delivered')
-                  ? 'bg-amber-500 hover:bg-amber-600'
-                  : 'bg-green-600 hover:bg-green-700'}
-              >
-                {orders.every(o => o.status === 'delivered') ? '↩️ Mark Unfinished' : '✓ Mark All Completed'}
-              </Button>
-            )}
           </div>
           <Card className="overflow-hidden bg-white">
             <div className="overflow-x-auto">
@@ -321,16 +310,27 @@ export const DispatchTripDetails: React.FC = () => {
                           <button onClick={() => handleRemoveOrder(order.id)} className="text-red-600 hover:text-red-800 text-xs font-medium">Remove</button>
                         )}
                         {trip.status !== 'draft' && (
-                          <button
-                            onClick={() => handleToggleOrderCompletion(order.id)}
-                            className={`text-xs font-medium px-2 py-1 rounded ${order.status === 'delivered'
-                              ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                              : 'bg-green-100 text-green-700 hover:bg-green-200'
-                              }`}
-                            title="Toggle order completion (temporary)"
-                          >
-                            {order.status === 'delivered' ? '↩️ Undo' : '✓ Done'}
-                          </button>
+                          <div className="flex gap-1 justify-end">
+                            <button
+                              onClick={() => handleToggleOrderCompletion(order.id)}
+                              className={`text-[10px] font-bold px-2 py-1 rounded transition ${order.status === 'delivered'
+                                ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                                : 'bg-green-100 text-green-700 hover:bg-green-200'
+                                }`}
+                              title="Toggle delivered/pending"
+                            >
+                              {order.status === 'delivered' ? '↩️ Undo' : '✓ Done'}
+                            </button>
+                            {order.status !== 'delivered' && order.status !== 'cancelled' && (
+                              <button
+                                onClick={() => handleMarkOrderFailed(order.id)}
+                                className="text-[10px] font-bold px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200 transition"
+                                title="Mark as failed"
+                              >
+                                ✗ Fail
+                              </button>
+                            )}
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -408,13 +408,13 @@ export const DispatchTripDetails: React.FC = () => {
 
             <div className="space-y-3">
               <button
-                onClick={() => completeTrip('sr')}
+                onClick={() => completeTrip('failed')}
                 disabled={isFinishing}
                 className="w-full p-4 bg-red-50 border-2 border-red-200 rounded-lg text-left hover:bg-red-100 transition disabled:opacity-50"
               >
-                <div className="font-bold text-red-800 mb-1">📋 Mark as Sales Return (SR)</div>
+                <div className="font-bold text-red-800 mb-1">📋 Mark Pending as Failed</div>
                 <div className="text-sm text-red-600">
-                  Orders will be cancelled and marked as sales returns
+                  Orders will be marked as failed/cancelled
                 </div>
               </button>
 

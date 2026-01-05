@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, Button, Badge } from '../../components/ui/Elements';
 import { Truck, MapPin, CheckCircle, Clock, Users, TrendingUp, ArrowRight, Search, Package } from 'lucide-react';
 import { TripService, OrderService, UserService } from '../../services/db';
@@ -29,9 +29,15 @@ export const TripsOverview: React.FC = () => {
     completedOrders: 0
   });
 
+  const [searchParams] = useSearchParams();
+
   useEffect(() => {
+    const status = searchParams.get('status');
+    if (status === 'completed') {
+      setStatusFilter('completed');
+    }
     loadData();
-  }, []);
+  }, [searchParams]);
 
   const loadData = async () => {
     setLoading(true);
@@ -128,7 +134,7 @@ export const TripsOverview: React.FC = () => {
     switch (status) {
       case 'draft': return <Badge color="amber">Draft</Badge>;
       case 'out_for_delivery': return <Badge color="blue">Out for Delivery</Badge>;
-      case 'completed': return <Badge color="green">Completed</Badge>;
+      case 'completed': return <Badge color="emerald">Completed</Badge>;
       default: return <Badge>{status}</Badge>;
     }
   };
@@ -195,8 +201,8 @@ export const TripsOverview: React.FC = () => {
               key={status}
               onClick={() => setStatusFilter(status)}
               className={`px-3 py-2 rounded-lg font-medium text-sm transition-colors ${statusFilter === status
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-indigo-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
             >
               {status === 'all' ? 'All' : status === 'out_for_delivery' ? 'Active' : status.charAt(0).toUpperCase() + status.slice(1)}

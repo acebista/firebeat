@@ -19,7 +19,8 @@ import {
   ShoppingCart,
   Activity,
   DollarSign,
-  Boxes
+  Boxes,
+  History
 } from 'lucide-react';
 import { useAuth } from '../../services/auth';
 import { UserRole } from '../../types';
@@ -43,8 +44,8 @@ const navItems: Record<UserRole, { label: string; path: string; icon: any }[]> =
     { label: 'Vehicles', path: '/admin/vehicles', icon: Truck },
     { label: 'Dispatch', path: '/admin/dispatch', icon: Truck },
     { label: 'HR & Commissions', path: '/admin/hr', icon: DollarSign },
+    { label: 'Past Trips', path: '/admin/trips?status=completed', icon: History },
     { label: 'Returns', path: '/admin/returns', icon: RotateCcw },
-    { label: 'Damaged Goods', path: '/admin/damaged-goods', icon: AlertTriangle },
   ],
   sales: [
     { label: 'Dashboard', path: '/sales/dashboard', icon: LayoutDashboard },
@@ -54,6 +55,7 @@ const navItems: Record<UserRole, { label: string; path: string; icon: any }[]> =
   ],
   delivery: [
     { label: 'Dashboard', path: '/delivery/dashboard', icon: LayoutDashboard },
+    { label: 'Past Trips', path: '/delivery/past-trips', icon: History },
     { label: 'Route Map', path: '/delivery/route-map', icon: MapIcon },
   ]
 };

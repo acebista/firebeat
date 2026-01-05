@@ -90,14 +90,6 @@ export const DeliveryDashboard: React.FC = () => {
     if (user) {
       loadMyTrips();
       loadAllUsersTrips();
-
-      const handleFocus = () => {
-        loadMyTrips();
-        loadAllUsersTrips();
-      };
-
-      window.addEventListener('focus', handleFocus);
-      return () => window.removeEventListener('focus', handleFocus);
     }
   }, [user]);
 
@@ -113,8 +105,10 @@ export const DeliveryDashboard: React.FC = () => {
       setMyTrips(tripsWithStats);
       calculateMyStats(tripsWithStats);
 
-      // Auto-expand first active trip
-      const activeTrip = tripsWithStats.find(t => t.trip.status === 'out_for_delivery');
+      // Auto-expand first active trip (Out for Delivery OR Packed)
+      const activeTrip = tripsWithStats.find(t => t.trip.status === 'out_for_delivery') ||
+        tripsWithStats.find(t => t.trip.status === 'packed');
+
       if (activeTrip) {
         setExpandedTripId(activeTrip.trip.id);
       }
@@ -372,22 +366,25 @@ export const DeliveryDashboard: React.FC = () => {
   };
 
   // Complete trip with specified action for pending orders
-  const completeTrip = async (tripData: TripWithStats, action: 'direct' | 'sr' | 'reschedule') => {
+  const completeTrip = async (tripData: TripWithStats, action: 'direct' | 'failed' | 'reschedule') => {
+    if (action === 'failed' && !window.confirm(`Are you sure you want to mark all ${tripData.pendingCount} pending orders as FAILED?`)) {
+      return;
+    }
     setIsFinishing(true);
     const toastId = toast.loading('Finishing trip...');
 
     try {
       const pendingOrders = tripData.orders.filter(o => o.status !== 'delivered');
 
-      if (action === 'sr') {
-        // Mark pending orders as cancelled (Sales Return)
+      if (action === 'failed') {
+        // Mark pending orders as cancelled (Recorded as Failure)
         for (const order of pendingOrders) {
           await OrderService.update(order.id, {
             status: 'cancelled',
-            remarks: `Sales Return - Trip finished with order pending. ${order.remarks || ''}`
+            remarks: `Delivery Failed - Trip finished with order pending. ${order.remarks || ''}`
           });
         }
-        toast.success(`${pendingOrders.length} orders marked as Sales Return`, { id: toastId });
+        toast.success(`${pendingOrders.length} orders marked as Failed`, { id: toastId });
       } else if (action === 'reschedule') {
         // Reschedule for tomorrow - remove from trip and set to approved
         const tomorrow = new Date();
@@ -433,6 +430,25 @@ export const DeliveryDashboard: React.FC = () => {
       toast.error('Failed to finish trip. Please try again.', { id: toastId });
     } finally {
       setIsFinishing(false);
+    }
+  };
+
+  const handleQuickFail = async (orderId: string) => {
+    const reason = prompt("Enter reason for failed delivery:", "Shop Closed");
+    if (!reason) return;
+
+    const tId = toast.loading('Updating order...');
+    try {
+      await OrderService.update(orderId, {
+        status: 'cancelled',
+        remarks: `Delivery Failed (Quick): ${reason}`
+      });
+      await loadMyTrips();
+      await loadAllUsersTrips();
+      toast.success('Order marked as failed', { id: tId });
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to update order', { id: tId });
     }
   };
 
@@ -628,13 +644,12 @@ export const DeliveryDashboard: React.FC = () => {
                   >
                     📊 Summary
                   </Button>
-                  {tripData.trip.status === 'out_for_delivery' && (
+                  {(tripData.trip.status === 'out_for_delivery' || tripData.trip.status === 'packed' || tripData.trip.status === 'ready_for_packing') && (
                     <Button
                       size="sm"
                       className="flex-1 bg-green-600 hover:bg-green-700 text-white"
                       onClick={() => handleFinishTripClick(tripData)}
-                      disabled={isFinishing || !tripData.isPackingComplete}
-                      title={!tripData.isPackingComplete ? "Finish packing first" : ""}
+                      disabled={isFinishing}
                     >
                       ✓ Finish Trip
                     </Button>
@@ -849,16 +864,29 @@ export const DeliveryDashboard: React.FC = () => {
                                           ✏️ Edit
                                         </Button>
                                       ) : (
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          disabled={!tripData.isPackingComplete}
-                                          onClick={() => navigate(`/delivery/invoice/${order.id}`)}
-                                          className={`mt-1 text-xs ${!tripData.isPackingComplete ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                          title={!tripData.isPackingComplete ? "Finish packing first" : ""}
-                                        >
-                                          Deliver
-                                        </Button>
+                                        <>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            disabled={!tripData.isPackingComplete}
+                                            onClick={() => navigate(`/delivery/invoice/${order.id}`)}
+                                            className={`mt-1 text-xs ${!tripData.isPackingComplete ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                            title={!tripData.isPackingComplete ? "Finish packing first" : ""}
+                                          >
+                                            Deliver
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleQuickFail(order.id);
+                                            }}
+                                            className="mt-1 text-xs border-red-200 text-red-600 hover:bg-red-50 ml-1"
+                                          >
+                                            ✗ Fail
+                                          </Button>
+                                        </>
                                       )}
                                     </div>
                                   </div>
@@ -913,13 +941,13 @@ export const DeliveryDashboard: React.FC = () => {
 
               <div className="space-y-3">
                 <button
-                  onClick={() => finishingTrip && completeTrip(finishingTrip, 'sr')}
+                  onClick={() => finishingTrip && completeTrip(finishingTrip, 'failed')}
                   disabled={isFinishing}
                   className="w-full p-4 bg-red-50 border-2 border-red-200 rounded-lg text-left hover:bg-red-100 transition disabled:opacity-50"
                 >
-                  <div className="font-bold text-red-800 mb-1">📋 Mark as Sales Return (SR)</div>
+                  <div className="font-bold text-red-800 mb-1">📋 Mark Pending as Failed</div>
                   <div className="text-sm text-red-600">
-                    Orders will be cancelled and marked as sales returns
+                    Orders will be marked as failed/cancelled
                   </div>
                 </button>
 

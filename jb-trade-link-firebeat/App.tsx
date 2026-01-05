@@ -48,6 +48,7 @@ import { DeliveryDashboard } from './pages/delivery/DeliveryDashboard';
 import { DeliveryOrderDetails } from './pages/delivery/DeliveryOrderDetails';
 import { RouteMap } from './pages/delivery/RouteMap';
 import { PackingListPage } from './pages/delivery/PackingListPage';
+import { PastTrips } from './pages/delivery/PastTrips';
 
 // Placeholder for missing pages
 const Placeholder = ({ title }: { title: string }) => (
@@ -189,6 +190,7 @@ const App: React.FC = () => {
           {/* Delivery Routes */}
           <Route element={<ProtectedRoute allowedRoles={['delivery', 'admin']} />}>
             <Route path="/delivery/dashboard" element={<DeliveryDashboard />} />
+            <Route path="/delivery/past-trips" element={<PastTrips />} />
             <Route path="/delivery/route-map" element={<RouteMap />} />
             <Route path="/delivery/invoice/:id" element={<DeliveryOrderDetails />} />
             <Route path="/delivery/packing-list/:tripId" element={<PackingListPage />} />

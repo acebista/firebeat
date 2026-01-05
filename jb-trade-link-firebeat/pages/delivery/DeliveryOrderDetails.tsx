@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Button, Input } from '../../components/ui/Elements';
 import { MapPin, Phone, CheckCircle, XCircle, ArrowLeft, Banknote, CreditCard, Clock, Package, Trash2, Plus, Minus, X, AlertCircle } from 'lucide-react';
@@ -6,6 +6,7 @@ import { OrderService, CustomerService, ProductService, TripService } from '../.
 import { PaymentsService } from '../../services/ledger';
 import { Order, Customer, DispatchTrip } from '../../types';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../services/auth';
 import toast from 'react-hot-toast';
 
 interface DamageItem {
@@ -36,6 +37,8 @@ export const DeliveryOrderDetails: React.FC = () => {
     const [order, setOrder] = useState<Order | null>(null);
     const [customer, setCustomer] = useState<Customer | null>(null);
     const [loading, setLoading] = useState(true);
+    const { user } = useAuth();
+    const [trip, setTrip] = useState<DispatchTrip | null>(null);
     const [processing, setProcessing] = useState(false);
     const [paymentSyncLock, setPaymentSyncLock] = useState(false); // Prevent concurrent payment syncs
 
@@ -56,6 +59,13 @@ export const DeliveryOrderDetails: React.FC = () => {
     const [editStatus, setEditStatus] = useState<'delivered' | 'cancelled'>('delivered'); // Status toggle in edit mode
     const [editFailReason, setEditFailReason] = useState(''); // Failure reason if marking as failed
 
+    const canEdit = useMemo(() => {
+        if (!user) return false;
+        if (user.role === 'admin') return true;
+        // Delivery person cannot edit if trip is completed
+        if (trip?.status === 'completed') return false;
+        return true;
+    }, [user, trip]);
     useEffect(() => {
         const loadData = async () => {
             if (!id) return;
@@ -135,6 +145,12 @@ export const DeliveryOrderDetails: React.FC = () => {
                     if (orderData.customerId) {
                         const custData = await CustomerService.getById(orderData.customerId);
                         if (custData) setCustomer(custData);
+                    }
+
+                    // Fetch trip details to check status
+                    if (orderData.assignedTripId) {
+                        const tripData = await TripService.getById(orderData.assignedTripId);
+                        if (tripData) setTrip(tripData);
                     }
                 }
             } catch (error) {
@@ -722,8 +738,16 @@ export const DeliveryOrderDetails: React.FC = () => {
                 </div>
             </Card>
 
+            {/* Show Read-Only Banner if applicable */}
+            {!canEdit && (
+                <div className="mb-4 bg-amber-50 border border-amber-200 p-3 rounded-lg flex items-center gap-2 text-amber-800 text-sm">
+                    <AlertCircle className="h-5 w-5" />
+                    <span>This trip is marked as completed. Details are now read-only.</span>
+                </div>
+            )}
+
             {/* Delivery Actions Card */}
-            {order.status !== 'delivered' && order.status !== 'cancelled' && (
+            {order.status === 'dispatched' && (
                 <Card className="p-5 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-xl shadow-sm mb-4">
                     <h3 className="font-bold text-gray-900 mb-4 flex items-center justify-between">
                         <span>Complete Delivery</span>
@@ -741,6 +765,7 @@ export const DeliveryOrderDetails: React.FC = () => {
                                             value={entry.method}
                                             onChange={(e) => updatePaymentEntry(idx, 'method', e.target.value)}
                                             className="px-2 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                                            disabled={!canEdit}
                                         >
                                             <option value="cash">💵 Cash</option>
                                             <option value="qr">📱 QR Code</option>
@@ -753,11 +778,13 @@ export const DeliveryOrderDetails: React.FC = () => {
                                             onChange={(e) => updatePaymentEntry(idx, 'amount', parseFloat(e.target.value) || 0)}
                                             placeholder="Amount"
                                             className="px-2 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 font-semibold"
+                                            disabled={!canEdit}
                                         />
                                     </div>
                                     <button
                                         onClick={() => removePaymentEntry(idx)}
                                         className="text-red-500 p-1 hover:bg-red-50 rounded"
+                                        disabled={!canEdit}
                                     >
                                         <Trash2 className="h-4 w-4" />
                                     </button>
@@ -769,6 +796,7 @@ export const DeliveryOrderDetails: React.FC = () => {
                                         onChange={(e) => updatePaymentEntry(idx, 'reference', e.target.value)}
                                         placeholder={entry.method === 'qr' ? 'Transaction ID' : entry.method === 'cheque' ? 'Cheque Numbers' : 'Notes'}
                                         className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded"
+                                        disabled={!canEdit}
                                     />
                                 )}
                             </div>
@@ -778,6 +806,7 @@ export const DeliveryOrderDetails: React.FC = () => {
                             size="sm"
                             className="w-full py-2 bg-white flex items-center justify-center gap-2 border-dashed border-2 hover:border-indigo-500 hover:text-indigo-600 border-indigo-200 text-indigo-500"
                             onClick={addPaymentEntry}
+                            disabled={!canEdit}
                         >
                             <Plus className="h-4 w-4" /> Add Payment Row
                         </Button>
@@ -838,6 +867,7 @@ export const DeliveryOrderDetails: React.FC = () => {
                             placeholder="Store was busy, left with security, etc."
                             rows={3}
                             className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                            disabled={!canEdit}
                         />
                     </div>
 
@@ -846,12 +876,14 @@ export const DeliveryOrderDetails: React.FC = () => {
                         <button
                             onClick={() => setShowDamageModal(true)}
                             className="p-3 rounded-lg bg-white border border-orange-200 text-orange-700 hover:bg-orange-50 font-bold text-sm flex items-center justify-center gap-2 shadow-sm"
+                            disabled={!canEdit}
                         >
                             <AlertCircle className="h-4 w-4" /> Record Damage
                         </button>
                         <button
                             onClick={() => setShowReturnModal(true)}
                             className="p-3 rounded-lg bg-white border border-purple-200 text-purple-700 hover:bg-purple-50 font-bold text-sm flex items-center justify-center gap-2 shadow-sm"
+                            disabled={!canEdit}
                         >
                             <Package className="h-4 w-4" /> Record Return
                         </button>
@@ -862,14 +894,14 @@ export const DeliveryOrderDetails: React.FC = () => {
                         <div className="grid grid-cols-2 gap-3">
                             <button
                                 onClick={handleReschedule}
-                                disabled={processing}
+                                disabled={processing || !canEdit}
                                 className="p-3 rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 font-bold text-sm shadow-sm"
                             >
                                 <Clock className="h-4 w-4 inline mr-2" /> Reschedule
                             </button>
                             <button
                                 onClick={handleMarkFailed}
-                                disabled={processing}
+                                disabled={processing || !canEdit}
                                 className="p-3 rounded-lg bg-white border border-red-200 text-red-700 hover:bg-red-50 font-bold text-sm shadow-sm"
                             >
                                 <XCircle className="h-4 w-4 inline mr-2" /> Mark Failed
@@ -877,10 +909,10 @@ export const DeliveryOrderDetails: React.FC = () => {
                         </div>
                         <button
                             onClick={handleMarkDelivered}
-                            disabled={processing}
+                            disabled={processing || !canEdit}
                             className="w-full p-4 rounded-xl bg-green-600 hover:bg-green-700 text-white font-black text-lg flex items-center justify-center gap-3 transition-all shadow-xl hover:scale-[1.02] active:scale-95 disabled:opacity-50"
                         >
-                            <CheckCircle className="h-6 w-6" /> COMPLETE DELIVERY
+                            <CheckCircle className="h-6 w-6" /> {canEdit ? 'COMPLETE DELIVERY' : 'VIEW ONLY'}
                         </button>
                     </div>
                 </Card>
@@ -917,17 +949,19 @@ export const DeliveryOrderDetails: React.FC = () => {
                         )}
                     </div>
 
-                    <Button
-                        variant="outline"
-                        className="w-full border-2 border-amber-400 text-amber-700 hover:bg-amber-50 font-bold"
-                        onClick={() => {
-                            setEditStatus('delivered');
-                            setEditFailReason('');
-                            setIsEditing(true);
-                        }}
-                    >
-                        ✏️ Edit Delivery Details
-                    </Button>
+                    {canEdit && (
+                        <Button
+                            variant="outline"
+                            className="w-full border-2 border-amber-400 text-amber-700 hover:bg-amber-50 font-bold"
+                            onClick={() => {
+                                setEditStatus('delivered');
+                                setEditFailReason('');
+                                setIsEditing(true);
+                            }}
+                        >
+                            ✏️ Edit Delivery Details
+                        </Button>
+                    )}
                 </Card>
             )}
 
@@ -1212,13 +1246,15 @@ export const DeliveryOrderDetails: React.FC = () => {
                         </div>
                     </div>
 
-                    <Button
-                        variant="outline"
-                        className="w-full border-2 border-red-400 text-red-700 hover:bg-red-50 font-bold"
-                        onClick={() => setIsEditing(true)}
-                    >
-                        ✏️ Edit / Reactivate Order
-                    </Button>
+                    {canEdit && (
+                        <Button
+                            variant="outline"
+                            className="w-full border-2 border-red-400 text-red-700 hover:bg-red-50 font-bold"
+                            onClick={() => setIsEditing(true)}
+                        >
+                            ✏️ Edit / Reactivate Order
+                        </Button>
+                    )}
                 </Card>
             )}
 

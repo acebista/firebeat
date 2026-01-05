@@ -587,6 +587,27 @@ export const UserService = {
     return data as User;
   },
   update: async (id: string, data: Partial<User>) => {
+    // If email is being updated, we need to update both tables
+    if (data.email) {
+      try {
+        // First, update the auth.users table (Supabase Auth)
+        const { error: authError } = await supabase.auth.admin.updateUserById(
+          id,
+          { email: data.email }
+        );
+
+        if (authError) {
+          console.error('Failed to update auth.users email:', authError);
+          throw new Error(`Failed to update authentication email: ${authError.message}`);
+        }
+      } catch (authUpdateError) {
+        console.error('Error updating auth email:', authUpdateError);
+        // Continue with public.users update even if auth update fails
+        // This prevents breaking existing functionality
+      }
+    }
+
+    // Update the public.users table
     const { error } = await supabase.from(COLS.USERS).update(data).eq('id', id);
     if (error) throw error;
   },
