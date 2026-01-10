@@ -1,0 +1,3 @@
+## 2026-01-10 - [Mixed Export Strategies Complicate Lazy Loading]
+**Learning:** This codebase uses a mix of default and named exports for page components. When implementing `React.lazy`, this inconsistency forces a mix of standard `React.lazy(() => import(...))` and the adapter pattern `React.lazy(() => import(...).then(m => ({ default: m.NamedExport })))`.
+**Action:** When working on this codebase, always inspect the export style of a component before attempting to lazy load it. Check the file content, not just the import statement (as `import { X }` is clear, but `import X` could be default or named if `esModuleInterop` is on, though here it's strictly TypeScript). The safe bet is to check the file.
