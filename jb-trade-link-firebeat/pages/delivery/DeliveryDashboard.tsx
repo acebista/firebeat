@@ -54,6 +54,9 @@ export const DeliveryDashboard: React.FC = () => {
   const [finishingTrip, setFinishingTrip] = useState<TripWithStats | null>(null); // Trip being finished
   const [isFinishing, setIsFinishing] = useState(false); // Processing state
   const [summaryTripData, setSummaryTripData] = useState<TripWithStats | null>(null); // Trip for summary modal
+  const [selectedOrderForFail, setSelectedOrderForFail] = useState<string | null>(null); // Order ID for failure reason
+  const [isFailModalOpen, setIsFailModalOpen] = useState(false); // Failure reason modal state
+  const [isQuickProcessing, setIsQuickProcessing] = useState(false); // Quick action state
 
   const [myStats, setMyStats] = useState({
     totalTrips: 0,
@@ -93,9 +96,9 @@ export const DeliveryDashboard: React.FC = () => {
     }
   }, [user]);
 
-  const loadMyTrips = async () => {
+  const loadMyTrips = async (silent: boolean = false) => {
     if (!user) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const trips = await TripService.getByDeliveryPerson(user.id);
       // Filter out completed trips - only show active/in-progress trips
@@ -119,7 +122,7 @@ export const DeliveryDashboard: React.FC = () => {
     }
   };
 
-  const loadAllUsersTrips = async () => {
+  const loadAllUsersTrips = async (silent: boolean = false) => {
     if (!user) return;
     try {
       const allUsers = await UserService.getAll();
@@ -418,8 +421,8 @@ export const DeliveryDashboard: React.FC = () => {
       await TripService.update(tripData.trip.id, { status: 'completed' });
 
       // Refresh data
-      await loadMyTrips();
-      await loadAllUsersTrips();
+      await loadMyTrips(true);
+      await loadAllUsersTrips(true);
       setFinishingTrip(null);
 
       if (action === 'direct') {
@@ -433,22 +436,67 @@ export const DeliveryDashboard: React.FC = () => {
     }
   };
 
-  const handleQuickFail = async (orderId: string) => {
-    const reason = prompt("Enter reason for failed delivery:", "Shop Closed");
-    if (!reason) return;
+  const handleQuickDeliver = async (order: Order) => {
+    if (!window.confirm(`Mark ${order.customerName}'s invoice as delivered with full cash collection?`)) return;
 
+    setIsQuickProcessing(true);
+    const tId = toast.loading('Processing delivery...');
+    try {
+      // 1. Update Order Status and Payment Tracking
+      await OrderService.update(order.id, {
+        status: 'delivered',
+        delivered_at: new Date().toISOString(),
+        payment_collected: order.totalAmount,
+        payment_method_at_delivery: 'cash',
+        remarks: `Quick Delivered (Full Cash) | ${order.remarks || ''}`
+      } as any);
+
+      // 2. Add Payment Record
+      await PaymentsService.addPayment({
+        invoiceId: order.id,
+        customerId: order.customerId!,
+        amount: order.totalAmount,
+        method: 'cash',
+        notes: 'Quick Delivery: Full Cash Collection'
+      });
+
+      // 3. Refresh State
+      await loadMyTrips(true);
+      await loadAllUsersTrips(true);
+      toast.success('Delivered successfully!', { id: tId });
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to process delivery', { id: tId });
+    } finally {
+      setIsQuickProcessing(false);
+    }
+  };
+
+  const handleQuickFailRequest = (orderId: string) => {
+    setSelectedOrderForFail(orderId);
+    setIsFailModalOpen(true);
+  };
+
+  const confirmQuickFail = async (reason: string) => {
+    if (!selectedOrderForFail) return;
+
+    setIsQuickProcessing(true);
     const tId = toast.loading('Updating order...');
     try {
-      await OrderService.update(orderId, {
+      await OrderService.update(selectedOrderForFail, {
         status: 'cancelled',
         remarks: `Delivery Failed (Quick): ${reason}`
       });
-      await loadMyTrips();
-      await loadAllUsersTrips();
+      await loadMyTrips(true);
+      await loadAllUsersTrips(true);
       toast.success('Order marked as failed', { id: tId });
+      setIsFailModalOpen(false);
+      setSelectedOrderForFail(null);
     } catch (e) {
       console.error(e);
       toast.error('Failed to update order', { id: tId });
+    } finally {
+      setIsQuickProcessing(false);
     }
   };
 
@@ -864,29 +912,43 @@ export const DeliveryDashboard: React.FC = () => {
                                           ✏️ Edit
                                         </Button>
                                       ) : (
-                                        <>
+                                        <div className="flex flex-col gap-1.5 mt-1">
+                                          <div className="flex gap-1.5">
+                                            <Button
+                                              size="sm"
+                                              variant="outline"
+                                              disabled={!tripData.isPackingComplete || isQuickProcessing}
+                                              onClick={() => navigate(`/delivery/invoice/${order.id}`)}
+                                              className={`flex-1 text-xs ${!tripData.isPackingComplete ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                              title={!tripData.isPackingComplete ? "Finish packing first" : ""}
+                                            >
+                                              Details
+                                            </Button>
+                                            <Button
+                                              size="sm"
+                                              className="flex-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600"
+                                              disabled={!tripData.isPackingComplete || isQuickProcessing}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleQuickDeliver(order as any);
+                                              }}
+                                            >
+                                              ✓ Deliver
+                                            </Button>
+                                          </div>
                                           <Button
                                             size="sm"
                                             variant="outline"
-                                            disabled={!tripData.isPackingComplete}
-                                            onClick={() => navigate(`/delivery/invoice/${order.id}`)}
-                                            className={`mt-1 text-xs ${!tripData.isPackingComplete ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                            title={!tripData.isPackingComplete ? "Finish packing first" : ""}
-                                          >
-                                            Deliver
-                                          </Button>
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
+                                            disabled={isQuickProcessing}
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              handleQuickFail(order.id);
+                                              handleQuickFailRequest(order.id);
                                             }}
-                                            className="mt-1 text-xs border-red-200 text-red-600 hover:bg-red-50 ml-1"
+                                            className="w-full text-xs border-red-200 text-red-600 hover:bg-red-50"
                                           >
-                                            ✗ Fail
+                                            ✗ Fail Delivery
                                           </Button>
-                                        </>
+                                        </div>
                                       )}
                                     </div>
                                   </div>
@@ -974,6 +1036,40 @@ export const DeliveryDashboard: React.FC = () => {
           </div>
         )
       }
+      {/* Failure Reason Modal */}
+      {isFailModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden slide-in-up">
+            <div className="p-6 border-b border-gray-100 bg-gradient-to-r from-red-50 to-white">
+              <h3 className="text-xl font-bold text-gray-900">Mark as Failed</h3>
+              <p className="text-sm text-gray-600 mt-1">Please select a reason for failure</p>
+            </div>
+            <div className="p-4 space-y-3">
+              {[
+                { label: '🏪 Shop Closed', value: 'Shop Closed' },
+                { label: '📦 Didn\'t Order', value: 'Didn\'t Order' },
+                { label: '💸 No Money', value: 'No Money' }
+              ].map((reason) => (
+                <button
+                  key={reason.value}
+                  disabled={isQuickProcessing}
+                  onClick={() => confirmQuickFail(reason.value)}
+                  className="w-full p-4 text-left font-semibold text-gray-800 bg-gray-50 hover:bg-red-50 hover:text-red-700 border border-gray-200 rounded-xl transition-all active:scale-95 disabled:opacity-50"
+                >
+                  {reason.label}
+                </button>
+              ))}
+              <button
+                onClick={() => setIsFailModalOpen(false)}
+                disabled={isQuickProcessing}
+                className="w-full p-3 text-gray-500 font-medium hover:text-gray-700 transition"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div >
   );
 };

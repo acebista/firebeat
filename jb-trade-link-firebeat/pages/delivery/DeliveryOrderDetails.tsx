@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Button, Input } from '../../components/ui/Elements';
-import { MapPin, Phone, CheckCircle, XCircle, ArrowLeft, Banknote, CreditCard, Clock, Package, Trash2, Plus, Minus, X, AlertCircle } from 'lucide-react';
+import { MapPin, Phone, CheckCircle, XCircle, ArrowLeft, Banknote, CreditCard, Clock, Package, Trash2, Plus, Minus, X, AlertCircle, Zap } from 'lucide-react';
 import { OrderService, CustomerService, ProductService, TripService } from '../../services/db';
 import { PaymentsService } from '../../services/ledger';
 import { Order, Customer, DispatchTrip } from '../../types';
@@ -307,6 +307,17 @@ export const DeliveryOrderDetails: React.FC = () => {
         const newEntries = [...paymentEntries];
         newEntries[index] = { ...newEntries[index], [field]: value };
         setPaymentEntries(newEntries);
+    };
+
+    const handleAutofill = (index: number) => {
+        const netTotal = calculateCurrentNetTotal();
+        const otherEntriesSum = paymentEntries.reduce((sum, p, i) => {
+            if (i === index) return sum;
+            return sum + (Number(p.amount) || 0);
+        }, 0);
+
+        const remaining = Math.max(0, netTotal - otherEntriesSum);
+        updatePaymentEntry(index, 'amount', Number(remaining.toFixed(2)));
     };
 
     const handleMarkDelivered = async () => {
@@ -772,14 +783,25 @@ export const DeliveryOrderDetails: React.FC = () => {
                                             <option value="cheque">📄 Cheque</option>
                                             <option value="credit">💳 Credit</option>
                                         </select>
-                                        <input
-                                            type="number"
-                                            value={entry.amount}
-                                            onChange={(e) => updatePaymentEntry(idx, 'amount', parseFloat(e.target.value) || 0)}
-                                            placeholder="Amount"
-                                            className="px-2 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 font-semibold"
-                                            disabled={!canEdit}
-                                        />
+                                        <div className="relative">
+                                            <input
+                                                type="number"
+                                                value={entry.amount}
+                                                onChange={(e) => updatePaymentEntry(idx, 'amount', parseFloat(e.target.value) || 0)}
+                                                placeholder="Amount"
+                                                className="w-full px-2 py-2 pr-8 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 font-semibold"
+                                                disabled={!canEdit}
+                                            />
+                                            {canEdit && (
+                                                <button
+                                                    onClick={() => handleAutofill(idx)}
+                                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-indigo-500 hover:text-indigo-700 p-0.5 rounded-full hover:bg-indigo-50 transition-colors"
+                                                    title="Autofill remaining balance"
+                                                >
+                                                    <Zap className="h-4 w-4" />
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                     <button
                                         onClick={() => removePaymentEntry(idx)}
@@ -1055,14 +1077,23 @@ export const DeliveryOrderDetails: React.FC = () => {
                                                     <option value="cheque">📄 Cheque</option>
                                                     <option value="credit">💳 Credit</option>
                                                 </select>
-                                                <input
-                                                    type="number"
-                                                    step="0.01"
-                                                    value={entry.amount}
-                                                    onChange={(e) => updatePaymentEntry(idx, 'amount', parseFloat(e.target.value) || 0)}
-                                                    placeholder="Amount"
-                                                    className="px-2 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-amber-500 font-semibold"
-                                                />
+                                                <div className="relative">
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        value={entry.amount}
+                                                        onChange={(e) => updatePaymentEntry(idx, 'amount', parseFloat(e.target.value) || 0)}
+                                                        placeholder="Amount"
+                                                        className="w-full px-2 py-2 pr-8 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-amber-500 font-semibold"
+                                                    />
+                                                    <button
+                                                        onClick={() => handleAutofill(idx)}
+                                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-amber-500 hover:text-amber-700 p-0.5 rounded-full hover:bg-amber-50 transition-colors"
+                                                        title="Autofill remaining balance"
+                                                    >
+                                                        <Zap className="h-4 w-4" />
+                                                    </button>
+                                                </div>
                                             </div>
                                             <button
                                                 onClick={() => removePaymentEntry(idx)}

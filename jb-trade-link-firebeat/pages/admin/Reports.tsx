@@ -21,8 +21,14 @@ import { HRCommissionReport } from './reports/HRCommissionRepo'; // Component
 const calculateMetrics = (orders: Order[], filters: ReportFilterState, products: Product[]) => {
 
   // Separate regular orders from rescheduled orders
-  const regularOrders = orders.filter(o => !(o as any).rescheduled_from);
-  const rescheduledOrders = orders.filter(o => !!(o as any).rescheduled_from);
+  // Regular includes:
+  // 1. Normal orders (no rescheduled_from)
+  // 2. Rescheduled orders NOT on a trip (backlog) - implicit "unassigned" status for dispatch purposes
+  const regularOrders = orders.filter(o => !(o as any).rescheduled_from || !(o as any).assignedTripId);
+
+  // Rescheduled section ONLY for:
+  // 1. Rescheduled orders ON a trip
+  const rescheduledOrders = orders.filter(o => !!(o as any).rescheduled_from && !!(o as any).assignedTripId);
 
   // Helper to map order to sales row
   const mapToSalesRow = (o: Order): SalesReportRow => {

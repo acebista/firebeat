@@ -116,10 +116,22 @@ export const generateVatBills = (rows: DeliveryReportRow[], forcedIndividualIds:
     const THRESHOLD = 50000;
     const VAT_RATE = 0.13;
 
-    // 1. Create global adjustment pools for the entire set of rows
-    const globalReturns = new Map<string, number>();
-    const globalDamages = new Map<string, number>();
+    // 1. Process each row locally to determine its contribution to the VAT bills
+    // This prevents "Return Credit" from one invoice being applied to a different invoice's product
+    const allNetItems: {
+        invoiceId: string;
+        invoiceNumber: string;
+        paymentMethod: string;
+        customerName: string;
+        customerPAN?: string;
+        date: string;
+        items: BillItem[];
+        itemsRaw: Order['items']; // Use Order['items'] for the raw items
+        netAmount: number; // Add netAmount to store the original netAmount for the row
+        collectedAmount: number; // Add collectedAmount
+    }[] = [];
 
+    // First pass: Calculate NET items for each invoice individually
     rows.forEach(row => {
         const isDelivered = ['delivered', 'completed', 'partially_returned'].includes(row.status.toLowerCase());
         if (!isDelivered) return;
@@ -127,34 +139,33 @@ export const generateVatBills = (rows: DeliveryReportRow[], forcedIndividualIds:
         const rowReturns = parseReturnsFromRemarks(row.order.remarks || '');
         const rowDamages = parseDamagesFromRemarks(row.order.remarks || '');
 
-        // Only include returns/damages for products that were actually in this invoice
-        const orderItemNames = new Set((row.order.items || []).map(i =>
-            (i.tempProductName || i.productName || '').toLowerCase().trim()
-        ));
+        // Use local deduction for this specific invoice
+        const { items: netItems } = getDeliveredItemsForRow(row, rowReturns, rowDamages);
 
-        rowReturns.forEach((qty, name) => {
-            const normName = name.toLowerCase().trim();
-            // Basic matching: if invoice has this product name (or it's a partial match)
-            const hasProduct = Array.from(orderItemNames).some(oname =>
-                oname === normName || oname.includes(normName) || normName.includes(oname)
-            );
+        // ONLY skip if net amount is non-positive (full return) or status isn't delivered
+        if (row.netAmount <= 0 || netItems.length === 0) return; // Also skip if no items remain after deductions
 
-            if (hasProduct) {
-                globalReturns.set(name, (globalReturns.get(name) || 0) + qty);
-            }
-        });
-
-        rowDamages.forEach((qty, name) => {
-            const normName = name.toLowerCase().trim();
-            const hasProduct = Array.from(orderItemNames).some(oname =>
-                oname === normName || oname.includes(normName) || normName.includes(oname)
-            );
-
-            if (hasProduct) {
-                globalDamages.set(name, (globalDamages.get(name) || 0) + qty);
-            }
-        });
+        if (netItems.length > 0) {
+            allNetItems.push({
+                invoiceId: row.invoiceId,
+                invoiceNumber: row.invoiceNumber,
+                paymentMethod: row.paymentMethod.toString(),
+                customerName: row.customerName,
+                customerPAN: row.order.customerPAN,
+                date: row.date,
+                items: netItems,
+                itemsRaw: row.order.items,
+                netAmount: row.netAmount,
+                collectedAmount: row.collectedAmount
+            });
+        }
     });
+
+    // 2. Group by Payment Method (Cash/QR vs Credit/Cheque)
+    // "Combined" bill is for Cash/QR generally, but we'll follow logic:
+    // Forced Individual -> Individual Bill
+    // Credit/Cheque -> Individual Bill
+    // Cash/QR -> Combined Bill (unless Forced Individual)
 
     let combinedItems: BillItem[] = [];
     let combinedInvoices: string[] = [];
@@ -187,15 +198,10 @@ export const generateVatBills = (rows: DeliveryReportRow[], forcedIndividualIds:
         combinedItems = []; combinedInvoices = []; combinedNumbers = []; combinedTargetCollection = 0;
     };
 
-    rows.forEach(row => {
-        const isDelivered = row.status.toLowerCase() === 'delivered' || row.status.toLowerCase() === 'completed';
-
-        // ONLY skip if net amount is non-positive (full return) or status isn't delivered
-        if (row.netAmount <= 0 || !isDelivered) return;
-
-        const method = (row.paymentMethod || 'cash').toString().toLowerCase();
-        // Use the global adjustment pools
-        const { items } = getDeliveredItemsForRow(row, globalReturns, globalDamages);
+    // Iterate over the PRE-CALCULATED net items
+    allNetItems.forEach(row => {
+        const method = row.paymentMethod.toLowerCase();
+        const items = row.items;
 
         // For billing purposes:
         // 1. If we have a collected amount, that's our target (matches money in hand)
@@ -221,7 +227,7 @@ export const generateVatBills = (rows: DeliveryReportRow[], forcedIndividualIds:
                 invoiceIds: [row.invoiceId],
                 invoiceNumbers: [row.invoiceNumber],
                 customerName: row.customerName,
-                customerPAN: row.order.customerPAN,
+                customerPAN: row.customerPAN,
                 subtotal: Number(subtotal.toFixed(2)),
                 discount: Number(preTaxDiscount.toFixed(2)),
                 vatAmount: Number(vat.toFixed(2)),
