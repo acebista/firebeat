@@ -25,9 +25,6 @@ export function PackingListPage() {
   const [saving, setSaving] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
 
-  // Expanded cards state for mobile
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-
   // Fetch data
   useEffect(() => {
     const fetchData = async () => {
@@ -185,13 +182,6 @@ export function PackingListPage() {
     }
   };
 
-  const toggleExpand = (id: string) => {
-    const newSet = new Set(expandedRows);
-    if (newSet.has(id)) newSet.delete(id);
-    else newSet.add(id);
-    setExpandedRows(newSet);
-  };
-
   if (loading) return <div className="p-8 text-center">Loading...</div>;
   if (error) return <div className="p-8 text-center text-red-600">{error}</div>;
 
@@ -249,33 +239,45 @@ export function PackingListPage() {
           aggregatedRows.map(row => (
             <div
               key={row.productId}
-              className={`bg-white rounded-xl shadow-sm border transition-all duration-200 ${row.isFullyLoaded ? 'border-green-200 bg-green-50/30' : 'border-gray-200'
-                }`}
+              onClick={() => handleToggleProduct(row)}
+              className={`bg-white rounded-xl shadow-sm border transition-all duration-200 cursor-pointer active:scale-[0.98] ${row.isFullyLoaded
+                ? 'border-green-300 bg-green-50/50 shadow-green-100'
+                : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
+                } ${saving ? 'opacity-60 pointer-events-none' : ''}`}
             >
               {/* Card Header / Main Row */}
               <div className="p-4 flex items-start gap-4">
-                <button
-                  onClick={() => handleToggleProduct(row)}
-                  disabled={saving}
-                  className={`flex-shrink-0 w-12 h-12 rounded-full border-2 flex items-center justify-center transition-all ${row.isFullyLoaded
-                      ? 'bg-green-500 border-green-500 text-white shadow-md scale-105'
-                      : 'border-gray-300 text-transparent hover:border-gray-400 bg-white'
-                    }`}
-                >
-                  <CheckCircle2 className="w-8 h-8" fill="currentColor" />
-                </button>
+                {/* Large, Prominent Checkbox with Extended Hit Area */}
+                <div className="flex-shrink-0 relative">
+                  {/* Extended tap target (invisible but clickable) */}
+                  <div className="absolute -inset-3" />
 
-                <div className="flex-1 min-w-0" onClick={() => toggleExpand(row.productId)}>
+                  <div
+                    className={`relative w-16 h-16 rounded-full border-[3px] flex items-center justify-center transition-all duration-300 ${row.isFullyLoaded
+                      ? 'bg-gradient-to-br from-green-500 to-green-600 border-green-600 text-white shadow-lg shadow-green-200 scale-105'
+                      : 'border-gray-300 text-gray-300 bg-white hover:border-green-400 hover:bg-green-50 hover:scale-105'
+                      } ${saving ? 'animate-pulse' : ''}`}
+                  >
+                    {row.isFullyLoaded ? (
+                      <CheckCircle2 className="w-10 h-10" fill="currentColor" strokeWidth={0} />
+                    ) : (
+                      <Circle className="w-10 h-10" strokeWidth={2.5} />
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <h3 className={`text-base font-bold text-gray-900 leading-tight ${row.isFullyLoaded ? 'line-through text-gray-500' : ''}`}>
+                    <div className="flex-1 pr-4">
+                      <h3 className={`text-base font-bold leading-tight transition-all ${row.isFullyLoaded ? 'line-through text-gray-500' : 'text-gray-900'
+                        }`}>
                         {row.productName}
                       </h3>
-                      <p className="text-sm text-gray-500 font-medium">{row.companyName}</p>
+                      <p className="text-sm text-gray-500 font-medium mt-0.5">{row.companyName}</p>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right flex-shrink-0">
                       <div className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Total</div>
-                      <div className="text-lg font-black text-gray-800 leading-none">
+                      <div className="text-lg font-black text-gray-800 leading-none mt-1">
                         {row.totalQty}
                       </div>
                       <div className="text-xs text-green-600 font-medium mt-1">
@@ -285,7 +287,7 @@ export function PackingListPage() {
                   </div>
 
                   {/* Prominent Packaging Breakdown */}
-                  <div className="flex flex-wrap gap-2 mt-2">
+                  <div className="flex flex-wrap gap-2 mt-3">
                     {row.cartons > 0 && (
                       <div className="flex flex-col items-center justify-center bg-amber-100 border-l-4 border-amber-500 px-3 py-1.5 rounded pr-4 min-w-[3.5rem]">
                         <span className="text-xl font-bold text-amber-900 leading-none">{row.cartons}</span>
