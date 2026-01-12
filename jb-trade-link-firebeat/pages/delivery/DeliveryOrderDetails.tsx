@@ -495,10 +495,13 @@ export const DeliveryOrderDetails: React.FC = () => {
                 const currentNetTotal = calculateCurrentNetTotal();
 
                 updateData = {
+                    status: 'delivered',
                     remarks: remarkText,
                     payment_collected: totalCollected,
                     payment_method_at_delivery: mainPaymentMethod,
-                    totalAmount: Math.max(0, currentNetTotal)
+                    totalAmount: Math.max(0, currentNetTotal),
+                    delivered_at: order.delivered_at || new Date().toISOString(),
+                    delivered_by: order.delivered_by || userId
                 };
             }
 
@@ -987,8 +990,8 @@ export const DeliveryOrderDetails: React.FC = () => {
                 </Card>
             )}
 
-            {/* Edit Mode for Delivered Orders */}
-            {(order.status === 'delivered' || order.status === 'completed') && isEditing && (
+            {/* Edit Mode for Delivered or Failed Orders */}
+            {(order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') && isEditing && (
                 <Card className="p-5 bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-300 rounded-xl shadow-sm mb-4">
                     <h3 className="font-bold text-gray-900 mb-4 flex items-center justify-between">
                         <span>✏️ Edit Delivery Details</span>
@@ -1281,7 +1284,11 @@ export const DeliveryOrderDetails: React.FC = () => {
                         <Button
                             variant="outline"
                             className="w-full border-2 border-red-400 text-red-700 hover:bg-red-50 font-bold"
-                            onClick={() => setIsEditing(true)}
+                            onClick={() => {
+                                setEditStatus('cancelled');
+                                setEditFailReason('');
+                                setIsEditing(true);
+                            }}
                         >
                             ✏️ Edit / Reactivate Order
                         </Button>
@@ -1289,67 +1296,6 @@ export const DeliveryOrderDetails: React.FC = () => {
                 </Card>
             )}
 
-            {/* Edit Mode for Cancelled Orders */}
-            {order.status === 'cancelled' && isEditing && (
-                <Card className="p-5 bg-gradient-to-br from-red-50 to-orange-50 border-2 border-red-300 rounded-xl shadow-sm mb-4">
-                    <h3 className="font-bold text-gray-900 mb-4 flex items-center justify-between">
-                        <span>✏️ Edit Failed Order</span>
-                        <button
-                            onClick={() => setIsEditing(false)}
-                            className="text-gray-500 hover:text-gray-700"
-                        >
-                            <X className="h-5 w-5" />
-                        </button>
-                    </h3>
-
-                    {/* Remarks */}
-                    <div className="mb-6">
-                        <label className="block text-sm font-semibold text-gray-900 mb-2">Updated Remarks</label>
-                        <textarea
-                            value={remarks}
-                            onChange={(e) => setRemarks(e.target.value)}
-                            placeholder="Update failure reason or notes..."
-                            rows={3}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500"
-                        />
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="flex gap-3">
-                        <Button
-                            variant="outline"
-                            className="flex-1"
-                            onClick={() => setIsEditing(false)}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="primary"
-                            className="flex-1 bg-red-600 hover:bg-red-700"
-                            disabled={processing}
-                            onClick={async () => {
-                                setProcessing(true);
-                                try {
-                                    await OrderService.update(order.id, {
-                                        remarks: remarks || order.remarks
-                                    } as any);
-                                    toast.success("Order updated!");
-                                    setIsEditing(false);
-                                    const updatedOrder = await OrderService.getById(order.id);
-                                    if (updatedOrder) setOrder(updatedOrder);
-                                } catch (e) {
-                                    console.error(e);
-                                    toast.error("Failed to update order");
-                                } finally {
-                                    setProcessing(false);
-                                }
-                            }}
-                        >
-                            {processing ? 'Saving...' : '💾 Save Changes'}
-                        </Button>
-                    </div>
-                </Card>
-            )}
 
             {/* Damage Modal */}
             {showDamageModal && (

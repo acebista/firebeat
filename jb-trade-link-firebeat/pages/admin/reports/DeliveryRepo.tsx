@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
 import { Card, Button, Badge } from '../../../components/ui/Elements';
 import { generateVatBills, VatBill } from '../../../utils/vatBilling';
-import { Download, Printer, Eye, X, TrendingUp, TrendingDown, DollarSign, Package, User, FileText, PackageX } from 'lucide-react';
+import { Download, Printer, Eye, X, TrendingUp, TrendingDown, DollarSign, Package, User, FileText, PackageX, ChevronDown, ChevronUp } from 'lucide-react';
 import { printContent } from '../../../lib/printUtils';
 import { Order, SalesReturn } from '../../../types';
 import { PaymentMode } from '../../../types/delivery-order';
 import { VatBillDetailModal } from './VatBillDetailModal';
 import { VatTallyModal } from '../../../components/delivery/VatTallyModal';
 import { CheckSquare } from 'lucide-react';
+import { StockReconciliationRow } from '../../../services/finpro/TripStockService';
+// UNIFIED VAT INVOICE RENDERER - Single source of truth for all VAT PDF generation
+import { exportAllVatBillsPDF, printAllVatBillsInBrowser } from '../../../utils/VatInvoiceRenderer';
 
 export interface DeliveryReportRow {
     invoiceId: string;
@@ -43,6 +46,7 @@ export interface DeliveryReportData {
         totalCollected: number;
         paymentBreakdown: Record<string, { count: number; amount: number }>;
     };
+    stockReconciliation?: StockReconciliationRow[]; // Stock data from TripStockService
 }
 
 interface DeliveryReportProps {
@@ -57,6 +61,7 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
     const [selectedVatBill, setSelectedVatBill] = useState<VatBill | null>(null);
     const [showTallyModal, setShowTallyModal] = useState(false);
     const [forcedIndividualIds, setForcedIndividualIds] = useState<string[]>([]);
+    const [isStockSectionExpanded, setIsStockSectionExpanded] = useState(false);
 
     const handlePrint = () => {
         printContent('Delivery Report', 'delivery-report-print');
@@ -139,6 +144,27 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
                 : [...prev, invoiceId]
         );
     };
+
+    const handleExportPDF = () => {
+        if (generatedBills.length === 0) {
+            alert('No VAT bills to export');
+            return;
+        }
+        const reportDate = rows.length > 0 ? rows[0].date : new Date().toISOString().split('T')[0];
+        // UNIFIED: Uses the single VatInvoiceRenderer for all PDF exports
+        exportAllVatBillsPDF(generatedBills, reportDate);
+    };
+
+    const handlePrintAllBills = () => {
+        if (generatedBills.length === 0) {
+            alert('No VAT bills to print');
+            return;
+        }
+        // UNIFIED: Uses the single VatInvoiceRenderer for all printing
+        // This renders IDENTICAL invoices to individual print
+        printAllVatBillsInBrowser(generatedBills);
+    };
+
 
     return (
         <div className="space-y-6">
@@ -268,6 +294,107 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
                     onClose={() => setSelectedPaymentMethod(null)}
                     parsePaymentBreakdown={parsePaymentBreakdown}
                 />
+            )}
+
+
+            {/* Stock Reconciliation Section */}
+            {data.stockReconciliation && data.stockReconciliation.length > 0 && (
+                <Card className="p-4">
+                    <div className="flex items-center justify-between mb-3">
+                        <button
+                            onClick={() => setIsStockSectionExpanded(!isStockSectionExpanded)}
+                            className="font-bold text-gray-800 flex items-center gap-2 hover:text-blue-600 transition-colors"
+                        >
+                            <Package className="h-5 w-5 text-blue-600" />
+                            Stock Reconciliation
+                            <span className="text-sm font-normal text-gray-500">
+                                ({data.stockReconciliation.length} products)
+                            </span>
+                            {isStockSectionExpanded ? (
+                                <ChevronUp className="h-4 w-4 text-gray-500" />
+                            ) : (
+                                <ChevronDown className="h-4 w-4 text-gray-500" />
+                            )}
+                        </button>
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm text-blue-600 font-medium">
+                                Expected Unload: {data.stockReconciliation.reduce((sum, r) => sum + r.expected_unload, 0)} units
+                            </span>
+                            {isStockSectionExpanded && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => printContent('Stock Reconciliation', 'stock-reconciliation-print')}
+                                >
+                                    <Printer className="h-4 w-4 mr-1" /> Print
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+
+                    {isStockSectionExpanded && (
+                        <div id="stock-reconciliation-print">
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full divide-y divide-gray-200 text-sm">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+                                            <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Taken</th>
+                                            <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Sold</th>
+                                            <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Returned</th>
+                                            <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Damaged</th>
+                                            <th className="px-3 py-3 text-right text-xs font-medium text-blue-700 uppercase tracking-wider bg-blue-50">Expected Unload</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-200">
+                                        {[...data.stockReconciliation].sort((a, b) => a.product_name.localeCompare(b.product_name)).map((row) => (
+                                            <tr
+                                                key={row.product_id}
+                                                className={row.expected_unload > 0 ? 'bg-blue-50' : 'hover:bg-gray-50'}
+                                            >
+                                                <td className="px-3 py-2 text-gray-900">{row.product_name}</td>
+                                                <td className="px-3 py-2 text-right text-gray-900">{row.qty_loaded}</td>
+                                                <td className="px-3 py-2 text-right text-green-600 font-medium">{row.qty_net_delivered}</td>
+                                                <td className="px-3 py-2 text-right text-amber-600">{row.qty_truck_returned}</td>
+                                                <td className="px-3 py-2 text-right text-red-600">{row.qty_truck_damaged}</td>
+                                                <td className={`px-3 py-2 text-right font-bold bg-blue-50 ${row.expected_unload > 0 ? 'text-blue-600' : 'text-green-600'
+                                                    }`}>
+                                                    {row.expected_unload}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot className="bg-gray-100 font-bold">
+                                        <tr>
+                                            <td className="px-3 py-3 text-right text-gray-900">TOTAL:</td>
+                                            <td className="px-3 py-3 text-right text-gray-900">
+                                                {data.stockReconciliation.reduce((sum, r) => sum + r.qty_loaded, 0)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right text-green-600">
+                                                {data.stockReconciliation.reduce((sum, r) => sum + r.qty_net_delivered, 0)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right text-amber-600">
+                                                {data.stockReconciliation.reduce((sum, r) => sum + r.qty_truck_returned, 0)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right text-red-600">
+                                                {data.stockReconciliation.reduce((sum, r) => sum + r.qty_truck_damaged, 0)}
+                                            </td>
+                                            <td className="px-3 py-3 text-right bg-blue-100 text-blue-700">
+                                                {data.stockReconciliation.reduce((sum, r) => sum + r.expected_unload, 0)}
+                                            </td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+
+                            <div className="mt-4 p-3 bg-gray-50 rounded-lg text-xs text-gray-600">
+                                <p><strong>Expected Unload</strong> = What should be in the van at end of day</p>
+                                <p>Calculated from: Taken - Sold (Net) + Truck Damaged</p>
+                                <p className="text-gray-500 mt-1">Where Sold (Net) = Items actually kept by customers (excludes cancelled orders and customer returns)</p>
+                            </div>
+                        </div>
+                    )}
+                </Card>
             )}
 
             {/* Invoice List Table */}
@@ -560,11 +687,16 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
                             </div>
                         </div>
 
-                        <div className="p-4 bg-white border-t flex justify-end gap-3">
+                        <div className="p-4 bg-white border-t flex justify-between gap-3">
+                            <div className="flex gap-2">
+                                <Button variant="outline" onClick={handlePrintAllBills}>
+                                    <Printer className="mr-2 h-4 w-4" /> Print All Bills
+                                </Button>
+                                <Button onClick={handleExportPDF} className="bg-teal-600 hover:bg-teal-700 text-white">
+                                    <Download className="mr-2 h-4 w-4" /> Export All as PDF
+                                </Button>
+                            </div>
                             <Button variant="outline" onClick={() => setShowVatModal(false)}>Close</Button>
-                            <Button className="bg-teal-600 hover:bg-teal-700 text-white">
-                                <Download className="mr-2 h-4 w-4" /> Save / Export
-                            </Button>
                         </div>
                     </div>
                 </div>
@@ -585,8 +717,86 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
                     onClose={() => setShowTallyModal(false)}
                     rows={rows}
                     generatedBills={generatedBills}
+                    stockReconciliation={data.stockReconciliation}
                 />
             )}
+
+            {/* Print View for All VAT Bills */}
+            <div id="all-vat-bills-print" style={{ display: 'none' }}>
+                {generatedBills.map((bill, index) => (
+                    <div
+                        key={bill.id}
+                        style={{
+                            pageBreakAfter: index < generatedBills.length - 1 ? 'always' : 'avoid',
+                            marginBottom: '40px',
+                            padding: '20px'
+                        }}
+                    >
+                        <div style={{ borderBottom: '3px solid #333', paddingBottom: '15px', marginBottom: '20px' }}>
+                            <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 'bold' }}>
+                                Bill #{bill.id}
+                            </h2>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', fontSize: '14px' }}>
+                                <span><strong>Type:</strong> {bill.type}</span>
+                                <span><strong>Payment Method:</strong> {bill.paymentMethod}</span>
+                                <span><strong>Date:</strong> {bill.date}</span>
+                            </div>
+                        </div>
+
+                        {bill.customerName && (
+                            <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f3f4f6', borderRadius: '8px' }}>
+                                <h3 style={{ margin: '0 0 10px 0', fontSize: '16px', fontWeight: 'bold' }}>Customer Information</h3>
+                                <p style={{ margin: '5px 0' }}><strong>Name:</strong> {bill.customerName}</p>
+                                {bill.customerPAN && <p style={{ margin: '5px 0' }}><strong>PAN:</strong> {bill.customerPAN}</p>}
+                            </div>
+                        )}
+
+                        <div style={{ marginBottom: '20px' }}>
+                            <h4 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '8px' }}>
+                                Invoices Included ({bill.invoiceNumbers.length}):
+                            </h4>
+                            <p style={{ fontSize: '12px', color: '#555', margin: 0 }}>
+                                {bill.invoiceNumbers.join(', ')}
+                            </p>
+                        </div>
+
+                        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '20px' }}>
+                            <thead style={{ backgroundColor: '#4f46e5', color: 'white' }}>
+                                <tr>
+                                    <th style={{ border: '1px solid #333', padding: '12px', textAlign: 'left' }}>Product</th>
+                                    <th style={{ border: '1px solid #333', padding: '12px', textAlign: 'center' }}>Qty</th>
+                                    <th style={{ border: '1px solid #333', padding: '12px', textAlign: 'right' }}>Rate</th>
+                                    <th style={{ border: '1px solid #333', padding: '12px', textAlign: 'right' }}>Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {bill.items.map((item, idx) => (
+                                    <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#f9fafb' }}>
+                                        <td style={{ border: '1px solid #ddd', padding: '10px' }}>{item.productName}</td>
+                                        <td style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'center' }}>{item.quantity}</td>
+                                        <td style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'right' }}>₹{item.rate.toFixed(2)}</td>
+                                        <td style={{ border: '1px solid #ddd', padding: '10px', textAlign: 'right' }}>₹{item.total.toFixed(2)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                            <tfoot style={{ backgroundColor: '#dcfce7', fontWeight: 'bold' }}>
+                                <tr>
+                                    <td colSpan={3} style={{ border: '2px solid #333', padding: '12px', textAlign: 'right', fontSize: '16px' }}>
+                                        Total Amount:
+                                    </td>
+                                    <td style={{ border: '2px solid #333', padding: '12px', textAlign: 'right', fontSize: '16px' }}>
+                                        ₹{bill.totalAmount.toFixed(2)}
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+
+                        <div style={{ textAlign: 'center', fontSize: '12px', color: '#666', marginTop: '30px', paddingTop: '15px', borderTop: '1px solid #ddd' }}>
+                            Bill {index + 1} of {generatedBills.length}
+                        </div>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 };
@@ -608,7 +818,12 @@ const PaymentMethodDetailModal: React.FC<PaymentMethodDetailModalProps> = ({ met
 
         if (rowMethod === method.toLowerCase()) {
             isRelevant = true;
-            methodAmount = row.collectedAmount;
+            // For credit, the "amount" is the order total (what was credited), not payment_collected
+            if (method.toLowerCase() === 'credit') {
+                methodAmount = row.netAmount;
+            } else {
+                methodAmount = row.collectedAmount;
+            }
         } else if (rowMethod === 'multiple') {
             const breakdown = parsePaymentBreakdown(row.order);
             if (breakdown) {

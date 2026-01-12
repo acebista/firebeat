@@ -14,6 +14,7 @@ import { CommissionRateService } from '../../services/hr'; // Import CommissionR
 import { Order, Product, User, SalesReturn, Company } from '../../types';
 import { CommissionRate } from '../../types/hr'; // Import CommissionRate type
 import { HRCommissionReport } from './reports/HRCommissionRepo'; // Component
+import { TripStockService, StockReconciliationRow } from '../../services/finpro/TripStockService';
 
 // --- Metric Calculation Helper ---
 // This moves the logic from MockReportService to the Client Component
@@ -286,7 +287,8 @@ export const Reports: React.FC = () => {
       totalAmount: 0,
       totalCollected: 0,
       paymentBreakdown: {}
-    }
+    },
+    stockReconciliation: []
   });
 
   // Delivery report specific filters
@@ -523,12 +525,10 @@ export const Reports: React.FC = () => {
         totalCollected: filteredRows.reduce((sum, r) => sum + r.collectedAmount, 0),
         paymentBreakdown: filteredRows.reduce((breakdown, row) => {
           const method = (row.paymentMethod || 'cash').toString().toLowerCase();
-
-          // Helper to capitalize for consistency
-          const formatMethod = (m: string) => m.charAt(0).toUpperCase() + m.slice(1).toLowerCase();
+          const isDelivered = row.status === 'delivered' || row.status === 'completed';
 
           if (method === 'multiple' && (row.order.remarks || '').includes('Payments:')) {
-            // Parse distribution from remarks
+            // Parse distribution from remarks (e.g., "Payments: CASH: ₹1000, QR: ₹500")
             const remarks = row.order.remarks || '';
             const paymentMatch = remarks.match(/Payments:\s*([^|]+)/);
 
@@ -556,26 +556,35 @@ export const Reports: React.FC = () => {
               breakdown['multiple'].count++;
               breakdown['multiple'].amount += row.collectedAmount;
             }
-          } else {
-            // Single payment method
-            const normalizedMethod = method;
-            if (!breakdown[normalizedMethod]) {
-              breakdown[normalizedMethod] = { count: 0, amount: 0 };
+          } else if (method === 'credit') {
+            // CREDIT: Intentional deferred payment - show full netAmount as receivable
+            // Credit orders are NOT shortfalls; the customer intentionally pays later
+            if (!breakdown['credit']) {
+              breakdown['credit'] = { count: 0, amount: 0 };
             }
-            breakdown[normalizedMethod].count++;
+            breakdown['credit'].count++;
+            breakdown['credit'].amount += row.netAmount; // Full amount is the receivable
+          } else {
+            // CASH, QR, CHEQUE, etc. - show what was actually collected
+            if (!breakdown[method]) {
+              breakdown[method] = { count: 0, amount: 0 };
+            }
+            breakdown[method].count++;
+            breakdown[method].amount += row.collectedAmount;
 
-            // For cash/others, add the collected amount
-            breakdown[normalizedMethod].amount += row.collectedAmount;
-
-            // CRITICAL: Any shortfall in a delivered order should be counted as credit
-            if ((row.status === 'delivered' || row.status === 'completed') && row.netAmount > row.collectedAmount) {
+            // SHORTFALL: Gap between invoice value and collected amount
+            // Applies to Cash, QR, Cheque - any method where we expect payment now
+            // Example: Cheque invoice ₹2435, cheque for ₹2400 → CHEQUE: ₹2400, SHORTFALL: ₹35
+            if (isDelivered && row.netAmount > row.collectedAmount) {
               const shortfall = row.netAmount - row.collectedAmount;
-              if (!breakdown['credit']) {
-                breakdown['credit'] = { count: 0, amount: 0 };
+              if (!breakdown['shortfall']) {
+                breakdown['shortfall'] = { count: 0, amount: 0 };
               }
-              breakdown['credit'].amount += shortfall;
+              breakdown['shortfall'].count++;
+              breakdown['shortfall'].amount += shortfall;
             }
           }
+
           return breakdown;
         }, {} as Record<string, { count: number; amount: number }>)
       };
@@ -586,7 +595,69 @@ export const Reports: React.FC = () => {
         summary
       });
 
-      setDeliveryReportData({ rows: filteredRows, summary });
+      // Fetch stock reconciliation data for all trips in the date range
+      let stockReconciliation: StockReconciliationRow[] = [];
+      try {
+        console.log('[Delivery] Fetching stock reconciliation for trips...');
+
+        // Get unique trip IDs from filtered rows
+        const tripIds = Array.from(new Set(
+          filteredRows
+            .map(row => (row.order as any).assignedTripId)
+            .filter(Boolean)
+        ));
+
+        console.log('[Delivery] Found trips:', tripIds.length);
+
+        // Fetch stock data for each trip
+        const stockDataByTrip = await Promise.all(
+          tripIds.map(async (tripId) => {
+            try {
+              return await TripStockService.getStockReconciliation(tripId);
+            } catch (err) {
+              console.warn(`[Delivery] Failed to fetch stock for trip ${tripId}:`, err);
+              return [];
+            }
+          })
+        );
+
+        // Flatten and deduplicate by product
+        const productStockMap = new Map<string, StockReconciliationRow>();
+
+        stockDataByTrip.flat().forEach(row => {
+          const existing = productStockMap.get(row.product_id);
+          if (existing) {
+            // Aggregate if same product from multiple trips
+            existing.qty_loaded += row.qty_loaded;
+            existing.qty_net_delivered += row.qty_net_delivered;
+            existing.qty_returned += row.qty_returned;
+            existing.qty_damaged += row.qty_damaged;
+            existing.expected_unload += row.expected_unload;
+            existing.actual_unsold += row.actual_unsold;
+            existing.actual_damaged += row.actual_damaged;
+          } else {
+            productStockMap.set(row.product_id, { ...row });
+          }
+        });
+
+        stockReconciliation = Array.from(productStockMap.values())
+          .sort((a, b) => b.expected_unload - a.expected_unload); // Sort by expected unload descending
+
+        console.log('[Delivery] Stock reconciliation complete:', {
+          productsWithStock: stockReconciliation.length,
+          totalExpectedUnload: stockReconciliation.reduce((sum, r) => sum + r.expected_unload, 0)
+        });
+
+      } catch (stockErr) {
+        console.error('[Delivery] Error fetching stock reconciliation:', stockErr);
+        // Don't fail the whole report if stock fetch fails
+      }
+
+      setDeliveryReportData({
+        rows: filteredRows,
+        summary,
+        stockReconciliation
+      });
       setDeliveryReportError(null);
 
     } catch (e: any) {
@@ -608,6 +679,7 @@ export const Reports: React.FC = () => {
           totalCollected: 0,
           paymentBreakdown: {},
         },
+        stockReconciliation: [],
       });
     } finally {
       setLoading(false);

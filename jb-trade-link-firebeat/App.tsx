@@ -172,6 +172,7 @@ const App: React.FC = () => {
             <Route path="/admin/damaged-goods" element={<DamagedGoodsReport />} />
 
             <Route path="/admin/reports" element={<Reports />} />
+
             <Route path="/admin/health" element={<SystemHealth />} />
             <Route path="/admin/migration" element={<Migration />} />
             <Route path="/admin/unknown-product-cleanup" element={<UnknownProductCleanup />} />

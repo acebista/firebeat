@@ -20,7 +20,8 @@ import {
   Activity,
   DollarSign,
   Boxes,
-  History
+  History,
+  FileOutput
 } from 'lucide-react';
 import { useAuth } from '../../services/auth';
 import { UserRole } from '../../types';

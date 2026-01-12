@@ -5,12 +5,14 @@ import { CheckCircle, AlertCircle, Package, Info, Filter, Users, Search, Downloa
 import { DeliveryReportRow } from '../../pages/admin/reports/DeliveryRepo';
 import { VatBill, parseReturnsFromRemarks, parseDamagesFromRemarks } from '../../utils/vatBilling';
 import { printContent } from '../../lib/printUtils';
+import { StockReconciliationRow } from '../../services/finpro/TripStockService';
 
 interface VatTallyModalProps {
     isOpen: boolean;
     onClose: () => void;
     rows: DeliveryReportRow[];
     generatedBills: VatBill[];
+    stockReconciliation?: StockReconciliationRow[];
 }
 
 interface TallyItem {
@@ -26,7 +28,7 @@ interface TallyItem {
     reasons: string[];
 }
 
-export const VatTallyModal: React.FC<VatTallyModalProps> = ({ isOpen, onClose, rows, generatedBills }) => {
+export const VatTallyModal: React.FC<VatTallyModalProps> = ({ isOpen, onClose, rows, generatedBills, stockReconciliation }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<'all' | 'match' | 'mismatch'>('all');
 
@@ -54,12 +56,12 @@ export const VatTallyModal: React.FC<VatTallyModalProps> = ({ isOpen, onClose, r
 
         // 1. Initialize Product Map with Trip Data
         rows.forEach(row => {
-            const rawItems = row.order.items || [];
+            const rawItems = row.order?.items || [];
             const orderItems = Array.isArray(rawItems) ? rawItems : [];
 
             // "Not Billed" = Cancelled, Failed, Returned, or still Dispatched/Rescheduled
             // These items are not expected to be in a VAT bill yet
-            const isNotBilled = ['cancelled', 'failed', 'returned', 'dispatched', 'approved'].includes(row.status.toLowerCase());
+            const isNotBilled = row.status && ['cancelled', 'failed', 'returned', 'dispatched', 'approved'].includes(row.status.toLowerCase());
 
             orderItems.forEach((item: any) => {
                 // Robust name/qty resolution for various DB formats
@@ -99,11 +101,11 @@ export const VatTallyModal: React.FC<VatTallyModalProps> = ({ isOpen, onClose, r
             const isDelivered = ['delivered', 'completed', 'partially_returned'].includes(row.status.toLowerCase());
             if (!isDelivered) return; // For failed orders, we already count the whole qty in 'stats.failed'
 
-            const returns = parseReturnsFromRemarks(row.order.remarks || '');
-            const damages = parseDamagesFromRemarks(row.order.remarks || '');
+            const returns = parseReturnsFromRemarks(row.order?.remarks || '');
+            const damages = parseDamagesFromRemarks(row.order?.remarks || '');
 
             // Get the set of product names actually in THIS invoice
-            const orderItemNames = new Set((row.order.items || []).map((i: any) =>
+            const orderItemNames = new Set((row.order?.items || []).map((i: any) =>
                 (i.tempProductName || i.productName || i.product_name || i.name || '').toLowerCase().trim()
             ));
 
@@ -198,7 +200,15 @@ export const VatTallyModal: React.FC<VatTallyModalProps> = ({ isOpen, onClose, r
                 status: isExplained ? 'match' : 'mismatch' as any,
                 reasons
             };
-        }).sort((a, b) => (a.status === 'match' ? 1 : -1));
+            // Sort: Mismatches first, then alphabetically by product name
+        }).sort((a, b) => {
+            // Mismatches come first
+            if (a.status !== b.status) {
+                return a.status === 'mismatch' ? -1 : 1;
+            }
+            // Within same status, sort alphabetically
+            return a.productName.localeCompare(b.productName);
+        });
 
         return items;
     }, [rows, generatedBills]);

@@ -1,7 +1,9 @@
 import React from 'react';
 import { Button } from '../../../components/ui/Elements';
-import { X, Download } from 'lucide-react';
+import { X, Download, Printer } from 'lucide-react';
 import { VatBill } from '../../../utils/vatBilling';
+// UNIFIED VAT INVOICE RENDERER - Single source of truth
+import { renderSingleVatInvoicePDF, renderVatInvoiceHTML } from '../../../utils/VatInvoiceRenderer';
 
 interface VatBillDetailModalProps {
     bill: VatBill;
@@ -10,42 +12,32 @@ interface VatBillDetailModalProps {
 
 export const VatBillDetailModal: React.FC<VatBillDetailModalProps> = ({ bill, onClose }) => {
     const handleExportPDF = () => {
-        // Trigger print which can be saved as PDF
+        // UNIFIED: Uses the single VatInvoiceRenderer - identical to Print All
+        const doc = renderSingleVatInvoicePDF(bill);
+        doc.save(`vat-invoice-${bill.id}.pdf`);
+    };
+
+    const handlePrint = () => {
+        // Open unified invoice HTML in new window for printing
         const printWindow = window.open('', '_blank');
         if (!printWindow) return;
 
-        const billHTML = document.getElementById(`vat-bill-${bill.id}`)?.innerHTML || '';
+        const invoiceHTML = renderVatInvoiceHTML(bill);
 
         printWindow.document.write(`
             <!DOCTYPE html>
             <html>
             <head>
-                <title>VAT Bill - ${bill.id}</title>
+                <title>VAT Invoice - ${bill.id}</title>
                 <style>
-                    body { font-family: Arial, sans-serif; margin: 20px; }
-                    .bill-container { max-width: 800px; margin: 0 auto; }
-                    .header { text-align: center; margin-bottom: 30px; border-bottom: 3px solid #333; padding-bottom: 20px; }
-                    .company-name { font-size: 24px; font-weight: bold; margin-bottom: 5px; }
-                    .bill-title { font-size: 20px; color: #666; margin-top: 10px; }
-                    .bill-info { display: flex; justify-content: space-between; margin: 20px 0; }
-                    .info-block { flex: 1; }
-                    .info-label { font-weight: bold; color: #666; font-size: 12px; }
-                    .info-value { font-size: 14px; margin-top: 5px; }
-                    table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-                    th { background-color: #f3f4f6; padding: 12px; text-align: left; border: 1px solid #ddd; font-size: 13px; }
-                    td { padding: 10px; border: 1px solid #ddd; font-size: 13px; }
-                    .text-right { text-align: right; }
-                    .text-center { text-align: center; }
-                    .total-row { background-color: #f9fafb; font-weight: bold; }
-                    .footer { margin-top: 40px; padding-top: 20px; border-top: 2px solid #ddd; font-size: 12px; color: #666; }
+                    body { margin: 20px; font-family: Arial, sans-serif; }
                     @media print {
                         body { margin: 0; }
-                        .no-print { display: none; }
                     }
                 </style>
             </head>
             <body>
-                ${billHTML}
+                ${invoiceHTML}
             </body>
             </html>
         `);
@@ -71,147 +63,18 @@ export const VatBillDetailModal: React.FC<VatBillDetailModalProps> = ({ bill, on
                 </div>
 
                 <div className="p-6 overflow-auto flex-1 bg-gray-50">
-                    <div id={`vat-bill-${bill.id}`} className="bg-white p-8 rounded-lg shadow">
-                        {/* Bill Header */}
-                        <div className="header">
-                            <div className="company-name">YOUR COMPANY NAME</div>
-                            <div style={{ fontSize: '12px', color: '#666' }}>
-                                Address Line 1, Address Line 2<br />
-                                Phone: +977-XXXXXXXXXX | Email: info@company.com<br />
-                                PAN: XXXXXXXXX | VAT No: XXXXXXXXX
-                            </div>
-                            <div className="bill-title">TAX INVOICE</div>
-                        </div>
-
-                        {/* Bill Info */}
-                        <div className="bill-info">
-                            <div className="info-block">
-                                <div className="info-label">BILL ID</div>
-                                <div className="info-value">{bill.id}</div>
-                            </div>
-                            <div className="info-block">
-                                <div className="info-label">DATE</div>
-                                <div className="info-value">{new Date(bill.date).toLocaleDateString()}</div>
-                            </div>
-                            <div className="info-block">
-                                <div className="info-label">PAYMENT METHOD</div>
-                                <div className="info-value">{bill.paymentMethod.toUpperCase()}</div>
-                            </div>
-                            <div className="info-block">
-                                <div className="info-label">TYPE</div>
-                                <div className="info-value">{bill.type}</div>
-                            </div>
-                        </div>
-
-                        {/* Customer Info */}
-                        {bill.customerName && (
-                            <div style={{ marginBottom: '20px', padding: '12px', backgroundColor: '#f0fdf4', borderLeft: '4px solid #10b981', borderRadius: '4px' }}>
-                                <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#065f46', marginBottom: '8px' }}>CUSTOMER DETAILS</div>
-                                <div style={{ fontSize: '13px', color: '#047857' }}>
-                                    <strong>Name:</strong> {bill.customerName}
-                                    {bill.customerPAN && (
-                                        <>
-                                            <br />
-                                            <strong>PAN:</strong> {bill.customerPAN}
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-
-                        {bill.type === 'Combined' && (
-                            <div style={{ marginBottom: '20px', padding: '10px', backgroundColor: '#f0f9ff', borderLeft: '4px solid #3b82f6' }}>
-                                <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#1e40af' }}>INVOICES INCLUDED</div>
-                                <div style={{ fontSize: '11px', color: '#1e3a8a', marginTop: '5px' }}>
-                                    {bill.invoiceNumbers.join(', ')}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Items Table */}
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th style={{ width: '50px' }}>S.N.</th>
-                                    <th>DESCRIPTION</th>
-                                    <th className="text-center" style={{ width: '100px' }}>QTY</th>
-                                    <th className="text-right" style={{ width: '120px' }}>RATE</th>
-                                    <th className="text-right" style={{ width: '120px' }}>AMOUNT</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {bill.items.map((item, idx) => (
-                                    <tr key={idx}>
-                                        <td className="text-center">{idx + 1}</td>
-                                        <td>{item.productName}</td>
-                                        <td className="text-center">{item.quantity}</td>
-                                        <td className="text-right">₹{item.rateBeforeVat.toFixed(2)}</td>
-                                        <td className="text-right">₹{item.total.toFixed(2)}</td>
-                                    </tr>
-                                ))}
-
-                                {/* Subtotal */}
-                                <tr style={{ borderTop: '2px solid #333' }}>
-                                    <td colSpan={4} className="text-right" style={{ fontWeight: 'bold', paddingTop: '10px' }}>SUBTOTAL</td>
-                                    <td className="text-right" style={{ fontWeight: 'bold', paddingTop: '10px' }}>
-                                        ₹{bill.subtotal.toFixed(2)}
-                                    </td>
-                                </tr>
-
-                                {/* Discount */}
-                                {bill.discount > 0 && (
-                                    <tr>
-                                        <td colSpan={4} className="text-right">Discount</td>
-                                        <td className="text-right">-₹{bill.discount.toFixed(2)}</td>
-                                    </tr>
-                                )}
-
-                                {/* VAT */}
-                                <tr>
-                                    <td colSpan={4} className="text-right">VAT (13%)</td>
-                                    <td className="text-right">₹{bill.vatAmount.toFixed(2)}</td>
-                                </tr>
-
-                                {/* Grand Total */}
-                                <tr className="total-row" style={{ borderTop: '2px solid #333' }}>
-                                    <td colSpan={4} className="text-right" style={{ fontWeight: 'bold', fontSize: '15px' }}>GRAND TOTAL</td>
-                                    <td className="text-right" style={{ fontWeight: 'bold', fontSize: '16px' }}>
-                                        ₹{bill.totalAmount.toFixed(2)}
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-
-                        {/* Amount in Words */}
-                        <div style={{ marginTop: '20px', padding: '10px', backgroundColor: '#f9fafb', borderRadius: '4px' }}>
-                            <div style={{ fontSize: '12px', fontWeight: 'bold' }}>Amount in Words:</div>
-                            <div style={{ fontSize: '13px', marginTop: '5px' }}>
-                                {/* You can add a number-to-words converter here */}
-                                Rupees {bill.totalAmount.toFixed(2)} Only
-                            </div>
-                        </div>
-
-                        {/* Footer */}
-                        <div className="footer">
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '60px' }}>
-                                <div>
-                                    <div>_____________________</div>
-                                    <div style={{ marginTop: '5px' }}>Prepared By</div>
-                                </div>
-                                <div>
-                                    <div>_____________________</div>
-                                    <div style={{ marginTop: '5px' }}>Authorized Signature</div>
-                                </div>
-                            </div>
-                            <div style={{ textAlign: 'center', marginTop: '30px', fontSize: '11px' }}>
-                                This is a computer-generated document. No signature required.
-                            </div>
-                        </div>
-                    </div>
+                    <div
+                        id={`vat-bill-${bill.id}`}
+                        className="bg-white p-2 rounded-lg shadow"
+                        dangerouslySetInnerHTML={{ __html: renderVatInvoiceHTML(bill) }}
+                    />
                 </div>
 
                 <div className="p-4 bg-white border-t flex justify-end gap-3">
                     <Button variant="outline" onClick={onClose}>Close</Button>
+                    <Button variant="outline" className="border-indigo-600 text-indigo-600 hover:bg-indigo-50" onClick={handlePrint}>
+                        <Printer className="mr-2 h-4 w-4" /> Print
+                    </Button>
                     <Button className="bg-indigo-600 hover:bg-indigo-700 text-white" onClick={handleExportPDF}>
                         <Download className="mr-2 h-4 w-4" /> Export as PDF
                     </Button>
