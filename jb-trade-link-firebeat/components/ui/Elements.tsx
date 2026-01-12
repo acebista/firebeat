@@ -230,7 +230,11 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
         {/* Icons */}
         <div className="absolute inset-y-0 right-0 flex items-center pr-3">
           {value && !disabled && (
-             <button onClick={handleClear} className="text-slate-400 hover:text-slate-600 mr-2 transition-colors">
+             <button
+               onClick={handleClear}
+               className="text-slate-400 hover:text-slate-600 mr-2 transition-colors"
+               aria-label="Clear selection"
+             >
                <X className="h-4 w-4" />
              </button>
           )}
