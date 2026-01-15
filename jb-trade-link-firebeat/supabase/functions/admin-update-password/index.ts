@@ -36,24 +36,6 @@ Deno.serve(async (req) => {
             )
         }
 
-        // Create a Supabase client with the user's JWT
-        const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-            global: { headers: { Authorization: authHeader } }
-        })
-
-        // Verify the user
-        const { data: { user: callerUser }, error: userError } = await userClient.auth.getUser()
-
-        if (userError || !callerUser) {
-            console.error('[admin-update-password] Auth error:', userError?.message)
-            return new Response(
-                JSON.stringify({ error: 'Invalid authentication' }),
-                { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            )
-        }
-
-        console.log(`[admin-update-password] Caller authenticated: ${callerUser.id}`)
-
         // Create admin client with service role key (bypasses RLS)
         const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
             auth: {
@@ -61,6 +43,20 @@ Deno.serve(async (req) => {
                 persistSession: false
             }
         })
+
+        // Verify the user using the admin client and the provided JWT
+        const token = authHeader.replace('Bearer ', '')
+        const { data: { user: callerUser }, error: userError } = await adminClient.auth.getUser(token)
+
+        if (userError || !callerUser) {
+            console.error('[admin-update-password] Auth error:', userError?.message)
+            return new Response(
+                JSON.stringify({ error: 'Invalid authentication', details: userError?.message }),
+                { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            )
+        }
+
+        console.log(`[admin-update-password] Caller authenticated: ${callerUser.id}`)
 
         // Check if caller is an admin by looking up their role in the public.users table
         const { data: callerProfile, error: profileError } = await adminClient
