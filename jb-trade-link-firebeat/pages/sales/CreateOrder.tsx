@@ -26,6 +26,7 @@ export const CreateOrder: React.FC = () => {
     const [cart, setCart] = useState<OrderItem[]>([]);
     const [orderDiscountPct, setOrderDiscountPct] = useState(0);
     const [isCartOpen, setIsCartOpen] = useState(false); // Mobile cart sheet
+    const [paymentMode, setPaymentMode] = useState<'Cash' | 'Cheque' | 'Credit' | 'QR'>('Cash');
 
     // Filters / Selections
     const [selectedCustomer, setSelectedCustomer] = useState('');
@@ -106,6 +107,7 @@ export const CreateOrder: React.FC = () => {
                                             if (draft.selectedCompany) setSelectedCompany(draft.selectedCompany);
                                             if (draft.selectedSalesperson) setSelectedSalesperson(draft.selectedSalesperson);
                                             if (draft.orderDiscountPct) setOrderDiscountPct(draft.orderDiscountPct);
+                                            if (draft.paymentMode) setPaymentMode(draft.paymentMode);
                                             toast.success('Draft restored!');
                                             toast.dismiss(t.id);
                                         }}
@@ -144,6 +146,7 @@ export const CreateOrder: React.FC = () => {
                 selectedCompany,
                 selectedSalesperson,
                 orderDiscountPct,
+                paymentMode,
                 savedAt: new Date().toISOString()
             };
             localStorage.setItem(`draft_order_${user?.id}`, JSON.stringify(draftData));
@@ -503,7 +506,8 @@ export const CreateOrder: React.FC = () => {
             items: cart,
             remarks: '',
             GPS: gpsCoords || undefined,
-            time: new Date().toISOString()
+            time: new Date().toISOString(),
+            paymentMode: paymentMode
         };
 
         try {
@@ -891,15 +895,14 @@ export const CreateOrder: React.FC = () => {
 
                         {/* Cart Footer - Totals & Actions */}
                         <div className="p-4 border-t border-gray-200 bg-gray-50 space-y-3">
-                            {/* Totals */}
+                            {/* Totals & Discount */}
                             <div className="space-y-2 text-sm">
                                 <div className="flex justify-between text-gray-600">
                                     <span>Subtotal</span>
                                     <span className="font-medium">₹{subtotalAmount.toFixed(2)}</span>
                                 </div>
 
-                                {/* Discount */}
-                                <div className="flex items-center justify-between py-2 border-t border-gray-200">
+                                <div className="flex items-center justify-between py-2 border-t border-blue-100">
                                     <label className="text-xs font-medium text-gray-600">Discount %:</label>
                                     <div className="flex items-center gap-2">
                                         <input
@@ -920,14 +923,34 @@ export const CreateOrder: React.FC = () => {
                                     </div>
                                 </div>
 
-                                <div className="flex justify-between font-bold text-lg text-gray-900 pt-2 border-t border-gray-200">
+                                {/* Payment Mode Selection */}
+                                <div className="space-y-2 py-3 border-t border-blue-100">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Collection Method</label>
+                                    <div className="grid grid-cols-4 gap-2">
+                                        {(['Cash', 'Cheque', 'Credit', 'QR'] as const).map((mode) => (
+                                            <button
+                                                key={mode}
+                                                type="button"
+                                                onClick={() => setPaymentMode(mode)}
+                                                className={`py-2 text-xs font-bold rounded-lg border-2 transition-all ${paymentMode === mode
+                                                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm scale-105'
+                                                    : 'bg-white border-gray-200 text-gray-500 hover:border-indigo-200'
+                                                    }`}
+                                            >
+                                                {mode}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-between font-bold text-lg text-gray-900 pt-3 border-t-2 border-indigo-100">
                                     <span>Total</span>
                                     <span className="text-indigo-700">₹{finalTotal.toFixed(2)}</span>
                                 </div>
                             </div>
 
                             {/* Action Buttons */}
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-2 gap-3 pt-2">
                                 <button
                                     onClick={clearCart}
                                     className="px-4 py-3 rounded-xl border-2 border-red-200 text-red-600 font-medium hover:bg-red-50 active:scale-95 transition-all"
@@ -937,7 +960,7 @@ export const CreateOrder: React.FC = () => {
                                 <button
                                     onClick={handlePlaceOrder}
                                     disabled={cart.length === 0}
-                                    className="px-4 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                                    className="px-4 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-100"
                                 >
                                     <Save className="h-5 w-5" />
                                     Place Order

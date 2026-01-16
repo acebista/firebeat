@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Input, Button, SearchableSelect } from '../../components/ui/Elements';
 import { Modal } from '../../components/ui/Modal';
-import { Search, Trash2, ShoppingBag, ShoppingCart, Building2, X, UserPlus, Phone, CreditCard, MapPin, Navigation, Save } from 'lucide-react';
+import { Search, Trash2, ShoppingBag, ShoppingCart, Building2, X, UserPlus, Phone, CreditCard, MapPin, Navigation, Save, Plus, Minus, ChevronUp } from 'lucide-react';
 import { Product, OrderItem, Customer, Order, Company, Salesperson } from '../../types';
 import { useAuth } from '../../services/auth';
 import { ProductService, CustomerService, CompanyService, OrderService, UserService } from '../../services/db';
@@ -25,6 +25,8 @@ export const EditOrder: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [cart, setCart] = useState<OrderItem[]>([]);
     const [orderDiscountPct, setOrderDiscountPct] = useState(0); // User enters percentage
+    const [paymentMode, setPaymentMode] = useState<'Cash' | 'Cheque' | 'Credit' | 'QR'>('Cash');
+    const [isCartOpen, setIsCartOpen] = useState(false); // Mobile cart sheet
 
     // Filters / Selections
     const [selectedCustomer, setSelectedCustomer] = useState('');
@@ -63,42 +65,43 @@ export const EditOrder: React.FC = () => {
                 setCustomers(custs);
                 setSalespersons(users.filter(u => u.role === 'sales').map(u => ({ id: u.id, name: u.name })));
 
-                    // Load Order Data if ID exists
-                    if (id) {
-                        const order = await OrderService.getById(id);
-                        if (order) {
-                            // ACCESS CONTROL: Check if user can edit this order
-                            const today = new Date().toISOString().split('T')[0];
-                            const canEdit =
-                                order.date === today &&
-                                (user?.role === 'admin' || order.salespersonId === user?.id);
+                // Load Order Data if ID exists
+                if (id) {
+                    const order = await OrderService.getById(id);
+                    if (order) {
+                        // ACCESS CONTROL: Check if user can edit this order
+                        const today = new Date().toISOString().split('T')[0];
+                        const canEdit =
+                            order.date === today &&
+                            (user?.role === 'admin' || order.salespersonId === user?.id);
 
-                            if (!canEdit) {
-                                toast.error('You do not have permission to edit this order. Orders can only be edited on the same day they were created.');
-                                navigate('/sales/orders');
-                                return;
-                            }
-
-                            setCart(order.items);
-                            setSelectedCustomer(order.customerId);
-                            setSelectedSalesperson(order.salespersonId);
-
-                            // Calculate discount pct from amount if needed
-                            const subTotal = order.items.reduce((sum: number, i: any) => sum + (i.total || 0), 0);
-                            if (subTotal > 0 && order.discount) {
-                                setOrderDiscountPct((order.discount / subTotal) * 100);
-                            }
-
-                            // Set company based on first item
-                            if (order.items.length > 0) {
-                                const firstProd = prods.find(p => p.id === order.items[0].productId);
-                                if (firstProd) setSelectedCompany(firstProd.companyId);
-                            }
-                        } else {
-                            toast.error('Order not found');
+                        if (!canEdit) {
+                            toast.error('You do not have permission to edit this order. Orders can only be edited on the same day they were created.');
                             navigate('/sales/orders');
+                            return;
                         }
+
+                        setCart(order.items);
+                        setSelectedCustomer(order.customerId);
+                        setSelectedSalesperson(order.salespersonId);
+                        if (order.paymentMode) setPaymentMode(order.paymentMode as any);
+
+                        // Calculate discount pct from amount if needed
+                        const subTotal = order.items.reduce((sum: number, i: any) => sum + (i.total || 0), 0);
+                        if (subTotal > 0 && order.discount) {
+                            setOrderDiscountPct((order.discount / subTotal) * 100);
+                        }
+
+                        // Set company based on first item
+                        if (order.items.length > 0) {
+                            const firstProd = prods.find(p => p.id === order.items[0].productId);
+                            if (firstProd) setSelectedCompany(firstProd.companyId);
+                        }
+                    } else {
+                        toast.error('Order not found');
+                        navigate('/sales/orders');
                     }
+                }
 
             } catch (e) {
                 console.error(e);
@@ -339,6 +342,7 @@ export const EditOrder: React.FC = () => {
             totalAmount: finalTotal,
             discount: discountAmount,
             items: cart,
+            paymentMode: paymentMode,
             // Keep original date/status/id
         };
 
@@ -535,8 +539,8 @@ export const EditOrder: React.FC = () => {
                 </div>
             </div>
 
-            {/* Right: Order Cart */}
-            <div className="lg:w-96 bg-white border-l border-gray-200 flex flex-col h-full shadow-xl lg:shadow-none z-30">
+            {/* Right: Order Cart (Desktop) */}
+            <div className="hidden lg:flex lg:w-96 bg-white border-l border-gray-200 flex-col h-full shadow-xl lg:shadow-none z-30">
                 <div className="p-4 border-b border-gray-200 bg-indigo-50">
                     <div className="flex items-center justify-between mb-1">
                         <h3 className="font-bold text-indigo-900 flex items-center gap-2">
@@ -635,41 +639,196 @@ export const EditOrder: React.FC = () => {
                         </div>
 
                         {/* Discount Input - Percentage based, stores as amount */}
-                        <div className="flex items-center gap-2 py-2 border-t border-gray-200">
+                        <div className="flex items-center justify-between py-2 border-t border-gray-200">
                             <label className="text-xs text-gray-600 font-medium">Discount %:</label>
-                            <input
-                                type="number"
-                                min="0"
-                                max="100"
-                                step="0.1"
-                                value={orderDiscountPct}
-                                onChange={(e) => setOrderDiscountPct(Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))}
-                                className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500"
-                                placeholder="0"
-                            />
-                            {orderDiscountPct > 0 && (
-                                <span className="text-xs text-red-600 font-medium">
-                                    -₹{discountAmount.toFixed(2)}
-                                </span>
-                            )}
-                        </div>
-
-                        <div className="flex justify-between font-bold text-lg text-gray-900 pt-2 border-t border-gray-200">
-                            <span>Total Payable</span>
-                            <span>₹{finalTotal.toFixed(2)}</span>
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    step="0.1"
+                                    value={orderDiscountPct}
+                                    onChange={(e) => setOrderDiscountPct(Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))}
+                                    className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500"
+                                    placeholder="0"
+                                />
+                                {orderDiscountPct > 0 && (
+                                    <span className="text-xs text-red-600 font-medium">
+                                        -₹{discountAmount.toFixed(2)}
+                                    </span>
+                                )}
+                            </div>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                        <Button variant="outline" onClick={clearCart} disabled={cart.length === 0} className="border-red-200 text-red-600 hover:bg-red-50">
-                            Clear
-                        </Button>
-                        <Button onClick={handleUpdateOrder} disabled={cart.length === 0 || !selectedCustomer}>
-                            <Save className="mr-2 h-4 w-4" /> Update Order
-                        </Button>
+                    {/* Payment Mode Selection */}
+                    <div className="space-y-2 py-3 border-t border-indigo-100">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Collection Method</label>
+                        <div className="grid grid-cols-4 gap-2">
+                            {(['Cash', 'Cheque', 'Credit', 'QR'] as const).map((mode) => (
+                                <button
+                                    key={mode}
+                                    type="button"
+                                    onClick={() => setPaymentMode(mode)}
+                                    className={`py-2 text-xs font-bold rounded-lg border-2 transition-all ${paymentMode === mode
+                                        ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm scale-105'
+                                        : 'bg-white border-gray-200 text-gray-500 hover:border-indigo-200'
+                                        }`}
+                                >
+                                    {mode}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="flex justify-between font-bold text-lg text-gray-900 pt-2 border-t border-gray-200">
+                        <span>Total Payable</span>
+                        <span>₹{finalTotal.toFixed(2)}</span>
                     </div>
                 </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                    <Button variant="outline" onClick={clearCart} disabled={cart.length === 0} className="border-red-200 text-red-600 hover:bg-red-50">
+                        Clear
+                    </Button>
+                    <Button onClick={handleUpdateOrder} disabled={cart.length === 0 || !selectedCustomer}>
+                        <Save className="mr-2 h-4 w-4" /> Update Order
+                    </Button>
+                </div>
             </div>
+
+            {/* Floating Cart Button (Mobile) */}
+            {cart.length > 0 && (
+                <button
+                    onClick={() => setIsCartOpen(true)}
+                    className="lg:hidden fixed bottom-6 right-6 z-50 bg-indigo-600 text-white rounded-full p-4 shadow-2xl active:scale-95 transition-all hover:bg-indigo-700 flex items-center gap-3"
+                >
+                    <ShoppingCart className="h-6 w-6" />
+                    <div className="flex flex-col items-start">
+                        <span className="text-xs opacity-90">Cart</span>
+                        <span className="font-bold">{cart.length} items</span>
+                    </div>
+                    <div className="absolute -top-1 -right-1 bg-yellow-400 text-gray-900 text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center border-2 border-white">
+                        {cart.length}
+                    </div>
+                </button>
+            )}
+
+            {/* Bottom Sheet Cart (Mobile) */}
+            {isCartOpen && (
+                <div className="lg:hidden fixed inset-0 z-50 flex flex-col bg-black/50" onClick={() => setIsCartOpen(false)}>
+                    <div
+                        className="mt-auto bg-white rounded-t-3xl max-h-[90vh] flex flex-col animate-in slide-in-from-bottom duration-300"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Cart Header */}
+                        <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-indigo-50 rounded-t-3xl">
+                            <div className="flex items-center gap-3">
+                                <ShoppingBag className="h-6 w-6 text-indigo-600" />
+                                <div>
+                                    <h3 className="font-bold text-indigo-900">Current Order</h3>
+                                    <p className="text-xs text-indigo-600">{cart.length} items</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setIsCartOpen(false)} className="p-2 hover:bg-indigo-100 rounded-full">
+                                <ChevronUp className="h-6 w-6 text-indigo-600" />
+                            </button>
+                        </div>
+
+                        {/* Cart Items */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                            {cart.map((item) => {
+                                const product = products.find(p => p.id === item.productId);
+                                const minQty = product?.minOrderQty || 1;
+                                const multiple = product?.orderMultiple || 1;
+                                const isMinError = item.qty < minQty;
+                                const isMultipleError = item.qty % multiple !== 0;
+                                const hasError = isMinError || isMultipleError;
+
+                                return (
+                                    <div key={item.productId} className={`bg-white border-2 rounded-xl p-3 ${hasError ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}>
+                                        <div className="flex justify-between items-start mb-3">
+                                            <div className="flex-1 pr-2">
+                                                <h4 className="text-sm font-bold text-gray-900 leading-tight">{item.productName}</h4>
+                                                {item.schemeAppliedText && <p className="text-[10px] text-green-600 font-bold mt-1">{item.schemeAppliedText}</p>}
+                                                {hasError && (
+                                                    <div className="mt-1 text-[10px] font-bold text-red-600">
+                                                        {isMinError && <span>• Min: {minQty} </span>}
+                                                        {isMultipleError && <span>• Multiple: {multiple}</span>}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <button onClick={() => removeFromCart(item.productId)} className="text-gray-300 hover:text-red-500">
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
+
+                                        <div className="flex items-center justify-between mt-auto">
+                                            <div className="flex items-center bg-gray-100 rounded-lg p-1 border border-gray-200">
+                                                <button onClick={() => updateQty(item.productId, item.qty - 1)} className="p-1 px-3 bg-white rounded shadow-sm hover:bg-gray-50 active:scale-95 transition-all text-indigo-600 font-black">-</button>
+                                                <input
+                                                    type="number"
+                                                    value={item.qty}
+                                                    onChange={(e) => updateQty(item.productId, parseInt(e.target.value) || 0)}
+                                                    className="w-10 text-center bg-transparent border-none text-sm font-bold focus:ring-0"
+                                                />
+                                                <button onClick={() => updateQty(item.productId, item.qty + 1)} className="p-1 px-3 bg-white rounded shadow-sm hover:bg-gray-50 active:scale-95 transition-all text-indigo-600 font-black">+</button>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-[10px] text-gray-500 line-through">₹{(item.baseRate || 0).toFixed(2)}</p>
+                                                <p className="text-sm font-black text-indigo-700">₹{item.total.toFixed(2)}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {/* Cart Footer */}
+                        <div className="p-4 bg-gray-50 border-t border-gray-200">
+                            {/* Collection Selection - Mobile */}
+                            <div className="mb-4">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Collection Method</label>
+                                <div className="grid grid-cols-4 gap-2">
+                                    {(['Cash', 'Cheque', 'Credit', 'QR'] as const).map((mode) => (
+                                        <button
+                                            key={mode}
+                                            onClick={() => setPaymentMode(mode)}
+                                            className={`py-2 text-[10px] font-bold rounded-lg border-2 transition-all ${paymentMode === mode ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white border-gray-200 text-gray-500'}`}
+                                        >
+                                            {mode}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="space-y-1 mb-4">
+                                <div className="flex justify-between text-sm text-gray-600">
+                                    <span>Subtotal</span>
+                                    <span>₹{subtotalAmount.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between text-sm text-red-600 font-medium">
+                                    <span>Discount ({orderDiscountPct}%)</span>
+                                    <span>-₹{discountAmount.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between font-bold text-xl text-indigo-900 pt-2 border-t">
+                                    <span>Total Payable</span>
+                                    <span>₹{finalTotal.toFixed(2)}</span>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3 pb-4">
+                                <Button variant="outline" className="h-12 border-red-200 text-red-600 font-bold" onClick={clearCart}>
+                                    Clear
+                                </Button>
+                                <Button className="h-12 bg-indigo-600 text-white font-bold" onClick={handleUpdateOrder}>
+                                    <Save className="mr-2 h-5 w-5" /> Update
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Quick Add Customer Modal */}
             <Modal isOpen={isAddCustomerOpen} onClose={() => setAddCustomerOpen(false)} title="Quick Add Customer">
@@ -703,7 +862,6 @@ export const EditOrder: React.FC = () => {
                     </div>
                 </div>
             </Modal>
-
         </div>
     );
 };
