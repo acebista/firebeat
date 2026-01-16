@@ -440,6 +440,20 @@ export const OrderService = {
     return data as Order[];
   },
 
+  // PHASE 1: Get last order for a customer
+  getLastOrder: async (customerId: string): Promise<Order | null> => {
+    const { data, error } = await supabase
+      .from(COLS.ORDERS)
+      .select('*')
+      .eq('customerId', customerId)
+      .order('date', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error) return null;
+    return data as Order;
+  },
+
   getOrdersByDateRangePaged: async (startDate: string, endDate: string) => {
     let from = 0;
     const batchSize = 1000;

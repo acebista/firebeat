@@ -32,6 +32,11 @@ export const CreateOrder: React.FC = () => {
     const [selectedCompany, setSelectedCompany] = useState('');
     const [selectedSalesperson, setSelectedSalesperson] = useState('');
 
+    // PHASE 1: New filter states
+    const [hideOutOfStock, setHideOutOfStock] = useState(false);
+    const [lastOrder, setLastOrder] = useState<Order | null>(null);
+    const [showLastOrderItems, setShowLastOrderItems] = useState(false);
+
     // Editable Customer Details State
     const [editableCustomer, setEditableCustomer] = useState({
         phone: '',
@@ -72,6 +77,96 @@ export const CreateOrder: React.FC = () => {
         };
         loadAll();
     }, []);
+
+    // PHASE 1: Auto-restore draft order on mount
+    useEffect(() => {
+        const draftKey = `draft_order_${user?.id}`;
+        const draftStr = localStorage.getItem(draftKey);
+
+        if (draftStr && products.length > 0) {
+            try {
+                const draft = JSON.parse(draftStr);
+                const savedTime = new Date(draft.savedAt);
+                const hoursSince = (Date.now() - savedTime.getTime()) / (1000 * 60 * 60);
+
+                // Only restore if less than 24 hours old and cart is empty
+                if (hoursSince < 24 && cart.length === 0) {
+                    toast(
+                        (t) => (
+                            <div>
+                                <p className="font-bold">Resume draft order?</p>
+                                <p className="text-sm text-gray-600">
+                                    {draft.cart?.length || 0} items from {new Date(draft.savedAt).toLocaleString()}
+                                </p>
+                                <div className="flex gap-2 mt-2">
+                                    <button
+                                        onClick={() => {
+                                            if (draft.cart) setCart(draft.cart);
+                                            if (draft.selectedCustomer) setSelectedCustomer(draft.selectedCustomer);
+                                            if (draft.selectedCompany) setSelectedCompany(draft.selectedCompany);
+                                            if (draft.selectedSalesperson) setSelectedSalesperson(draft.selectedSalesperson);
+                                            if (draft.orderDiscountPct) setOrderDiscountPct(draft.orderDiscountPct);
+                                            toast.success('Draft restored!');
+                                            toast.dismiss(t.id);
+                                        }}
+                                        className="px-3 py-1 bg-indigo-600 text-white rounded text-sm"
+                                    >
+                                        Resume
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            localStorage.removeItem(draftKey);
+                                            toast.dismiss(t.id);
+                                        }}
+                                        className="px-3 py-1 bg-gray-300 rounded text-sm"
+                                    >
+                                        Discard
+                                    </button>
+                                </div>
+                            </div>
+                        ),
+                        { duration: 10000 }
+                    );
+                }
+            } catch (error) {
+                console.error('Failed to parse draft order:', error);
+                localStorage.removeItem(draftKey);
+            }
+        }
+    }, [user?.id, products]);
+
+    // PHASE 1: Auto-save cart to localStorage
+    useEffect(() => {
+        if (cart.length > 0 || selectedCustomer) {
+            const draftData = {
+                cart,
+                selectedCustomer,
+                selectedCompany,
+                selectedSalesperson,
+                orderDiscountPct,
+                savedAt: new Date().toISOString()
+            };
+            localStorage.setItem(`draft_order_${user?.id}`, JSON.stringify(draftData));
+        } else {
+            // Clear draft if cart is empty and no customer selected
+            localStorage.removeItem(`draft_order_${user?.id}`);
+        }
+    }, [cart, selectedCustomer, selectedCompany, orderDiscountPct, selectedSalesperson, user?.id]);
+
+    // PHASE 1: Load last order when customer is selected
+    useEffect(() => {
+        if (selectedCustomer) {
+            OrderService.getLastOrder(selectedCustomer).then(order => {
+                setLastOrder(order);
+                setShowLastOrderItems(false); // Reset collapse state
+            }).catch(() => {
+                setLastOrder(null);
+            });
+        } else {
+            setLastOrder(null);
+            setShowLastOrderItems(false);
+        }
+    }, [selectedCustomer]);
 
     // --- 1 Bill Per Company Logic ---
     const cartLockedCompanyId = cart.length > 0 ? products.find(p => p.id === cart[0].productId)?.companyId : null;
@@ -351,7 +446,17 @@ export const CreateOrder: React.FC = () => {
     };
 
     const handlePlaceOrder = async () => {
-        if (!selectedCustomer || cart.length === 0) return;
+        // PHASE 1: Validate customer selection with proper UX
+        if (!selectedCustomer) {
+            toast.error("Please select a customer before placing order");
+            setIsCartOpen(true); // Keep cart open so user can see items
+            return;
+        }
+
+        if (cart.length === 0) {
+            toast.error("Cart is empty");
+            return;
+        }
 
         const errors = validateCart();
         if (errors.length > 0) {
@@ -403,6 +508,10 @@ export const CreateOrder: React.FC = () => {
 
         try {
             await OrderService.add(orderData);
+
+            // PHASE 1: Clear draft after successful order
+            localStorage.removeItem(`draft_order_${user?.id}`);
+
             toast.success(`✓ Order #${invoiceId} - ₹${finalTotal.toFixed(0)}`);
             setCart([]);
             setSelectedCompany('');
@@ -414,11 +523,60 @@ export const CreateOrder: React.FC = () => {
         }
     };
 
+
+    // PHASE 1: Duplicate last order for quick reorder
+    const duplicateOrder = (order: Order) => {
+        // Clear existing cart
+        setCart([]);
+
+        // Populate cart with order items, recalculating with current pricing
+        const newCart: OrderItem[] = [];
+
+        order.items.forEach(item => {
+            const product = products.find(p => p.id === item.productId);
+            if (!product) return;
+
+            // Handle legacy field names (quantity vs qty)
+            const itemQty = item.qty || item.quantity || 0;
+            if (itemQty === 0) return;
+
+            // Recalculate pricing with current rates
+            const pricing = calculateItemPricing(product, itemQty);
+
+            newCart.push({
+                productId: item.productId,
+                productName: product.name,
+                qty: itemQty,
+                rate: pricing.netRate,
+                baseRate: pricing.baseRate,
+                discountPct: pricing.discountPct,
+                total: pricing.total,
+                schemeAppliedText: pricing.schemeAppliedText,
+                companyId: product.companyId,
+                companyName: product.companyName,
+                packetsPerCarton: product.packetsPerCarton || 1,
+                piecesPerPacket: product.piecesPerPacket || 1
+            } as OrderItem);
+        });
+
+        setCart(newCart);
+
+        // Set company filter
+        if (newCart.length > 0) {
+            setSelectedCompany(newCart[0].companyId || '');
+        }
+
+        toast.success(`Loaded ${newCart.length} items from last order`);
+        setIsCartOpen(true);
+    };
+
     const filteredProducts = products.filter(p => {
         const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             p.category?.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesCompany = selectedCompany ? p.companyId === selectedCompany : true;
-        return matchesSearch && matchesCompany;
+        // PHASE 1: Add hide out of stock filter
+        const matchesStock = hideOutOfStock ? !p.stockOut : true;
+        return matchesSearch && matchesCompany && matchesStock;
     });
 
     const subtotalAmount = cart.reduce((acc, item) => acc + item.total, 0);
@@ -508,8 +666,67 @@ export const CreateOrder: React.FC = () => {
                                 <option key={c.id} value={c.id}>{c.name}</option>
                             ))}
                         </select>
+
+                        {/* PHASE 1: Hide Out of Stock Toggle */}
+                        <div className="flex items-center gap-2 px-1">
+                            <input
+                                type="checkbox"
+                                id="hide-out-of-stock"
+                                checked={hideOutOfStock}
+                                onChange={(e) => setHideOutOfStock(e.target.checked)}
+                                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                            />
+                            <label htmlFor="hide-out-of-stock" className="text-sm text-gray-700 select-none">
+                                Hide out of stock items
+                            </label>
+                        </div>
                     </div>
                 </div>
+
+                {/* PHASE 1: Last Order Widget - Show when customer selected */}
+                {selectedCustomer && lastOrder && (
+                    <div className="mx-3 mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg shadow-sm">
+                        <div className="flex justify-between items-start mb-2">
+                            <div>
+                                <p className="text-xs text-blue-600 font-medium">📦 Last Order</p>
+                                <p className="text-sm text-gray-700">
+                                    {new Date(lastOrder.date).toLocaleDateString()} •
+                                    {lastOrder.items.length} items •
+                                    ₹{lastOrder.totalAmount.toLocaleString()}
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setShowLastOrderItems(!showLastOrderItems)}
+                                className="px-3 py-1 bg-white border border-blue-200 text-blue-600 text-xs font-bold rounded-full shadow-sm active:scale-95 transition-all"
+                            >
+                                {showLastOrderItems ? 'Hide' : 'View Items'}
+                            </button>
+                        </div>
+
+                        {showLastOrderItems && (
+                            <div className="mb-3 mt-2 space-y-1 bg-white/60 p-2 rounded-lg border border-blue-100 divide-y divide-blue-50">
+                                {lastOrder.items.map((item, idx) => (
+                                    <div key={idx} className="flex justify-between items-center py-1.5 px-1 first:pt-0 last:pb-0">
+                                        <span className="text-xs text-gray-800 font-medium line-clamp-1 flex-1 pr-2">
+                                            {item.productName || item.tempProductName || 'Unknown Product'}
+                                        </span>
+                                        <span className="text-xs font-bold text-blue-700 whitespace-nowrap">
+                                            x{item.qty || item.quantity || 0}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        <button
+                            onClick={() => duplicateOrder(lastOrder)}
+                            className="w-full px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-sm shadow-blue-200"
+                        >
+                            <ShoppingCart className="h-4 w-4" />
+                            🔄 Reorder Same Items
+                        </button>
+                    </div>
+                )}
 
                 {/* Product Grid */}
                 <div className="p-3 grid grid-cols-2 gap-3">
@@ -519,8 +736,8 @@ export const CreateOrder: React.FC = () => {
                             onClick={() => addToCart(product)}
                             disabled={product.stockOut}
                             className={`bg-white rounded-xl p-3 text-left border-2 active:scale-95 transition-all ${product.stockOut
-                                    ? 'opacity-50 border-gray-200'
-                                    : 'border-gray-200 hover:border-indigo-300 active:border-indigo-500'
+                                ? 'opacity-50 border-gray-200'
+                                : 'border-gray-200 hover:border-indigo-300 active:border-indigo-500'
                                 }`}
                         >
                             <div>
@@ -719,7 +936,7 @@ export const CreateOrder: React.FC = () => {
                                 </button>
                                 <button
                                     onClick={handlePlaceOrder}
-                                    disabled={!selectedCustomer || cart.length === 0}
+                                    disabled={cart.length === 0}
                                     className="px-4 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
                                 >
                                     <Save className="h-5 w-5" />
