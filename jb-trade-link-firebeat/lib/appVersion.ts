@@ -1,6 +1,6 @@
 // App Version - Increment this to force all users to refresh
 // Format: YYYYMMDD-HHmm
-export const APP_VERSION = '20260118-1050';
+export const APP_VERSION = '20260118-1115';
 
 // Check if the app needs a forced refresh
 export const checkAppVersion = (): boolean => {

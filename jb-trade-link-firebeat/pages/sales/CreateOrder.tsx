@@ -723,31 +723,31 @@ export const CreateOrder: React.FC = () => {
             {/* MOBILE-FIRST LAYOUT */}
             <div className="pb-24 min-h-screen bg-gray-50" style={{ fontSize: `${zoomLevel}%` }}>
 
-                {/* Zoom Controls - Fixed position */}
-                <div className="fixed bottom-28 right-4 z-50 flex flex-col gap-1 bg-white rounded-lg shadow-lg border border-gray-200 p-1">
+                {/* Zoom Controls - Fixed position bottom-right */}
+                <div className="fixed bottom-32 right-4 z-[9999] flex flex-col items-center gap-0.5 bg-indigo-600 rounded-xl shadow-2xl p-1.5">
                     <button
                         onClick={zoomIn}
-                        className="p-2 hover:bg-gray-100 rounded active:scale-95 transition-all"
+                        className="w-10 h-10 flex items-center justify-center bg-white rounded-lg hover:bg-indigo-50 active:scale-95 transition-all"
                         aria-label="Zoom in"
-                        title="Zoom In"
+                        title="Zoom In (make text bigger)"
                     >
-                        <ZoomIn className="h-5 w-5 text-gray-600" />
+                        <span className="text-xl font-bold text-indigo-600">+</span>
                     </button>
                     <button
                         onClick={resetZoom}
-                        className="p-2 hover:bg-gray-100 rounded active:scale-95 transition-all text-xs font-medium text-gray-500"
+                        className="w-10 h-8 flex items-center justify-center text-white text-xs font-bold"
                         aria-label="Reset zoom"
-                        title="Reset Zoom"
+                        title="Tap to reset zoom"
                     >
                         {zoomLevel}%
                     </button>
                     <button
                         onClick={zoomOut}
-                        className="p-2 hover:bg-gray-100 rounded active:scale-95 transition-all"
+                        className="w-10 h-10 flex items-center justify-center bg-white rounded-lg hover:bg-indigo-50 active:scale-95 transition-all"
                         aria-label="Zoom out"
-                        title="Zoom Out"
+                        title="Zoom Out (make text smaller)"
                     >
-                        <ZoomOut className="h-5 w-5 text-gray-600" />
+                        <span className="text-xl font-bold text-indigo-600">−</span>
                     </button>
                 </div>
 
