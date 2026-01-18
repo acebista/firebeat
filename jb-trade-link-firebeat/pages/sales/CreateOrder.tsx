@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Input, Button, SearchableSelect } from '../../components/ui/Elements';
 import { Modal } from '../../components/ui/Modal';
-import { Search, Trash2, ShoppingBag, ShoppingCart, Building2, X, UserPlus, Phone, CreditCard, MapPin, Navigation, Save, Plus, Minus, ChevronUp } from 'lucide-react';
+import { Search, Trash2, ShoppingBag, ShoppingCart, Building2, X, UserPlus, Phone, CreditCard, MapPin, Navigation, Save, Plus, Minus, ChevronUp, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { Product, OrderItem, Customer, Order, Company, Salesperson } from '../../types';
 import { useAuth } from '../../services/auth';
 import { ProductService, CustomerService, CompanyService, OrderService, UserService } from '../../services/db';
@@ -55,6 +55,30 @@ export const CreateOrder: React.FC = () => {
     const [isGettingLocation, setIsGettingLocation] = useState(false);
     const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
     const [permissionStatus, setPermissionStatus] = useState<'unknown' | 'granted' | 'denied' | 'prompt'>('unknown');
+
+    // Zoom state - persisted to localStorage
+    const [zoomLevel, setZoomLevel] = useState(() => {
+        const saved = localStorage.getItem('createorder_zoom');
+        return saved ? parseFloat(saved) : 100;
+    });
+
+    // Zoom control functions
+    const zoomIn = () => {
+        const newZoom = Math.min(zoomLevel + 10, 150);
+        setZoomLevel(newZoom);
+        localStorage.setItem('createorder_zoom', String(newZoom));
+    };
+
+    const zoomOut = () => {
+        const newZoom = Math.max(zoomLevel - 10, 70);
+        setZoomLevel(newZoom);
+        localStorage.setItem('createorder_zoom', String(newZoom));
+    };
+
+    const resetZoom = () => {
+        setZoomLevel(100);
+        localStorage.setItem('createorder_zoom', '100');
+    };
 
     // Check permissions and session on load
     useEffect(() => {
@@ -697,7 +721,35 @@ export const CreateOrder: React.FC = () => {
     return (
         <>
             {/* MOBILE-FIRST LAYOUT */}
-            <div className="pb-24 min-h-screen bg-gray-50">
+            <div className="pb-24 min-h-screen bg-gray-50" style={{ fontSize: `${zoomLevel}%` }}>
+
+                {/* Zoom Controls - Fixed position */}
+                <div className="fixed bottom-28 right-4 z-50 flex flex-col gap-1 bg-white rounded-lg shadow-lg border border-gray-200 p-1">
+                    <button
+                        onClick={zoomIn}
+                        className="p-2 hover:bg-gray-100 rounded active:scale-95 transition-all"
+                        aria-label="Zoom in"
+                        title="Zoom In"
+                    >
+                        <ZoomIn className="h-5 w-5 text-gray-600" />
+                    </button>
+                    <button
+                        onClick={resetZoom}
+                        className="p-2 hover:bg-gray-100 rounded active:scale-95 transition-all text-xs font-medium text-gray-500"
+                        aria-label="Reset zoom"
+                        title="Reset Zoom"
+                    >
+                        {zoomLevel}%
+                    </button>
+                    <button
+                        onClick={zoomOut}
+                        className="p-2 hover:bg-gray-100 rounded active:scale-95 transition-all"
+                        aria-label="Zoom out"
+                        title="Zoom Out"
+                    >
+                        <ZoomOut className="h-5 w-5 text-gray-600" />
+                    </button>
+                </div>
 
                 {/* Sticky Header Filters */}
                 <div className="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm">
