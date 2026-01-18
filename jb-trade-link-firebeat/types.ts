@@ -116,7 +116,8 @@ export interface Order {
   salespersonPhone?: string;
   customerPhone?: string;
   customerPAN?: string;
-  paymentMode?: string;
+  paymentMode?: string; // Legacy - use paymentMethod instead
+  paymentMethod?: string; // Primary field - matches DB column
   // Delivery and reporting fields
   delivered_at?: string;
   delivered_by?: string;

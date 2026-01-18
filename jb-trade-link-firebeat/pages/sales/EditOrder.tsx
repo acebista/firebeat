@@ -84,7 +84,7 @@ export const EditOrder: React.FC = () => {
                         setCart(order.items);
                         setSelectedCustomer(order.customerId);
                         setSelectedSalesperson(order.salespersonId);
-                        if (order.paymentMode) setPaymentMode(order.paymentMode as any);
+                        if (order.paymentMethod || order.paymentMode) setPaymentMode((order.paymentMethod || order.paymentMode) as any);
 
                         // Calculate discount pct from amount if needed
                         const subTotal = order.items.reduce((sum: number, i: any) => sum + (i.total || 0), 0);
@@ -342,7 +342,7 @@ export const EditOrder: React.FC = () => {
             totalAmount: finalTotal,
             discount: discountAmount,
             items: cart,
-            paymentMode: paymentMode,
+            paymentMethod: paymentMode,
             // Keep original date/status/id
         };
 
