@@ -629,36 +629,54 @@ export const UserService = {
     // If email is being updated, use the Edge Function which has service role access
     if (data.email) {
       try {
+        // Refresh session first to ensure fresh token
+        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+        if (refreshError) {
+          console.warn('Session refresh failed:', refreshError.message);
+        }
+
         // Get current session for auth header
         const { data: sessionData } = await supabase.auth.getSession();
-        const accessToken = sessionData?.session?.access_token;
+        const accessToken = refreshData?.session?.access_token || sessionData?.session?.access_token;
 
-        if (accessToken) {
-          // Call the Edge Function to update email in auth.users
-          const response = await fetch(
-            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-update-password`,
-            {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${accessToken}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                userId: id,
-                newEmail: data.email
-              })
-            }
-          );
-
-          const result = await response.json();
-          if (result.error) {
-            console.error('Failed to update auth email via Edge Function:', result.error);
-            throw new Error(result.error);
-          }
-          console.log('Auth email updated successfully via Edge Function');
-        } else {
-          console.warn('No session token, skipping auth email update');
+        if (!accessToken) {
+          console.error('No access token available');
+          throw new Error('Your session has expired. Please log out and log back in.');
         }
+
+        console.log('[UserService.update] Calling Edge Function to update email...');
+
+        // Call the Edge Function to update email in auth.users
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-update-password`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              userId: id,
+              newEmail: data.email
+            })
+          }
+        );
+
+        const result = await response.json();
+        if (result.error) {
+          console.error('Failed to update auth email via Edge Function:', result.error);
+          throw new Error(result.error);
+        }
+        console.log('Auth email updated successfully via Edge Function:', result.message);
+
+        // Edge Function already updates the users table, so we can skip that
+        // But still update other fields if present
+        const { email: _, ...otherData } = data;
+        if (Object.keys(otherData).length > 0) {
+          const { error } = await supabase.from(COLS.USERS).update(otherData).eq('id', id);
+          if (error) throw error;
+        }
+        return; // Exit early - email update handled by Edge Function
       } catch (authUpdateError) {
         console.error('Error updating auth email:', authUpdateError);
         throw authUpdateError; // Don't silently fail - user needs to know
