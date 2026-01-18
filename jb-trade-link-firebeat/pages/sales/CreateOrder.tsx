@@ -496,7 +496,7 @@ export const CreateOrder: React.FC = () => {
 
     // Generate a guaranteed-unique invoice ID
     // Format: YYMMDD-XXXX where XXXX is a unique suffix
-    const generateInvoiceId = async (): Promise<string> => {
+    const generateStrictSequentialId = async (): Promise<string> => {
         const date = new Date();
         const yy = date.getFullYear().toString().slice(-2);
         const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -504,57 +504,42 @@ export const CreateOrder: React.FC = () => {
         const datePrefix = `${yy}${mm}${dd}`;
 
         try {
-            // Get count of today's orders to use as base
-            const { count, error } = await supabase
+            // Get the highest sequential number for today
+            const { data: todayOrders, error } = await supabase
                 .from('orders')
-                .select('*', { count: 'exact', head: true })
-                .like('id', `${datePrefix}-%`);
+                .select('id')
+                .like('id', `${datePrefix}-%`)
+                .order('id', { ascending: false })
+                .limit(1);
 
             if (error) throw error;
 
-            // Use count + 1 as base, add timestamp component for uniqueness
-            const baseSeq = (count || 0) + 1;
+            let nextSeq = 1;
+            if (todayOrders && todayOrders.length > 0) {
+                const lastInvoice = todayOrders[0].id;
+                const parts = lastInvoice.split('-');
+                if (parts.length >= 2) {
+                    const lastNum = parseInt(parts[1]);
+                    if (!isNaN(lastNum)) {
+                        nextSeq = lastNum + 1;
+                    }
+                }
+            }
 
-            // Add microsecond-level uniqueness: last 3 digits of timestamp + random
-            const microUnique = Date.now() % 1000;
-            const randomSuffix = Math.floor(Math.random() * 10);
-
-            // Combine: baseSeq * 10000 + micro * 10 + random gives unique number
-            const uniqueNum = baseSeq * 10000 + microUnique * 10 + randomSuffix;
-
-            return `${datePrefix}-${uniqueNum}`;
+            const seq = String(nextSeq).padStart(3, '0');
+            return `${datePrefix}-${seq}`;
         } catch (error) {
-            console.error('Error generating invoice ID:', error);
-            // Fallback: Pure timestamp-based ID (guaranteed unique)
-            const timestamp = Date.now().toString(36).toUpperCase();
-            const randomPart = Math.random().toString(36).slice(2, 5).toUpperCase();
-            return `${datePrefix}-${timestamp}${randomPart}`;
+            console.error('Error generating strict sequential ID:', error);
+            // Fallback: guaranteed unique but non-sequential for emergency
+            return `${datePrefix}-${Date.now().toString(36).toUpperCase()}`;
         }
     };
 
-    // Insert order with robust retry and guaranteed unique ID generation
-    const insertOrderWithRetry = async (orderData: any, maxRetries = 5): Promise<{ success: boolean; orderId?: string; error?: string }> => {
+    // Insert order with robust retry to handle multi-user collisions perfectly
+    const insertOrderWithRetry = async (orderData: any, maxRetries = 10): Promise<{ success: boolean; orderId?: string; error?: string }> => {
         for (let attempt = 0; attempt < maxRetries; attempt++) {
-            // Generate a fresh unique ID for each attempt
-            let invoiceId: string;
-
-            if (attempt === 0) {
-                // First attempt: use the standard generator
-                invoiceId = await generateInvoiceId();
-            } else {
-                // Subsequent attempts: use guaranteed-unique fallback format
-                const date = new Date();
-                const yy = date.getFullYear().toString().slice(-2);
-                const mm = String(date.getMonth() + 1).padStart(2, '0');
-                const dd = String(date.getDate()).padStart(2, '0');
-                const datePrefix = `${yy}${mm}${dd}`;
-
-                // Use full timestamp + random for guaranteed uniqueness
-                const ts = Date.now().toString(36).toUpperCase();
-                const rand = Math.random().toString(36).slice(2, 4).toUpperCase();
-                invoiceId = `${datePrefix}-${ts}${rand}`;
-            }
-
+            // Always get the LATEST next sequential ID
+            const invoiceId = await generateStrictSequentialId();
             const orderWithId = { ...orderData, id: invoiceId };
 
             try {
@@ -563,23 +548,23 @@ export const CreateOrder: React.FC = () => {
                     return { success: true, orderId: invoiceId };
                 }
             } catch (err: any) {
-                const errorMsg = err?.message || String(err);
+                const errorMsg = (err?.message || String(err)).toLowerCase();
 
-                // Check if it's a duplicate key error
+                // If it's a collision (duplicate ID), just try again immediately
+                // The next loop will find the newly inserted ID and calculate the correct NEXT one
                 if (errorMsg.includes('duplicate') || errorMsg.includes('unique') || errorMsg.includes('23505')) {
-                    console.warn(`[CreateOrder] Duplicate ID collision on attempt ${attempt + 1}, using fallback generator...`);
-                    // Wait with exponential backoff
-                    await new Promise(resolve => setTimeout(resolve, 50 * Math.pow(2, attempt) + Math.random() * 100));
+                    console.warn(`[CreateOrder] Sequence collision for ${invoiceId}, retrying with next number...`);
+                    // Tiny random jitter delay to prevent users from perfectly sync-stepping
+                    await new Promise(resolve => setTimeout(resolve, Math.random() * 50));
                     continue;
                 }
 
-                // Other error - don't retry
+                // Other business/connection error - don't retry
                 return { success: false, error: errorMsg };
             }
         }
 
-        // This should almost never happen with the new approach
-        return { success: false, error: 'Unable to save order. Please check your connection and try again.' };
+        return { success: false, error: 'Sequence busy. Please try clicking Place Order again.' };
     };
 
     const validateCart = (): string[] => {
