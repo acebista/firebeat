@@ -494,77 +494,53 @@ export const CreateOrder: React.FC = () => {
         }
     };
 
-    // Generate a guaranteed-unique invoice ID
-    // Format: YYMMDD-XXXX where XXXX is a unique suffix
-    const generateStrictSequentialId = async (): Promise<string> => {
-        const date = new Date();
-        const yy = date.getFullYear().toString().slice(-2);
-        const mm = String(date.getMonth() + 1).padStart(2, '0');
-        const dd = String(date.getDate()).padStart(2, '0');
-        const datePrefix = `${yy}${mm}${dd}`;
-
+    // ============================================================
+    // GAPLESS INVOICE ID GENERATION (Server-Side)
+    // Uses Postgres pessimistic locking - no retries, no gaps, no races
+    // ============================================================
+    const generateInvoiceId = async (): Promise<{ success: boolean; invoiceId?: string; error?: string }> => {
         try {
-            // Get the highest sequential number for today
-            const { data: todayOrders, error } = await supabase
-                .from('orders')
-                .select('id')
-                .like('id', `${datePrefix}-%`)
-                .order('id', { ascending: false })
-                .limit(1);
+            // Call the database function that uses FOR UPDATE locking
+            const { data, error } = await supabase.rpc('generate_invoice_id');
 
-            if (error) throw error;
-
-            let nextSeq = 1;
-            if (todayOrders && todayOrders.length > 0) {
-                const lastInvoice = todayOrders[0].id;
-                const parts = lastInvoice.split('-');
-                if (parts.length >= 2) {
-                    const lastNum = parseInt(parts[1]);
-                    if (!isNaN(lastNum)) {
-                        nextSeq = lastNum + 1;
-                    }
-                }
+            if (error) {
+                console.error('[CreateOrder] Server ID generation failed:', error);
+                return { success: false, error: error.message };
             }
 
-            const seq = String(nextSeq).padStart(3, '0');
-            return `${datePrefix}-${seq}`;
-        } catch (error) {
-            console.error('Error generating strict sequential ID:', error);
-            // Fallback: guaranteed unique but non-sequential for emergency
-            return `${datePrefix}-${Date.now().toString(36).toUpperCase()}`;
+            if (!data) {
+                return { success: false, error: 'No invoice ID returned from server' };
+            }
+
+            return { success: true, invoiceId: data as string };
+        } catch (err: any) {
+            console.error('[CreateOrder] generateInvoiceId exception:', err);
+            return { success: false, error: err?.message || 'Failed to generate invoice ID' };
         }
     };
 
-    // Insert order with robust retry to handle multi-user collisions perfectly
-    const insertOrderWithRetry = async (orderData: any, maxRetries = 10): Promise<{ success: boolean; orderId?: string; error?: string }> => {
-        for (let attempt = 0; attempt < maxRetries; attempt++) {
-            // Always get the LATEST next sequential ID
-            const invoiceId = await generateStrictSequentialId();
-            const orderWithId = { ...orderData, id: invoiceId };
-
-            try {
-                const result = await OrderService.add(orderWithId);
-                if (result) {
-                    return { success: true, orderId: invoiceId };
-                }
-            } catch (err: any) {
-                const errorMsg = (err?.message || String(err)).toLowerCase();
-
-                // If it's a collision (duplicate ID), just try again immediately
-                // The next loop will find the newly inserted ID and calculate the correct NEXT one
-                if (errorMsg.includes('duplicate') || errorMsg.includes('unique') || errorMsg.includes('23505')) {
-                    console.warn(`[CreateOrder] Sequence collision for ${invoiceId}, retrying with next number...`);
-                    // Tiny random jitter delay to prevent users from perfectly sync-stepping
-                    await new Promise(resolve => setTimeout(resolve, Math.random() * 50));
-                    continue;
-                }
-
-                // Other business/connection error - don't retry
-                return { success: false, error: errorMsg };
-            }
+    // Insert order with server-generated ID (no retry needed - DB handles locking)
+    const insertOrderWithId = async (orderData: any): Promise<{ success: boolean; orderId?: string; error?: string }> => {
+        // Step 1: Get the guaranteed-unique ID from the server
+        const idResult = await generateInvoiceId();
+        if (!idResult.success || !idResult.invoiceId) {
+            return { success: false, error: idResult.error || 'Failed to get invoice number' };
         }
 
-        return { success: false, error: 'Sequence busy. Please try clicking Place Order again.' };
+        const invoiceId = idResult.invoiceId;
+        const orderWithId = { ...orderData, id: invoiceId };
+
+        // Step 2: Insert the order with the server-assigned ID
+        try {
+            const result = await OrderService.add(orderWithId);
+            if (result) {
+                return { success: true, orderId: invoiceId };
+            }
+            return { success: false, error: 'Order insert returned null' };
+        } catch (err: any) {
+            console.error('[CreateOrder] Order insert failed:', err);
+            return { success: false, error: err?.message || 'Failed to save order' };
+        }
     };
 
     const validateCart = (): string[] => {
@@ -645,8 +621,8 @@ export const CreateOrder: React.FC = () => {
             paymentMethod: paymentMode
         };
 
-        // Use retry mechanism to handle duplicate ID collisions
-        const result = await insertOrderWithRetry(orderData);
+        // Use server-side atomic ID generation (no collisions possible)
+        const result = await insertOrderWithId(orderData);
 
         if (result.success && result.orderId) {
             // PHASE 1: Clear draft after successful order
