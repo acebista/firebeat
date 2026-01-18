@@ -721,7 +721,13 @@ export const CreateOrder: React.FC = () => {
     return (
         <>
             {/* MOBILE-FIRST LAYOUT */}
-            <div className="pb-24 min-h-screen bg-gray-50" style={{ fontSize: `${zoomLevel}%` }}>
+            <div
+                className="pb-24 min-h-screen bg-gray-50 origin-top-left"
+                style={{
+                    zoom: zoomLevel / 100,
+                    width: `${100 / (zoomLevel / 100)}%`, // Compensate width to prevent horizontal scroll
+                }}
+            >
 
                 {/* Sticky Header Filters */}
                 <div className="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm">
