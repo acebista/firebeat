@@ -52,6 +52,7 @@ const navItems: Record<UserRole, { label: string; path: string; icon: any }[]> =
     { label: 'Dashboard', path: '/sales/dashboard', icon: LayoutDashboard },
     { label: 'Create Order', path: '/sales/create-order', icon: ShoppingBag },
     { label: 'My Orders', path: '/sales/orders', icon: FileText },
+    { label: 'Print Challans', path: '/sales/print-challans', icon: FileOutput },
     { label: 'Performance', path: '/sales/performance', icon: Users },
   ],
   delivery: [

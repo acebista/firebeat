@@ -47,6 +47,7 @@ import { CreateOrder } from './pages/sales/CreateOrder';
 import { EditOrder } from './pages/sales/EditOrder';
 import { MyOrders } from './pages/sales/MyOrders';
 import { PerformanceDashboard } from './pages/sales/PerformanceDashboard';
+import { SalesPrintChallans } from './pages/sales/SalesPrintChallans';
 
 // Delivery Pages
 import { DeliveryDashboard } from './pages/delivery/DeliveryDashboard';
@@ -190,6 +191,7 @@ const App: React.FC = () => {
             <Route path="/sales/create-order" element={<CreateOrder />} />
             <Route path="/sales/edit-order/:id" element={<EditOrder />} />
             <Route path="/sales/orders" element={<MyOrders />} />
+            <Route path="/sales/print-challans" element={<SalesPrintChallans />} />
             <Route path="/sales/performance" element={<PerformanceDashboard />} />
           </Route>
 
