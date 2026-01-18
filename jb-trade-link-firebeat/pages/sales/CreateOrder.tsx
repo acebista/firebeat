@@ -95,52 +95,51 @@ export const CreateOrder: React.FC = () => {
         };
     }, [zoomLevel]);
 
-    // Check permissions and session on load
+    // Check permissions on load
     useEffect(() => {
-        // Check location permission
-        if ('permissions' in navigator) {
-            navigator.permissions.query({ name: 'geolocation' }).then((result) => {
-                setPermissionStatus(result.state as any);
-                console.log('[CreateOrder] Location permission:', result.state);
-
-                // If denied, show a toast with instructions
-                if (result.state === 'denied') {
-                    toast.error(
-                        <div>
-                            <p className="font-bold">Location Access Blocked</p>
-                            <p className="text-sm">Please enable location in your browser settings for order GPS tracking.</p>
-                        </div>,
-                        { duration: 8000 }
-                    );
-                }
-
-                // Listen for permission changes
-                result.onchange = () => {
+        const checkPermission = async () => {
+            if ('permissions' in navigator) {
+                try {
+                    const result = await navigator.permissions.query({ name: 'geolocation' as any });
                     setPermissionStatus(result.state as any);
-                    console.log('[CreateOrder] Location permission changed to:', result.state);
-                };
-            }).catch(() => {
-                console.log('[CreateOrder] Could not query permissions');
-            });
+
+                    result.onchange = () => {
+                        setPermissionStatus(result.state as any);
+                    };
+                } catch (e) {
+                    console.log('[CreateOrder] Permissions query not fully supported');
+                }
+            }
+        };
+        checkPermission();
+    }, []);
+
+    // Manual location check
+    const checkLocationManually = () => {
+        if (!navigator.geolocation) {
+            toast.error("Geolocation not supported on this device");
+            return;
         }
 
-        // Request location permission proactively (shows prompt if needed)
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                () => {
-                    console.log('[CreateOrder] Location access granted');
-                    setPermissionStatus('granted');
-                },
-                (error) => {
-                    if (error.code === error.PERMISSION_DENIED) {
-                        setPermissionStatus('denied');
-                        console.log('[CreateOrder] Location access denied');
-                    }
-                },
-                { timeout: 5000 }
-            );
-        }
-    }, []);
+        setIsGettingLocation(true);
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                setPermissionStatus('granted');
+                setIsGettingLocation(false);
+                toast.success("Location access granted");
+            },
+            (err) => {
+                setIsGettingLocation(false);
+                if (err.code === err.PERMISSION_DENIED) {
+                    setPermissionStatus('denied');
+                    toast.error("Location access denied. Please enable in settings.");
+                } else {
+                    toast.error("Could not get location. Try again if you are outside.");
+                }
+            },
+            { enableHighAccuracy: true, timeout: 5000 }
+        );
+    };
 
     // Load Data
     useEffect(() => {
@@ -741,9 +740,24 @@ export const CreateOrder: React.FC = () => {
                 {/* Sticky Header Filters */}
                 <div className="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm">
                     <div className="p-3 space-y-3">
-                        {/* Top Bar with Zoom Controls */}
-                        <div className="flex justify-between items-center bg-indigo-50 -m-3 mb-3 p-3 border-b border-indigo-100">
-                            <span className="text-xs font-bold text-indigo-700 uppercase tracking-widest">Order Entry Filters</span>
+                        {/* Top Bar with Zoom & GPS Controls */}
+                        <div className="flex justify-between items-center bg-indigo-50 -m-3 mb-3 p-3 border-b border-indigo-100 min-h-[50px]">
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-indigo-700 uppercase tracking-widest">Order Entry Filters</span>
+                                {/* GPS Status Indicator */}
+                                <button
+                                    onClick={checkLocationManually}
+                                    className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-bold border transition-all active:scale-95 ${permissionStatus === 'granted'
+                                            ? 'bg-green-50 border-green-200 text-green-700'
+                                            : permissionStatus === 'denied'
+                                                ? 'bg-red-50 border-red-200 text-red-700'
+                                                : 'bg-white border-gray-200 text-gray-500'
+                                        }`}
+                                >
+                                    <MapPin className={`h-3 w-3 ${isGettingLocation ? 'animate-pulse' : ''}`} />
+                                    {permissionStatus === 'granted' ? 'GPS Active' : permissionStatus === 'denied' ? 'GPS Blocked' : 'Check GPS'}
+                                </button>
+                            </div>
                             <div className="flex items-center gap-1 bg-white rounded-lg border border-indigo-200 p-0.5 shadow-sm">
                                 <button
                                     onClick={zoomOut}
