@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { User } from '../../types';
 import { Session } from '@supabase/supabase-js';
 import { useUserStore } from './userStore';
+import { initSessionManager, clearSessionCache, setSessionCache } from '../sessionManager';
 
 const initialState: AuthState = {
     status: AuthStatus.LOADING,
@@ -44,16 +45,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Initialize boot: rehydrate session (guards clear internally)
     useEffect(() => {
         const boot = async () => {
-            try {
-                console.log('[AuthProvider] Starting boot...');
+            console.log('[AuthProvider] ========== BOOT START ==========');
+            console.time('[AuthProvider] Total boot time');
 
-                // Rehydrate session WITHOUT clearing tokens first
-                // rehydrateFromSession() will check getSession() first,
-                // then only clear tokens if session is missing/invalid
+            try {
+                // Initialize SessionManager first (sets up auth state listener)
+                initSessionManager();
+
+                // Rehydrate session - this now uses cached session manager
                 await useUserStore.getState().rehydrateFromSession();
 
                 const storeState = useUserStore.getState();
-                console.log('[AuthProvider] Boot complete. User authenticated:', !!storeState.user);
+                console.log('[AuthProvider] Boot complete. User:', storeState.user?.name || 'None');
 
                 if (storeState.user) {
                     dispatch({
@@ -68,6 +71,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 console.error('[AuthProvider] Boot error:', err);
                 dispatch({ type: 'SET_ERROR', error: err });
             } finally {
+                console.timeEnd('[AuthProvider] Total boot time');
+                console.log('[AuthProvider] ========== BOOT END ==========');
                 // Mark initialized even on error to prevent infinite loading
                 setIsInitialized(true);
             }

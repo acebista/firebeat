@@ -3,6 +3,7 @@ import { persist, subscribeWithSelector } from 'zustand/middleware';
 import { User } from '../../types';
 import { supabase } from '../../lib/supabase';
 import { loadUserProfile } from './profileService';
+import { getCachedSession, clearSessionCache, setSessionCache } from '../sessionManager';
 
 type BootStatus = 'idle' | 'checking' | 'ready';
 
@@ -60,55 +61,52 @@ export const useUserStore = create<UserState>()(
             set({ bootStatus: 'checking' });
           }
 
-          // Boot timeout guard: if checking takes >10 seconds, force ready state
+          // Boot timeout guard: 20 seconds for slow networks (Nepal mobile)
+          const BOOT_TIMEOUT_MS = 20000;
           const timeoutId = setTimeout(() => {
             const current = get();
             if (current.bootStatus === 'checking') {
-              console.warn('[Boot] Boot timeout (10s exceeded), forcing ready state');
+              console.warn(`[Boot] Boot timeout (${BOOT_TIMEOUT_MS / 1000}s exceeded), forcing ready state`);
               set({
                 bootStatus: 'ready',
-                bootError: 'Session check timed out. Please try refreshing.',
+                bootError: 'Connection is slow. Please check your network and try again.',
                 user: null,
               });
             }
-          }, 10000);
+          }, BOOT_TIMEOUT_MS);
 
           try {
-            console.log('[Boot] Starting session rehydration...');
+            // ========== PHASE 1: Session Check ==========
+            console.log('[Boot] Phase 1: Checking session...');
+            console.time('[Boot] Phase 1: Session');
 
-            // CRITICAL: Check Supabase session FIRST before clearing anything
-            const { data, error } = await supabase.auth.getSession();
+            // Use centralized SessionManager instead of direct supabase call
+            const session = await getCachedSession();
 
-            if (error) {
-              console.error('[Boot] getSession error:', error);
-              // Session lookup failed - clear tokens and stay logged out
-              clearStaleTokens();
-              set({
-                bootStatus: 'ready',
-                bootError: `Session fetch failed: ${error.message}`,
-                user: null,
-                session: null,
-              });
-              return;
-            }
-
-            const session = data.session;
-            console.log('[Boot] Session check:', session ? 'Found valid session' : 'No session found');
+            console.timeEnd('[Boot] Phase 1: Session');
+            console.log('[Boot] Session result:', session ? '✓ Valid' : '✗ None');
 
             if (!session?.user) {
-              console.log('[Boot] No active session found, clearing auth state');
+              console.log('[Boot] No active session, clearing auth state');
+              clearSessionCache();
               clearStaleTokens();
               set({ bootStatus: 'ready', user: null, session: null, bootError: null });
               return;
             }
 
-            // Session exists - now load profile
-            console.log('[Boot] Valid session found, loading profile for user:', session.user.id);
+            // Cache session for future use
+            setSessionCache(session);
+
+            // ========== PHASE 2: Load Profile ==========
+            console.log('[Boot] Phase 2: Loading user profile...');
+            console.time('[Boot] Phase 2: Profile');
 
             try {
               const profile = await loadUserProfile(session.user.id);
-              console.log('[Boot] Profile loaded successfully');
-              // Success - set authenticated state WITHOUT clearing tokens
+              console.timeEnd('[Boot] Phase 2: Profile');
+              console.log('[Boot] Profile loaded:', profile.name, `(${profile.role})`);
+
+              // Success - set authenticated state
               set({
                 bootStatus: 'ready',
                 user: profile,
@@ -116,20 +114,25 @@ export const useUserStore = create<UserState>()(
                 bootError: null,
                 error: null,
               });
+
+              console.log('[Boot] ✓ Boot complete - user authenticated');
             } catch (profileErr: any) {
+              console.timeEnd('[Boot] Phase 2: Profile');
               console.error('[Boot] Profile fetch failed:', profileErr);
-              // Profile fetch failed - clear tokens since session is unrecoverable
+
+              // Profile fetch failed - clear session
+              clearSessionCache();
               clearStaleTokens();
               set({
                 bootStatus: 'ready',
                 user: null,
                 session: null,
-                bootError: `Profile fetch failed: ${profileErr?.message || 'Unknown error'}. Please log in again.`,
+                bootError: `Profile load failed: ${profileErr?.message || 'Unknown error'}. Please log in again.`,
               });
             }
           } catch (err: any) {
             console.error('[Boot] Unexpected boot error:', err);
-            // Unexpected error - stay logged out
+            clearSessionCache();
             clearStaleTokens();
             set({
               bootStatus: 'ready',

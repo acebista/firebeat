@@ -18,15 +18,10 @@ export const COLS = {
 };
 
 // Helper to standardize response
+// NOTE: Session is verified at boot time. We trust it's valid here.
+// If session expires, Supabase will return 401 and we handle it globally.
 const fetchCollection = async <T>(colName: string): Promise<T[]> => {
   try {
-    // Verify we have an active session before fetching
-    const { data: sessionData } = await supabase.auth.getSession();
-    if (!sessionData?.session) {
-      console.warn(`No active session when fetching ${colName}`);
-      throw new Error('No active Supabase session. Please log in.');
-    }
-
     const { data, error } = await supabase.from(colName).select('*');
     if (error) {
       console.error(`Supabase error fetching ${colName}:`, error);
@@ -40,14 +35,9 @@ const fetchCollection = async <T>(colName: string): Promise<T[]> => {
 };
 
 // Helper to fetch vehicles with column name mapping
+// NOTE: Session is verified at boot time. We trust it's valid here.
 const fetchVehicles = async (): Promise<Vehicle[]> => {
   try {
-    const { data: sessionData } = await supabase.auth.getSession();
-    if (!sessionData?.session) {
-      console.warn('No active session when fetching vehicles');
-      throw new Error('No active Supabase session. Please log in.');
-    }
-
     const { data, error } = await supabase.from(COLS.VEHICLES).select('*');
     if (error) {
       console.error('Supabase error fetching vehicles:', error);
