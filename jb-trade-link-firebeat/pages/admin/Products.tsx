@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Input, Select, Badge } from '../../components/ui/Elements';
 import { Modal } from '../../components/ui/Modal';
-import { Edit2, Eye, Plus, Building2, CheckCircle, XCircle, Trash2 } from 'lucide-react';
+import { Edit2, Eye, Plus, Building2, CheckCircle, XCircle, Trash2, Package, PackageX } from 'lucide-react';
 import { Product, Company } from '../../types';
 import { useNavigate } from 'react-router-dom';
 import { ProductService, CompanyService } from '../../services/db';
@@ -228,6 +228,18 @@ export const ProductManagement: React.FC = () => {
     }
   };
 
+  const toggleStockStatus = async (product: Product) => {
+    const newStatus = !product.stockOut;
+    try {
+      await ProductService.update(product.id, { stockOut: newStatus });
+      setProducts(prev => prev.map(p => p.id === product.id ? { ...p, stockOut: newStatus } : p));
+      toast.success(`${product.name} is now ${newStatus ? 'Out of Stock' : 'Available'}`);
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to update stock status");
+    }
+  };
+
   const openDetails = (product: Product) => {
     setCurrentProduct(product);
     setDetailsOpen(true);
@@ -263,6 +275,22 @@ export const ProductManagement: React.FC = () => {
     } catch (e) {
       console.error(e);
       toast.error("Failed to update status for some items.");
+    }
+  };
+
+  const handleBulkStockChange = async (isStockOut: boolean) => {
+    if (!window.confirm(`Mark ${selectedProductIds.size} products as ${isStockOut ? 'Out of Stock' : 'In Stock'}?`)) return;
+
+    try {
+      const ids = Array.from(selectedProductIds);
+      await Promise.all(ids.map(id => ProductService.update(id, { stockOut: isStockOut })));
+
+      setProducts(prev => prev.map(p => selectedProductIds.has(p.id) ? { ...p, stockOut: isStockOut } : p));
+      setSelectedProductIds(new Set());
+      toast.success(`${ids.length} products marked as ${isStockOut ? 'Out of Stock' : 'In Stock'}`);
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to update stock status for some items.");
     }
   };
 
@@ -394,6 +422,23 @@ export const ProductManagement: React.FC = () => {
             </Button>
             <div className="w-px bg-indigo-400 mx-1"></div>
             <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => handleBulkStockChange(false)}
+              className="bg-green-500 text-white hover:bg-green-600 border-transparent"
+            >
+              <Package className="mr-2 h-4 w-4" /> Unlock (In Stock)
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => handleBulkStockChange(true)}
+              className="bg-orange-500 text-white hover:bg-orange-600 border-transparent"
+            >
+              <PackageX className="mr-2 h-4 w-4" /> Mark Stock Out
+            </Button>
+            <div className="w-px bg-indigo-400 mx-1"></div>
+            <Button
               variant="danger"
               size="sm"
               onClick={handleBulkDelete}
@@ -483,6 +528,13 @@ export const ProductManagement: React.FC = () => {
                       </Badge>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                      <button
+                        onClick={() => toggleStockStatus(product)}
+                        className={`p-1 transition-colors ${product.stockOut ? 'text-orange-600 hover:text-orange-900' : 'text-gray-400 hover:text-gray-600'}`}
+                        title={product.stockOut ? "Mark as In Stock (Unlock)" : "Mark as Out of Stock"}
+                      >
+                        {product.stockOut ? <Package className="h-4 w-4" /> : <PackageX className="h-4 w-4" />}
+                      </button>
                       <button onClick={() => openDetails(product)} className="text-gray-600 hover:text-gray-900 p-1">
                         <Eye className="h-4 w-4" />
                       </button>
@@ -519,10 +571,14 @@ export const ProductManagement: React.FC = () => {
               </div>
               <Input label="Order Multiple" type="number" value={formData.orderMultiple ?? 1} onChange={e => setFormData({ ...formData, orderMultiple: Number(e.target.value) })} error={validationErrors.orderMultiple} />
 
-              <div className="col-span-2 flex items-center gap-2 mt-2">
-                <label className="flex items-center gap-2 text-sm cursor-pointer">
-                  <input type="checkbox" checked={formData.isActive ?? true} onChange={e => setFormData({ ...formData, isActive: e.target.checked })} className="rounded text-green-600" />
+              <div className="col-span-2 flex items-center gap-6 mt-2">
+                <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                  <input type="checkbox" checked={formData.isActive ?? true} onChange={e => setFormData({ ...formData, isActive: e.target.checked })} className="rounded text-green-600 h-4 w-4" />
                   Product is Active
+                </label>
+                <label className="flex items-center gap-2 text-sm font-medium cursor-pointer text-red-600">
+                  <input type="checkbox" checked={formData.stockOut ?? false} onChange={e => setFormData({ ...formData, stockOut: e.target.checked })} className="rounded text-red-600 h-4 w-4" />
+                  Mark as Stock Out
                 </label>
               </div>
             </div>
