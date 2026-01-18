@@ -507,7 +507,7 @@ export const CreateOrder: React.FC = () => {
             remarks: '',
             GPS: gpsCoords || undefined,
             time: new Date().toISOString(),
-            paymentMode: paymentMode
+            paymentMethod: paymentMode
         };
 
         try {
@@ -521,9 +521,46 @@ export const CreateOrder: React.FC = () => {
             setSelectedCompany('');
             setOrderDiscountPct(0);
             setIsCartOpen(false);
-        } catch (e) {
-            console.error(e);
-            toast.error("Failed to place order");
+        } catch (e: any) {
+            console.error('Order placement failed:', e);
+
+            // Parse the error and provide a helpful message
+            let errorMessage = 'Failed to place order';
+            let errorDetails = '';
+
+            if (e?.message) {
+                const msg = e.message.toLowerCase();
+
+                if (msg.includes('network') || msg.includes('fetch') || msg.includes('connection')) {
+                    errorMessage = 'Network Error';
+                    errorDetails = 'Please check your internet connection and try again.';
+                } else if (msg.includes('duplicate') || msg.includes('unique') || msg.includes('already exists')) {
+                    errorMessage = 'Duplicate Order ID';
+                    errorDetails = 'An order with this ID already exists. Please try again.';
+                } else if (msg.includes('permission') || msg.includes('denied') || msg.includes('unauthorized')) {
+                    errorMessage = 'Permission Denied';
+                    errorDetails = 'You do not have permission to place orders. Please contact admin.';
+                } else if (msg.includes('null') || msg.includes('required') || msg.includes('missing')) {
+                    errorMessage = 'Missing Information';
+                    errorDetails = 'Some required information is missing. Please check customer and items.';
+                } else if (msg.includes('timeout')) {
+                    errorMessage = 'Server Timeout';
+                    errorDetails = 'The server took too long to respond. Please try again.';
+                } else {
+                    // Show the raw error for debugging
+                    errorDetails = e.message.length > 100 ? e.message.substring(0, 100) + '...' : e.message;
+                }
+            } else if (e?.code) {
+                errorDetails = `Error code: ${e.code}`;
+            }
+
+            toast.error(
+                <div className="space-y-1">
+                    <p className="font-bold">{errorMessage}</p>
+                    {errorDetails && <p className="text-sm opacity-90">{errorDetails}</p>}
+                </div>,
+                { duration: 6000 }
+            );
         }
     };
 

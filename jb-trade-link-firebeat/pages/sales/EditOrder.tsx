@@ -350,9 +350,45 @@ export const EditOrder: React.FC = () => {
             await OrderService.update(id, orderData);
             toast.success(`Order Updated Successfully!\n\nID: ${id}\nTotal: ₹${finalTotal.toFixed(2)}`);
             navigate('/sales/orders');
-        } catch (e) {
-            console.error(e);
-            toast.error("Failed to update order");
+        } catch (e: any) {
+            console.error('Order update failed:', e);
+
+            // Parse the error and provide a helpful message
+            let errorMessage = 'Failed to update order';
+            let errorDetails = '';
+
+            if (e?.message) {
+                const msg = e.message.toLowerCase();
+
+                if (msg.includes('network') || msg.includes('fetch') || msg.includes('connection')) {
+                    errorMessage = 'Network Error';
+                    errorDetails = 'Please check your internet connection and try again.';
+                } else if (msg.includes('permission') || msg.includes('denied') || msg.includes('unauthorized')) {
+                    errorMessage = 'Permission Denied';
+                    errorDetails = 'You may not have permission to edit this order.';
+                } else if (msg.includes('null') || msg.includes('required') || msg.includes('missing')) {
+                    errorMessage = 'Missing Information';
+                    errorDetails = 'Some required fields are missing. Please review the order.';
+                } else if (msg.includes('timeout')) {
+                    errorMessage = 'Server Timeout';
+                    errorDetails = 'The server took too long. Please try again.';
+                } else if (msg.includes('not found') || msg.includes('no rows')) {
+                    errorMessage = 'Order Not Found';
+                    errorDetails = 'This order may have been deleted or modified by another user.';
+                } else {
+                    errorDetails = e.message.length > 100 ? e.message.substring(0, 100) + '...' : e.message;
+                }
+            } else if (e?.code) {
+                errorDetails = `Error code: ${e.code}`;
+            }
+
+            toast.error(
+                <div className="space-y-1">
+                    <p className="font-bold">{errorMessage}</p>
+                    {errorDetails && <p className="text-sm opacity-90">{errorDetails}</p>}
+                </div>,
+                { duration: 6000 }
+            );
         }
     };
 

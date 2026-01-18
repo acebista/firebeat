@@ -368,11 +368,16 @@ export const OrderService = {
     return { success: successCount, failed: failedOrders };
   },
 
-  add: async (order: Omit<Order, 'id'>) => {
+  add: async (order: Omit<Order, 'id'> | Order) => {
     // Use insert instead of upsert to avoid silent failures
     // If you need upsert behavior, the caller should handle it explicitly
+    console.log('[OrderService.add] Attempting to insert order:', JSON.stringify(order, null, 2));
     const { data, error } = await supabase.from(COLS.ORDERS).insert(order).select().single();
-    if (error) throw error;
+    if (error) {
+      console.error('[OrderService.add] Insert failed:', error);
+      throw error;
+    }
+    console.log('[OrderService.add] Order inserted successfully:', data?.id);
     return data as Order;
   },
   updateStatus: async (id: string, status: string) => {
