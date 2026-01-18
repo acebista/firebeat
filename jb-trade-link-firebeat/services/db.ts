@@ -626,23 +626,42 @@ export const UserService = {
     return data as User;
   },
   update: async (id: string, data: Partial<User>) => {
-    // If email is being updated, we need to update both tables
+    // If email is being updated, use the Edge Function which has service role access
     if (data.email) {
       try {
-        // First, update the auth.users table (Supabase Auth)
-        const { error: authError } = await supabase.auth.admin.updateUserById(
-          id,
-          { email: data.email }
-        );
+        // Get current session for auth header
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData?.session?.access_token;
 
-        if (authError) {
-          console.error('Failed to update auth.users email:', authError);
-          throw new Error(`Failed to update authentication email: ${authError.message}`);
+        if (accessToken) {
+          // Call the Edge Function to update email in auth.users
+          const response = await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-update-password`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                userId: id,
+                newEmail: data.email
+              })
+            }
+          );
+
+          const result = await response.json();
+          if (result.error) {
+            console.error('Failed to update auth email via Edge Function:', result.error);
+            throw new Error(result.error);
+          }
+          console.log('Auth email updated successfully via Edge Function');
+        } else {
+          console.warn('No session token, skipping auth email update');
         }
       } catch (authUpdateError) {
         console.error('Error updating auth email:', authUpdateError);
-        // Continue with public.users update even if auth update fails
-        // This prevents breaking existing functionality
+        throw authUpdateError; // Don't silently fail - user needs to know
       }
     }
 
