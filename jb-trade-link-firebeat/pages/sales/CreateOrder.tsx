@@ -723,37 +723,36 @@ export const CreateOrder: React.FC = () => {
             {/* MOBILE-FIRST LAYOUT */}
             <div className="pb-24 min-h-screen bg-gray-50" style={{ fontSize: `${zoomLevel}%` }}>
 
-                {/* Zoom Controls - Fixed position bottom-right */}
-                <div className="fixed bottom-32 right-4 z-[9999] flex flex-col items-center gap-0.5 bg-indigo-600 rounded-xl shadow-2xl p-1.5">
-                    <button
-                        onClick={zoomIn}
-                        className="w-10 h-10 flex items-center justify-center bg-white rounded-lg hover:bg-indigo-50 active:scale-95 transition-all"
-                        aria-label="Zoom in"
-                        title="Zoom In (make text bigger)"
-                    >
-                        <span className="text-xl font-bold text-indigo-600">+</span>
-                    </button>
-                    <button
-                        onClick={resetZoom}
-                        className="w-10 h-8 flex items-center justify-center text-white text-xs font-bold"
-                        aria-label="Reset zoom"
-                        title="Tap to reset zoom"
-                    >
-                        {zoomLevel}%
-                    </button>
-                    <button
-                        onClick={zoomOut}
-                        className="w-10 h-10 flex items-center justify-center bg-white rounded-lg hover:bg-indigo-50 active:scale-95 transition-all"
-                        aria-label="Zoom out"
-                        title="Zoom Out (make text smaller)"
-                    >
-                        <span className="text-xl font-bold text-indigo-600">−</span>
-                    </button>
-                </div>
-
                 {/* Sticky Header Filters */}
                 <div className="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm">
                     <div className="p-3 space-y-3">
+                        {/* Top Bar with Zoom Controls */}
+                        <div className="flex justify-between items-center bg-indigo-50 -m-3 mb-3 p-3 border-b border-indigo-100">
+                            <span className="text-xs font-bold text-indigo-700 uppercase tracking-widest">Order Entry Filters</span>
+                            <div className="flex items-center gap-1 bg-white rounded-lg border border-indigo-200 p-0.5 shadow-sm">
+                                <button
+                                    onClick={zoomOut}
+                                    className="w-8 h-8 flex items-center justify-center hover:bg-indigo-50 rounded active:scale-90 transition-all"
+                                    title="Decrease Text Size"
+                                >
+                                    <Minus className="h-4 w-4 text-indigo-600" />
+                                </button>
+                                <button
+                                    onClick={resetZoom}
+                                    className="px-2 h-8 flex items-center justify-center text-[10px] font-bold text-indigo-700 hover:bg-indigo-50 rounded min-w-[40px]"
+                                    title="Reset to 100%"
+                                >
+                                    {zoomLevel}%
+                                </button>
+                                <button
+                                    onClick={zoomIn}
+                                    className="w-8 h-8 flex items-center justify-center hover:bg-indigo-50 rounded active:scale-90 transition-all"
+                                    title="Increase Text Size"
+                                >
+                                    <Plus className="h-4 w-4 text-indigo-600" />
+                                </button>
+                            </div>
+                        </div>
 
                         {/* Customer Selection - Priority 1 */}
                         <div className="flex gap-2">
