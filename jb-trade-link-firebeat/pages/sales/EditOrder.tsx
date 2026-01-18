@@ -72,6 +72,21 @@ export const EditOrder: React.FC = () => {
         localStorage.setItem('createorder_zoom', '100');
     };
 
+    // Apply zoom to root HTML element for consistent scaling of all rem-based elements
+    useEffect(() => {
+        const root = document.documentElement;
+        const originalSize = root.style.fontSize;
+
+        // Only apply zoom on mobile screens for better readability
+        if (window.innerWidth < 768) {
+            root.style.fontSize = `${zoomLevel}%`;
+        }
+
+        return () => {
+            root.style.fontSize = originalSize;
+        };
+    }, [zoomLevel]);
+
     // Load Data
     useEffect(() => {
         const loadAll = async () => {
@@ -438,13 +453,7 @@ export const EditOrder: React.FC = () => {
     if (loadingData) return <div className="p-10 text-center">Loading order data...</div>;
 
     return (
-        <div
-            className="flex flex-col lg:flex-row gap-6 lg:h-[calc(100vh-7rem)] h-auto pb-6 origin-top-left"
-            style={{
-                zoom: zoomLevel / 100,
-                width: `${100 / (zoomLevel / 100)}%`,
-            }}
-        >
+        <div className="flex flex-col lg:flex-row gap-6 lg:h-[calc(100vh-7rem)] h-auto pb-6">
             {/* Left: Product Catalog */}
             <div className="flex-1 flex flex-col gap-4 lg:min-h-0 h-auto overflow-visible">
                 <div className="flex justify-between items-center bg-indigo-50 p-2 rounded-lg border border-indigo-100 mb-2">

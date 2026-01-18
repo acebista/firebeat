@@ -184,7 +184,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
         </header>
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto p-8 bg-gradient-to-br from-slate-50 via-white to-slate-50">
+        <main className="flex-1 overflow-y-auto p-4 lg:p-8 bg-gradient-to-br from-slate-50 via-white to-slate-50">
           <div className="max-w-7xl mx-auto">
             {children}
           </div>

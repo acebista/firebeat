@@ -80,6 +80,21 @@ export const CreateOrder: React.FC = () => {
         localStorage.setItem('createorder_zoom', '100');
     };
 
+    // Apply zoom to root HTML element for consistent scaling of all rem-based elements
+    useEffect(() => {
+        const root = document.documentElement;
+        const originalSize = root.style.fontSize;
+
+        // Only apply zoom on mobile screens for better readability
+        if (window.innerWidth < 768) {
+            root.style.fontSize = `${zoomLevel}%`;
+        }
+
+        return () => {
+            root.style.fontSize = originalSize;
+        };
+    }, [zoomLevel]);
+
     // Check permissions and session on load
     useEffect(() => {
         // Check location permission
@@ -721,13 +736,7 @@ export const CreateOrder: React.FC = () => {
     return (
         <>
             {/* MOBILE-FIRST LAYOUT */}
-            <div
-                className="pb-24 min-h-screen bg-gray-50 origin-top-left"
-                style={{
-                    zoom: zoomLevel / 100,
-                    width: `${100 / (zoomLevel / 100)}%`, // Compensate width to prevent horizontal scroll
-                }}
-            >
+            <div className="pb-24 min-h-screen bg-gray-50">
 
                 {/* Sticky Header Filters */}
                 <div className="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm">
