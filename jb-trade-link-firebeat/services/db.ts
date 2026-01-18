@@ -590,6 +590,26 @@ export const TripService = {
     // 2. Order Update
     const { error } = await supabase.from(COLS.ORDERS).update({ status: 'approved', assignedTripId: null }).eq('id', orderId);
     if (error) throw error;
+  },
+
+  removeOrders: async (tripId: string, orderIdsToRemove: string[], currentTripData: DispatchTrip, ordersDataToRemove: Order[]) => {
+    // 1. Trip Update
+    const newOrderIds = currentTripData.orderIds.filter(id => !orderIdsToRemove.includes(id));
+    const amountToRemove = ordersDataToRemove.reduce((sum, o) => sum + o.totalAmount, 0);
+    const newTotalAmount = currentTripData.totalAmount - amountToRemove;
+    const newTotalOrders = currentTripData.totalOrders - orderIdsToRemove.length;
+
+    const { error: tripError } = await supabase.from(COLS.TRIPS).update({
+      orderIds: newOrderIds,
+      totalAmount: newTotalAmount,
+      totalOrders: newTotalOrders
+    }).eq('id', tripId);
+
+    if (tripError) throw tripError;
+
+    // 2. Order Update
+    const { error } = await supabase.from(COLS.ORDERS).update({ status: 'approved', assignedTripId: null }).in('id', orderIdsToRemove);
+    if (error) throw error;
   }
 };
 

@@ -29,7 +29,9 @@ export const ReportFilters: React.FC<ReportFiltersProps> = ({ filters, setFilter
         UserService.getAll()
       ]);
       setCompanies(companiesData.filter(c => c.isActive));
-      setEmployees(usersData.filter(u => u.role === 'sales'));
+      const salesUsers = usersData.filter(u => u.role === 'sales');
+      console.log('📊 [ReportFilters] Sales users loaded:', salesUsers.map(u => ({ id: u.id, name: u.name })));
+      setEmployees(salesUsers);
     } catch (error) {
       console.error('Failed to load filter data:', error);
     } finally {

@@ -76,8 +76,26 @@ export const DispatchPlanner: React.FC = () => {
           const salesPeople = users.filter(u => u.role === 'sales');
           const deliveryPeople = users.filter(u => u.role === 'delivery');
           console.log('🔍 DEBUG: Users loaded:', users.length);
-          console.log('🔍 DEBUG: Sales users:', salesPeople.length, salesPeople.map(u => u.name));
+          console.log('🔍 DEBUG: Sales users:', salesPeople.map(u => ({ id: u.id, name: u.name })));
           console.log('🔍 DEBUG: Delivery users:', deliveryPeople.length);
+
+          // Diagnostic: Compare salesperson IDs in orders vs users
+          const orderSalespersonIds = new Set(pendingOrders.map(o => o.salespersonId));
+          const userSalesIds = new Set(salesPeople.map(u => u.id));
+          const missingInUsers = [...orderSalespersonIds].filter(id => !userSalesIds.has(id));
+          const unusedUserIds = [...userSalesIds].filter(id => !orderSalespersonIds.has(id));
+
+          if (missingInUsers.length > 0) {
+            console.warn('⚠️ SALESPERSON ID MISMATCH: Orders reference salesperson IDs not in users table:');
+            missingInUsers.forEach(id => {
+              const exampleOrder = pendingOrders.find(o => o.salespersonId === id);
+              console.warn(`   - ID: ${id}, Name in order: "${exampleOrder?.salespersonName}"`);
+            });
+          }
+          if (unusedUserIds.length > 0) {
+            console.log('ℹ️ Users with no pending orders:', unusedUserIds.map(id => salesPeople.find(u => u.id === id)?.name));
+          }
+
           setSalesUsers(salesPeople);
           setDeliveryUsers(deliveryPeople);
         } catch (userErr) {

@@ -14,6 +14,7 @@ export const DispatchTripDetails: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showFinishModal, setShowFinishModal] = useState(false);
   const [isFinishing, setIsFinishing] = useState(false);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (id) refreshData();
@@ -49,10 +50,45 @@ export const DispatchTripDetails: React.FC = () => {
 
     try {
       await TripService.removeOrder(trip.id, orderId, trip, order);
+      setSelectedOrderIds(prev => prev.filter(id => id !== orderId));
       refreshData();
     } catch (e) {
       console.error(e);
       toast.error("Failed to remove order");
+    }
+  };
+
+  const handleBulkRemoveOrders = async () => {
+    if (!trip || selectedOrderIds.length === 0) return;
+
+    if (!window.confirm(`Remove ${selectedOrderIds.length} selected orders from the trip? they will return to the approved ready for dispatch pool.`)) return;
+
+    const ordersToRemove = orders.filter(o => selectedOrderIds.includes(o.id));
+
+    try {
+      await (TripService as any).removeOrders(trip.id, selectedOrderIds, trip, ordersToRemove);
+      setSelectedOrderIds([]);
+      toast.success(`${ordersToRemove.length} orders removed from trip`);
+      refreshData();
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to remove orders");
+    }
+  };
+
+  const toggleOrderSelection = (orderId: string) => {
+    setSelectedOrderIds(prev =>
+      prev.includes(orderId)
+        ? prev.filter(id => id !== orderId)
+        : [...prev, orderId]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedOrderIds.length === orders.length) {
+      setSelectedOrderIds([]);
+    } else {
+      setSelectedOrderIds(orders.map(o => o.id));
     }
   };
 
@@ -281,12 +317,32 @@ export const DispatchTripDetails: React.FC = () => {
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <h3 className="font-bold text-gray-800">Assigned Orders</h3>
+            {trip.status === 'draft' && selectedOrderIds.length > 0 && (
+              <Button
+                size="sm"
+                variant="danger"
+                onClick={handleBulkRemoveOrders}
+                className="py-1 px-3 h-auto text-xs"
+              >
+                Remove Selected ({selectedOrderIds.length})
+              </Button>
+            )}
           </div>
           <Card className="overflow-hidden bg-white">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
+                    {trip.status === 'draft' && (
+                      <th className="px-4 py-2 text-left w-10">
+                        <input
+                          type="checkbox"
+                          checked={orders.length > 0 && selectedOrderIds.length === orders.length}
+                          onChange={toggleSelectAll}
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                      </th>
+                    )}
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Order #</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Customer</th>
                     <th className="px-4 py-2 text-center text-xs font-medium text-gray-600 uppercase">Status</th>
@@ -297,6 +353,16 @@ export const DispatchTripDetails: React.FC = () => {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {orders.map(order => (
                     <tr key={order.id} className={`hover:bg-gray-50 ${order.status === 'delivered' ? 'bg-green-50' : ''}`}>
+                      {trip.status === 'draft' && (
+                        <td className="px-4 py-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedOrderIds.includes(order.id)}
+                            onChange={() => toggleOrderSelection(order.id)}
+                            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+                        </td>
+                      )}
                       <td className="px-4 py-2 whitespace-nowrap text-xs font-mono text-gray-700">{order.id.slice(0, 8)}...</td>
                       <td className="px-4 py-2 whitespace-nowrap text-sm text-black font-medium">{order.customerName}</td>
                       <td className="px-4 py-2 whitespace-nowrap text-center">

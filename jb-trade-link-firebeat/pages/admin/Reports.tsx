@@ -20,16 +20,18 @@ import { TripStockService, StockReconciliationRow } from '../../services/finpro/
 // This moves the logic from MockReportService to the Client Component
 // In a production app with thousands of orders, this should be a Firebase Cloud Function or Aggregation Query.
 const calculateMetrics = (orders: Order[], filters: ReportFilterState, products: Product[]) => {
+  // Filter out cancelled orders - they should not appear in sales or dispatch reports
+  const activeOrders = orders.filter(o => o.status !== 'cancelled');
 
   // Separate regular orders from rescheduled orders
   // Regular includes:
   // 1. Normal orders (no rescheduled_from)
   // 2. Rescheduled orders NOT on a trip (backlog) - implicit "unassigned" status for dispatch purposes
-  const regularOrders = orders.filter(o => !(o as any).rescheduled_from || !(o as any).assignedTripId);
+  const regularOrders = activeOrders.filter(o => !(o as any).rescheduled_from || !(o as any).assignedTripId);
 
   // Rescheduled section ONLY for:
   // 1. Rescheduled orders ON a trip
-  const rescheduledOrders = orders.filter(o => !!(o as any).rescheduled_from && !!(o as any).assignedTripId);
+  const rescheduledOrders = activeOrders.filter(o => !!(o as any).rescheduled_from && !!(o as any).assignedTripId);
 
   // Helper to map order to sales row
   const mapToSalesRow = (o: Order): SalesReportRow => {
@@ -234,7 +236,7 @@ const calculateMetrics = (orders: Order[], filters: ReportFilterState, products:
   const schemeRows: SchemeRow[] = [];
 
   // 4. Challan Rows
-  const challanRows: ChallanValidationRow[] = orders.map(o => ({
+  const challanRows: ChallanValidationRow[] = activeOrders.map(o => ({
     orderId: o.id,
     invoiceNo: o.id,
     customerName: o.customerName,
@@ -402,12 +404,14 @@ export const Reports: React.FC = () => {
       [...orders, ...rescheduledOrders].forEach(o => orderMap.set(o.id, o));
       orders = Array.from(orderMap.values());
 
-      // Include delivered, cancelled (failed), and any order that was assigned to a trip
+      // Filter orders for the delivery report
       const deliveryStatuses = ['delivered', 'completed', 'dispatched', 'partially_returned', 'returned', 'cancelled', 'approved'];
-      orders = orders.filter(o =>
-        deliveryStatuses.includes(o.status) ||
-        (o as any).assignedTripId // Include rescheduled orders that were on a trip
-      );
+      orders = orders.filter(o => {
+        // Exclude cancelled orders if they were never assigned to a trip (cancelled at source)
+        if (o.status === 'cancelled' && !(o as any).assignedTripId) return false;
+
+        return deliveryStatuses.includes(o.status) || (o as any).assignedTripId;
+      });
 
       // Fetch all users to resolve delivery user names
       const allUsers = await UserService.getAll();
