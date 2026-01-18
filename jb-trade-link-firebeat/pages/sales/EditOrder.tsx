@@ -381,6 +381,7 @@ export const EditOrder: React.FC = () => {
             discount: discountAmount,
             items: cart,
             paymentMethod: paymentMode,
+            paymentMode: paymentMode, // Set both for backward/forward compatibility
             // Keep original date/status/id
         };
 

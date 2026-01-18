@@ -49,7 +49,7 @@ const calculateMetrics = (orders: Order[], filters: ReportFilterState, products:
       subTotal: subTotal,
       discountAmount: discountAmount,
       grandTotal: o.totalAmount,
-      paymentMode: (o as any).paymentMethod || 'Cash',
+      paymentMode: (o as any).paymentMethod || (o as any).paymentMode || 'Cash',
       netAmount: o.totalAmount,
       order: o
     };

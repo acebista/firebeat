@@ -250,7 +250,7 @@ export const CreateOrder: React.FC = () => {
             // Clear draft if cart is empty and no customer selected
             localStorage.removeItem(`draft_order_${user?.id}`);
         }
-    }, [cart, selectedCustomer, selectedCompany, orderDiscountPct, selectedSalesperson, user?.id]);
+    }, [cart, selectedCustomer, selectedCompany, orderDiscountPct, selectedSalesperson, user?.id, paymentMode]);
 
     // PHASE 1: Load last order when customer is selected
     useEffect(() => {
@@ -528,7 +528,11 @@ export const CreateOrder: React.FC = () => {
         }
 
         const invoiceId = idResult.invoiceId;
-        const orderWithId = { ...orderData, id: invoiceId };
+        const orderWithId = {
+            ...orderData,
+            id: invoiceId,
+            paymentMode: orderData.paymentMethod // Ensure legacy field is also set
+        };
 
         // Step 2: Insert the order with the server-assigned ID
         try {
