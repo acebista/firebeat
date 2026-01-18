@@ -97,6 +97,23 @@ export const DispatchTripDetails: React.FC = () => {
     try {
       await TripService.update(trip.id, { status: newStatus });
       setTrip(prev => prev ? { ...prev, status: newStatus } : null);
+
+      // When marking as PACKED, auto-generate trip_loads from order items
+      if (newStatus === 'packed' && orders.length > 0) {
+        try {
+          const { TripStockService } = await import('../../services/finpro/TripStockService');
+          const generated = await TripStockService.generateLoadsFromOrders(trip.id);
+          if (generated.items.length > 0) {
+            await TripStockService.loadTruck(generated);
+            console.log('[DispatchTripDetails] Auto-generated trip_loads:', generated.items.length, 'products');
+            toast.success(`Loaded ${generated.items.length} products onto trip`);
+          }
+        } catch (loadErr) {
+          console.error('[DispatchTripDetails] Failed to auto-generate trip_loads:', loadErr);
+          // Don't fail the whole operation, just log - the fallback in Reports will still work
+        }
+      }
+
       // When dispatching to delivery, ensure linked orders reflect the dispatch status
       if (newStatus === 'out_for_delivery' && orders.length > 0) {
         await Promise.all(
