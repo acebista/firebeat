@@ -523,6 +523,7 @@ export const CreateOrder: React.FC = () => {
             setIsCartOpen(false);
         } catch (e: any) {
             console.error('Order placement failed:', e);
+            console.error('Error details:', JSON.stringify(e, null, 2));
 
             // Parse the error and provide a helpful message
             let errorMessage = 'Failed to place order';
