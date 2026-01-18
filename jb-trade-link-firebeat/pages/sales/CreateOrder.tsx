@@ -494,7 +494,7 @@ export const CreateOrder: React.FC = () => {
         }
     };
 
-    const generateInvoiceId = async () => {
+    const generateInvoiceId = async (): Promise<string> => {
         const date = new Date();
         const yy = date.getFullYear().toString().slice(-2);
         const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -502,6 +502,7 @@ export const CreateOrder: React.FC = () => {
         const datePrefix = `${yy}${mm}${dd}`;
 
         try {
+            // Get the highest sequential number for today
             const { data: todayOrders, error } = await supabase
                 .from('orders')
                 .select('id')
@@ -511,20 +512,61 @@ export const CreateOrder: React.FC = () => {
 
             if (error) throw error;
 
-            let nextSeq = 1;
+            let baseSeq = 1;
             if (todayOrders && todayOrders.length > 0) {
                 const lastInvoice = todayOrders[0].id;
-                const lastSeq = parseInt(lastInvoice.split('-')[1]);
-                nextSeq = lastSeq + 1;
+                const parts = lastInvoice.split('-');
+                if (parts.length >= 2) {
+                    const lastSeq = parseInt(parts[1]);
+                    if (!isNaN(lastSeq)) {
+                        baseSeq = lastSeq + 1;
+                    }
+                }
             }
 
-            const seq = String(nextSeq).padStart(3, '0');
+            // Add a small random offset (0-5) to reduce collision probability
+            // when multiple users hit "Place Order" at exact same moment
+            const randomOffset = Math.floor(Math.random() * 5);
+            const seq = String(baseSeq + randomOffset).padStart(3, '0');
+
             return `${datePrefix}-${seq}`;
         } catch (error) {
             console.error('Error generating invoice ID:', error);
-            const seq = String(Math.floor(Math.random() * 900) + 100);
-            return `${datePrefix}-${seq}`;
+            // Fallback: Use timestamp-based ID to guarantee uniqueness
+            const timestamp = Date.now().toString(36).slice(-4).toUpperCase();
+            const randomPart = Math.floor(Math.random() * 100).toString().padStart(2, '0');
+            return `${datePrefix}-${timestamp}${randomPart}`;
         }
+    };
+
+    // Retry order insertion with new ID if duplicate detected
+    const insertOrderWithRetry = async (orderData: any, maxRetries = 3): Promise<{ success: boolean; orderId?: string; error?: string }> => {
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+            const invoiceId = await generateInvoiceId();
+            const orderWithId = { ...orderData, id: invoiceId };
+
+            try {
+                const result = await OrderService.add(orderWithId);
+                if (result) {
+                    return { success: true, orderId: invoiceId };
+                }
+            } catch (err: any) {
+                const errorMsg = err?.message || String(err);
+
+                // Check if it's a duplicate key error
+                if (errorMsg.includes('duplicate') || errorMsg.includes('unique') || errorMsg.includes('23505')) {
+                    console.warn(`[CreateOrder] Duplicate ID collision on attempt ${attempt + 1}, retrying...`);
+                    // Wait a tiny bit before retry to let other transactions complete
+                    await new Promise(resolve => setTimeout(resolve, 100 + Math.random() * 200));
+                    continue;
+                }
+
+                // Other error - don't retry
+                return { success: false, error: errorMsg };
+            }
+        }
+
+        return { success: false, error: 'Failed to generate unique order ID after multiple attempts. Please try again.' };
     };
 
     const validateCart = (): string[] => {
@@ -563,7 +605,6 @@ export const CreateOrder: React.FC = () => {
             return;
         }
 
-        const invoiceId = await generateInvoiceId();
         const spName = selectedSalesperson === 'office' ? 'Office' : salespersons.find(s => s.id === selectedSalesperson)?.name || 'Unknown';
         const custName = customers.find(c => c.id === selectedCustomer)?.name || 'Unknown';
 
@@ -588,8 +629,8 @@ export const CreateOrder: React.FC = () => {
 
         const gpsCoords = await captureGPS();
 
+        // Prepare order data WITHOUT id - id will be generated in retry loop
         const orderData = {
-            id: invoiceId,
             customerId: selectedCustomer,
             customerName: custName,
             salespersonId: selectedSalesperson,
@@ -606,55 +647,26 @@ export const CreateOrder: React.FC = () => {
             paymentMethod: paymentMode
         };
 
-        try {
-            await OrderService.add(orderData);
+        // Use retry mechanism to handle duplicate ID collisions
+        const result = await insertOrderWithRetry(orderData);
 
+        if (result.success && result.orderId) {
             // PHASE 1: Clear draft after successful order
             localStorage.removeItem(`draft_order_${user?.id}`);
 
-            toast.success(`✓ Order #${invoiceId} - ₹${finalTotal.toFixed(0)}`);
+            toast.success(`✓ Order #${result.orderId} - ₹${finalTotal.toFixed(0)}`);
             setCart([]);
             setSelectedCompany('');
             setOrderDiscountPct(0);
             setIsCartOpen(false);
-        } catch (e: any) {
-            console.error('Order placement failed:', e);
-            console.error('Error details:', JSON.stringify(e, null, 2));
-
-            // Parse the error and provide a helpful message
-            let errorMessage = 'Failed to place order';
-            let errorDetails = '';
-
-            if (e?.message) {
-                const msg = e.message.toLowerCase();
-
-                if (msg.includes('network') || msg.includes('fetch') || msg.includes('connection')) {
-                    errorMessage = 'Network Error';
-                    errorDetails = 'Please check your internet connection and try again.';
-                } else if (msg.includes('duplicate') || msg.includes('unique') || msg.includes('already exists')) {
-                    errorMessage = 'Duplicate Order ID';
-                    errorDetails = 'An order with this ID already exists. Please try again.';
-                } else if (msg.includes('permission') || msg.includes('denied') || msg.includes('unauthorized')) {
-                    errorMessage = 'Permission Denied';
-                    errorDetails = 'You do not have permission to place orders. Please contact admin.';
-                } else if (msg.includes('null') || msg.includes('required') || msg.includes('missing')) {
-                    errorMessage = 'Missing Information';
-                    errorDetails = 'Some required information is missing. Please check customer and items.';
-                } else if (msg.includes('timeout')) {
-                    errorMessage = 'Server Timeout';
-                    errorDetails = 'The server took too long to respond. Please try again.';
-                } else {
-                    // Show the raw error for debugging
-                    errorDetails = e.message.length > 100 ? e.message.substring(0, 100) + '...' : e.message;
-                }
-            } else if (e?.code) {
-                errorDetails = `Error code: ${e.code}`;
-            }
+        } else {
+            // Handle error
+            const errorMessage = result.error || 'Failed to place order. Please try again.';
 
             toast.error(
                 <div className="space-y-1">
-                    <p className="font-bold">{errorMessage}</p>
-                    {errorDetails && <p className="text-sm opacity-90">{errorDetails}</p>}
+                    <p className="font-bold">Order Failed</p>
+                    <p className="text-sm opacity-90">{errorMessage}</p>
                 </div>,
                 { duration: 6000 }
             );
@@ -748,10 +760,10 @@ export const CreateOrder: React.FC = () => {
                                 <button
                                     onClick={checkLocationManually}
                                     className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-bold border transition-all active:scale-95 ${permissionStatus === 'granted'
-                                            ? 'bg-green-50 border-green-200 text-green-700'
-                                            : permissionStatus === 'denied'
-                                                ? 'bg-red-50 border-red-200 text-red-700'
-                                                : 'bg-white border-gray-200 text-gray-500'
+                                        ? 'bg-green-50 border-green-200 text-green-700'
+                                        : permissionStatus === 'denied'
+                                            ? 'bg-red-50 border-red-200 text-red-700'
+                                            : 'bg-white border-gray-200 text-gray-500'
                                         }`}
                                 >
                                     <MapPin className={`h-3 w-3 ${isGettingLocation ? 'animate-pulse' : ''}`} />
