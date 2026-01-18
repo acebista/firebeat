@@ -294,12 +294,47 @@ export const TripStockService = {
     /**
      * Get stock reconciliation for a trip
      * Auto-calculates what should be in the van at EOD from all data sources
+     * 
+     * FALLBACK: If trip_loads is empty, we derive loaded quantities from order items
+     * This ensures retroactive compatibility for trips without explicit load records.
      */
     getStockReconciliation: async (tripId: string): Promise<StockReconciliationRow[]> => {
-        // Get loads
+        // Get loads from trip_loads table
         const loads = await TripStockService.getTripLoads(tripId);
-        const loadMap = new Map<string, number>();
+        let loadMap = new Map<string, number>();
         loads.forEach(l => loadMap.set(l.product_id, l.qty_loaded));
+
+        // FALLBACK: If no loads recorded, derive from all orders assigned to this trip
+        if (loads.length === 0) {
+            console.log(`[TripStockService] No trip_loads for ${tripId}, deriving from orders...`);
+
+            // Get ALL orders assigned to this trip (regardless of status)
+            // This includes delivered, cancelled, dispatched etc.
+            const { data: allOrders, error } = await supabase
+                .from('orders')
+                .select('id, items, status')
+                .eq('assignedTripId', tripId);
+
+            if (!error && allOrders) {
+                for (const order of allOrders) {
+                    let items = order.items;
+                    if (typeof items === 'string') {
+                        try { items = JSON.parse(items); } catch (e) { continue; }
+                    }
+                    if (!Array.isArray(items)) continue;
+
+                    for (const item of items) {
+                        const productId = item.productId || item.product_id;
+                        const qty = Number(item.qty || item.quantity) || 0;
+                        if (productId && qty > 0) {
+                            const current = loadMap.get(productId) || 0;
+                            loadMap.set(productId, current + qty);
+                        }
+                    }
+                }
+                console.log(`[TripStockService] Derived ${loadMap.size} products from ${allOrders.length} orders`);
+            }
+        }
 
         // Get manual unloads (if entered)
         const unloads = await TripStockService.getTripUnloads(tripId);
