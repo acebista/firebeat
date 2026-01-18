@@ -54,24 +54,82 @@ export const CreateOrder: React.FC = () => {
     const [newCustomerLocation, setNewCustomerLocation] = useState('');
     const [isGettingLocation, setIsGettingLocation] = useState(false);
     const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+    const [permissionStatus, setPermissionStatus] = useState<'unknown' | 'granted' | 'denied' | 'prompt'>('unknown');
+
+    // Check permissions and session on load
+    useEffect(() => {
+        // Check location permission
+        if ('permissions' in navigator) {
+            navigator.permissions.query({ name: 'geolocation' }).then((result) => {
+                setPermissionStatus(result.state as any);
+                console.log('[CreateOrder] Location permission:', result.state);
+
+                // If denied, show a toast with instructions
+                if (result.state === 'denied') {
+                    toast.error(
+                        <div>
+                            <p className="font-bold">Location Access Blocked</p>
+                            <p className="text-sm">Please enable location in your browser settings for order GPS tracking.</p>
+                        </div>,
+                        { duration: 8000 }
+                    );
+                }
+
+                // Listen for permission changes
+                result.onchange = () => {
+                    setPermissionStatus(result.state as any);
+                    console.log('[CreateOrder] Location permission changed to:', result.state);
+                };
+            }).catch(() => {
+                console.log('[CreateOrder] Could not query permissions');
+            });
+        }
+
+        // Request location permission proactively (shows prompt if needed)
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                () => {
+                    console.log('[CreateOrder] Location access granted');
+                    setPermissionStatus('granted');
+                },
+                (error) => {
+                    if (error.code === error.PERMISSION_DENIED) {
+                        setPermissionStatus('denied');
+                        console.log('[CreateOrder] Location access denied');
+                    }
+                },
+                { timeout: 5000 }
+            );
+        }
+    }, []);
 
     // Load Data
     useEffect(() => {
         const loadAll = async () => {
             setLoadingData(true);
             try {
+                console.log('[CreateOrder] Loading data...');
                 const [prods, comps, custs, users] = await Promise.all([
                     ProductService.getAll(),
                     CompanyService.getAll(),
                     CustomerService.getAll(),
                     UserService.getAll()
                 ]);
+                console.log('[CreateOrder] Data loaded: products=%d, companies=%d, customers=%d, users=%d',
+                    prods.length, comps.length, custs.length, users.length);
                 setProducts(prods);
                 setCompanies(comps);
                 setCustomers(custs);
                 setSalespersons(users.filter(u => u.role === 'sales').map(u => ({ id: u.id, name: u.name })));
-            } catch (e) {
-                console.error(e);
+            } catch (e: any) {
+                console.error('[CreateOrder] Failed to load data:', e);
+                toast.error(
+                    <div>
+                        <p className="font-bold">Failed to Load Data</p>
+                        <p className="text-sm">{e?.message || 'Please check your connection and refresh.'}</p>
+                    </div>,
+                    { duration: 8000 }
+                );
             } finally {
                 setLoadingData(false);
             }

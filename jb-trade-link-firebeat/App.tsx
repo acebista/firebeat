@@ -8,6 +8,11 @@ import { LoadingOverlay } from './components/auth/LoadingOverlay';
 import { Login } from './pages/Login';
 import { ResetPassword } from './pages/ResetPassword';
 import { UserRole } from './types';
+import { initVersionCheck, APP_VERSION } from './lib/appVersion';
+
+// Initialize version check on app load - forces refresh if version changed
+initVersionCheck();
+console.log(`[App] Version: ${APP_VERSION}`);
 
 // Admin Pages
 import { AdminDashboard } from './pages/admin/AdminDashboard';
