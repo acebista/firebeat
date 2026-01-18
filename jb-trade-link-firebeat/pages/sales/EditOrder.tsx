@@ -49,6 +49,29 @@ export const EditOrder: React.FC = () => {
     const [newCustomerLocation, setNewCustomerLocation] = useState('');
     const [isGettingLocation, setIsGettingLocation] = useState(false);
 
+    // Zoom state - persisted to localStorage
+    const [zoomLevel, setZoomLevel] = useState(() => {
+        const saved = localStorage.getItem('createorder_zoom');
+        return saved ? parseFloat(saved) : 100;
+    });
+
+    const zoomIn = () => {
+        const newZoom = Math.min(zoomLevel + 10, 150);
+        setZoomLevel(newZoom);
+        localStorage.setItem('createorder_zoom', String(newZoom));
+    };
+
+    const zoomOut = () => {
+        const newZoom = Math.max(zoomLevel - 10, 70);
+        setZoomLevel(newZoom);
+        localStorage.setItem('createorder_zoom', String(newZoom));
+    };
+
+    const resetZoom = () => {
+        setZoomLevel(100);
+        localStorage.setItem('createorder_zoom', '100');
+    };
+
     // Load Data
     useEffect(() => {
         const loadAll = async () => {
@@ -415,9 +438,32 @@ export const EditOrder: React.FC = () => {
     if (loadingData) return <div className="p-10 text-center">Loading order data...</div>;
 
     return (
-        <div className="flex flex-col lg:flex-row gap-6 lg:h-[calc(100vh-7rem)] h-auto pb-6">
+        <div className="flex flex-col lg:flex-row gap-6 lg:h-[calc(100vh-7rem)] h-auto pb-6" style={{ fontSize: `${zoomLevel}%` }}>
             {/* Left: Product Catalog */}
             <div className="flex-1 flex flex-col gap-4 lg:min-h-0 h-auto overflow-visible">
+                <div className="flex justify-between items-center bg-indigo-50 p-2 rounded-lg border border-indigo-100 mb-2">
+                    <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-widest pl-2">Scale Display</span>
+                    <div className="flex items-center gap-1 bg-white rounded-lg border border-indigo-200 p-0.5 shadow-sm">
+                        <button
+                            onClick={zoomOut}
+                            className="w-8 h-8 flex items-center justify-center hover:bg-indigo-50 rounded active:scale-90 transition-all font-bold text-indigo-600"
+                        >
+                            −
+                        </button>
+                        <button
+                            onClick={resetZoom}
+                            className="px-2 h-8 flex items-center justify-center text-[10px] font-bold text-indigo-700 hover:bg-indigo-50 rounded min-w-[40px]"
+                        >
+                            {zoomLevel}%
+                        </button>
+                        <button
+                            onClick={zoomIn}
+                            className="w-8 h-8 flex items-center justify-center hover:bg-indigo-50 rounded active:scale-90 transition-all font-bold text-indigo-600"
+                        >
+                            +
+                        </button>
+                    </div>
+                </div>
                 <Card className="p-4 shrink-0 space-y-3 shadow-sm overflow-visible z-20">
                     <div className="flex justify-between items-center border-b pb-2">
                         <h2 className="text-lg font-bold text-indigo-800">Edit Order: {id}</h2>
