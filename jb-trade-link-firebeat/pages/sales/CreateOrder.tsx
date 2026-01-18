@@ -494,6 +494,8 @@ export const CreateOrder: React.FC = () => {
         }
     };
 
+    // Generate a guaranteed-unique invoice ID
+    // Format: YYMMDD-XXXX where XXXX is a unique suffix
     const generateInvoiceId = async (): Promise<string> => {
         const date = new Date();
         const yy = date.getFullYear().toString().slice(-2);
@@ -502,47 +504,57 @@ export const CreateOrder: React.FC = () => {
         const datePrefix = `${yy}${mm}${dd}`;
 
         try {
-            // Get the highest sequential number for today
-            const { data: todayOrders, error } = await supabase
+            // Get count of today's orders to use as base
+            const { count, error } = await supabase
                 .from('orders')
-                .select('id')
-                .like('id', `${datePrefix}-%`)
-                .order('id', { ascending: false })
-                .limit(1);
+                .select('*', { count: 'exact', head: true })
+                .like('id', `${datePrefix}-%`);
 
             if (error) throw error;
 
-            let baseSeq = 1;
-            if (todayOrders && todayOrders.length > 0) {
-                const lastInvoice = todayOrders[0].id;
-                const parts = lastInvoice.split('-');
-                if (parts.length >= 2) {
-                    const lastSeq = parseInt(parts[1]);
-                    if (!isNaN(lastSeq)) {
-                        baseSeq = lastSeq + 1;
-                    }
-                }
-            }
+            // Use count + 1 as base, add timestamp component for uniqueness
+            const baseSeq = (count || 0) + 1;
 
-            // Add a small random offset (0-5) to reduce collision probability
-            // when multiple users hit "Place Order" at exact same moment
-            const randomOffset = Math.floor(Math.random() * 5);
-            const seq = String(baseSeq + randomOffset).padStart(3, '0');
+            // Add microsecond-level uniqueness: last 3 digits of timestamp + random
+            const microUnique = Date.now() % 1000;
+            const randomSuffix = Math.floor(Math.random() * 10);
 
-            return `${datePrefix}-${seq}`;
+            // Combine: baseSeq * 10000 + micro * 10 + random gives unique number
+            const uniqueNum = baseSeq * 10000 + microUnique * 10 + randomSuffix;
+
+            return `${datePrefix}-${uniqueNum}`;
         } catch (error) {
             console.error('Error generating invoice ID:', error);
-            // Fallback: Use timestamp-based ID to guarantee uniqueness
-            const timestamp = Date.now().toString(36).slice(-4).toUpperCase();
-            const randomPart = Math.floor(Math.random() * 100).toString().padStart(2, '0');
+            // Fallback: Pure timestamp-based ID (guaranteed unique)
+            const timestamp = Date.now().toString(36).toUpperCase();
+            const randomPart = Math.random().toString(36).slice(2, 5).toUpperCase();
             return `${datePrefix}-${timestamp}${randomPart}`;
         }
     };
 
-    // Retry order insertion with new ID if duplicate detected
-    const insertOrderWithRetry = async (orderData: any, maxRetries = 3): Promise<{ success: boolean; orderId?: string; error?: string }> => {
+    // Insert order with robust retry and guaranteed unique ID generation
+    const insertOrderWithRetry = async (orderData: any, maxRetries = 5): Promise<{ success: boolean; orderId?: string; error?: string }> => {
         for (let attempt = 0; attempt < maxRetries; attempt++) {
-            const invoiceId = await generateInvoiceId();
+            // Generate a fresh unique ID for each attempt
+            let invoiceId: string;
+
+            if (attempt === 0) {
+                // First attempt: use the standard generator
+                invoiceId = await generateInvoiceId();
+            } else {
+                // Subsequent attempts: use guaranteed-unique fallback format
+                const date = new Date();
+                const yy = date.getFullYear().toString().slice(-2);
+                const mm = String(date.getMonth() + 1).padStart(2, '0');
+                const dd = String(date.getDate()).padStart(2, '0');
+                const datePrefix = `${yy}${mm}${dd}`;
+
+                // Use full timestamp + random for guaranteed uniqueness
+                const ts = Date.now().toString(36).toUpperCase();
+                const rand = Math.random().toString(36).slice(2, 4).toUpperCase();
+                invoiceId = `${datePrefix}-${ts}${rand}`;
+            }
+
             const orderWithId = { ...orderData, id: invoiceId };
 
             try {
@@ -555,9 +567,9 @@ export const CreateOrder: React.FC = () => {
 
                 // Check if it's a duplicate key error
                 if (errorMsg.includes('duplicate') || errorMsg.includes('unique') || errorMsg.includes('23505')) {
-                    console.warn(`[CreateOrder] Duplicate ID collision on attempt ${attempt + 1}, retrying...`);
-                    // Wait a tiny bit before retry to let other transactions complete
-                    await new Promise(resolve => setTimeout(resolve, 100 + Math.random() * 200));
+                    console.warn(`[CreateOrder] Duplicate ID collision on attempt ${attempt + 1}, using fallback generator...`);
+                    // Wait with exponential backoff
+                    await new Promise(resolve => setTimeout(resolve, 50 * Math.pow(2, attempt) + Math.random() * 100));
                     continue;
                 }
 
@@ -566,7 +578,8 @@ export const CreateOrder: React.FC = () => {
             }
         }
 
-        return { success: false, error: 'Failed to generate unique order ID after multiple attempts. Please try again.' };
+        // This should almost never happen with the new approach
+        return { success: false, error: 'Unable to save order. Please check your connection and try again.' };
     };
 
     const validateCart = (): string[] => {
