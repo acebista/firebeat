@@ -15,6 +15,7 @@ import { Order, Product, User, SalesReturn, Company } from '../../types';
 import { CommissionRate } from '../../types/hr'; // Import CommissionRate type
 import { HRCommissionReport } from './reports/HRCommissionRepo'; // Component
 import { TripStockService, StockReconciliationRow } from '../../services/finpro/TripStockService';
+import { PaymentsService } from '../../services/ledger/PaymentsService';
 
 // --- Metric Calculation Helper ---
 // This moves the logic from MockReportService to the Client Component
@@ -444,6 +445,16 @@ export const Reports: React.FC = () => {
       const returnsByInvoiceId = new Map<string, SalesReturn>();
       allReturns.forEach(r => returnsByInvoiceId.set(r.invoiceId, r));
 
+      // Fetch payments for these invoices to get accurate collection data
+      const invoiceIds = orders.map(o => o.id);
+      const allPayments = await PaymentsService.getPaymentsByInvoices(invoiceIds);
+      const paymentsByInvoice = new Map<string, any[]>();
+      allPayments.forEach(p => {
+        const list = paymentsByInvoice.get(p.invoice_id) || [];
+        list.push(p);
+        paymentsByInvoice.set(p.invoice_id, list);
+      });
+
       // Process each order into a report row
       const rows = orders.map(order => {
         const discountAmount = order.discount || 0;
@@ -467,15 +478,20 @@ export const Reports: React.FC = () => {
           }
         }
 
-        // Get payment method from the delivery capture field
-        const paymentMethod = order.payment_method_at_delivery || order.paymentMode || 'cash';
+        // Use actual payment data from ledger
+        const invoicePayments = paymentsByInvoice.get(order.id) || [];
+        const collectedAmount = invoicePayments.reduce((sum, p) => sum + Number(p.amount), 0);
 
-        // Calculate collected amount
-        let collectedAmount = 0;
-        if (order.status === 'delivered' || order.status === 'completed') {
-          collectedAmount = (order.payment_collected !== undefined && order.payment_collected !== null)
-            ? Number(order.payment_collected)
-            : order.totalAmount;
+        // Get payment method from ledger if payments exist, otherwise fallback to order fields
+        let paymentMethod = order.payment_method_at_delivery || order.paymentMode || 'cash';
+        if (invoicePayments.length > 0) {
+          paymentMethod = invoicePayments.length > 1 ? 'multiple' : invoicePayments[0].method;
+        } else if (order.status === 'delivered' || order.status === 'completed') {
+          // If delivered but no payments in ledger, it's likely a credit order
+          // unless payment_method_at_delivery says otherwise (multiple fallback)
+          if (!order.payment_method_at_delivery) {
+            paymentMethod = 'credit';
+          }
         }
 
         return {
