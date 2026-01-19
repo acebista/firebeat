@@ -177,18 +177,18 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [selectedOption]);
 
-  // Initial sync of value - also re-sync when options change
+  // Sync searchTerm with selected value when value or options change
   useEffect(() => {
     // Find selected option from current options
     const currentSelectedOption = options.find(o => o.value === value);
     if (currentSelectedOption) {
+      // Always update searchTerm to match selected option label
       setSearchTerm(currentSelectedOption.label);
     } else if (!value) {
-      // Only clear if value is actually empty (not just missing from options temporarily)
+      // Clear if no value selected
       setSearchTerm("");
     }
-    // Note: If value exists but option not found, keep existing searchTerm
-    // This handles the brief moment when value is set before options array updates
+    // If value exists but option not found yet, keep waiting (next options update will find it)
   }, [value, options]);
 
   const filteredOptions = options.filter(opt =>
@@ -332,8 +332,8 @@ export const Tab: React.FC<TabProps> = ({ id, children, activeTab = '', onTabCha
     <button
       onClick={() => onTabChange(id)}
       className={`py-3 px-1 font-semibold text-sm border-b-2 transition-all duration-200 whitespace-nowrap ${isActive
-          ? 'border-blue-600 text-blue-700'
-          : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
+        ? 'border-blue-600 text-blue-700'
+        : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
         }`}
     >
       {children}

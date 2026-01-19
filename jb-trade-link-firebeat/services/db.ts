@@ -118,7 +118,14 @@ export const CustomerService = {
     return allCustomers;
   },
   add: async (customer: Omit<Customer, 'id'>) => {
-    const { data, error } = await supabase.from(COLS.CUSTOMERS).upsert(customer).select().single();
+    // Generate a unique ID if not provided
+    const id = (customer as any).id || `cust_${crypto.randomUUID().split('-')[0]}`;
+
+    const { data, error } = await supabase
+      .from(COLS.CUSTOMERS)
+      .insert({ ...customer, id })
+      .select()
+      .single();
     if (error) throw error;
     return data as Customer;
   },
