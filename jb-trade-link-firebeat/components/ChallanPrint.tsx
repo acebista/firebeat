@@ -141,7 +141,7 @@ export const ChallanPrint: React.FC<ChallanPrintProps> = ({
           <strong>PAN Number:</strong> {order.customerPAN || 'N/A'}
         </div>
         <div style={{ marginBottom: '5px' }}>
-          <strong>Payment Mode:</strong> {order.paymentMode || 'Cash'}
+          <strong>Payment Mode:</strong> {(order as any).paymentMethod || order.paymentMode || 'Cash'}
         </div>
         <div style={{ marginBottom: '10px' }}>
           <strong>Products Sold:</strong>
@@ -337,7 +337,7 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
             <div><strong>Salesman:</strong> ${order.salespersonName} &nbsp;&nbsp;&nbsp; <strong>Phone:</strong> ${order.salespersonPhone || 'N/A'}</div>
             <div><strong>Customer Name:</strong> ${order.customerName} &nbsp;&nbsp;&nbsp; <strong>Phone:</strong> ${order.customerPhone || 'N/A'}</div>
             <div><strong>PAN Number:</strong> ${order.customerPAN || 'N/A'}</div>
-            <div><strong>Payment Mode:</strong> ${order.paymentMode || 'Cash'}</div>
+            <div><strong>Payment Mode:</strong> ${(order as any).paymentMethod || order.paymentMode || 'Cash'}</div>
             <div><strong>Products Sold:</strong></div>
           </div>
 
@@ -462,7 +462,7 @@ export const printChallans = (
                 <div><strong>Salesman:</strong> ${order.salespersonName} &nbsp;&nbsp;&nbsp; <strong>Phone:</strong> ${order.salespersonPhone || 'N/A'}</div>
                 <div><strong>Customer Name:</strong> ${order.customerName} &nbsp;&nbsp;&nbsp; <strong>Phone:</strong> ${order.customerPhone || 'N/A'}</div>
                 <div><strong>PAN Number:</strong> ${order.customerPAN || 'N/A'}</div>
-                <div><strong>Payment Mode:</strong> ${order.paymentMode || 'Cash'}</div>
+                <div><strong>Payment Mode:</strong> ${(order as any).paymentMethod || order.paymentMode || 'Cash'}</div>
                 <div><strong>Products Sold:</strong></div>
               </div>
 

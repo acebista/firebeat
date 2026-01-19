@@ -1,26 +1,26 @@
 import { Order, Product, Customer } from '../types';
 
 export const printChallanV2 = (order: Order, products: Product[], customer?: Customer) => {
-    const printWindow = window.open('', '', 'height=800,width=600');
-    if (!printWindow) {
-        alert('Please allow popups to print');
-        return;
-    }
+  const printWindow = window.open('', '', 'height=800,width=600');
+  if (!printWindow) {
+    alert('Please allow popups to print');
+    return;
+  }
 
-    const customerLocation = customer?.locationText;
-    const qrUrl = customerLocation
-        ? `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(`https://www.google.com/maps?q=${customerLocation}`)}`
-        : '';
+  const customerLocation = customer?.locationText;
+  const qrUrl = customerLocation
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(`https://www.google.com/maps?q=${customerLocation}`)}`
+    : '';
 
-    const subtotal = order.items?.reduce((sum: number, item: any) => sum + (item.total || 0), 0) || 0;
-    const discountAmount = order.discount || 0;
-    const discountPct = subtotal > 0 ? ((discountAmount / subtotal) * 100).toFixed(2) : '0';
-    const grandTotal = order.totalAmount || 0;
-    const paymentMethod = (order as any).paymentMethod || 'Cash';
+  const subtotal = order.items?.reduce((sum: number, item: any) => sum + (item.total || 0), 0) || 0;
+  const discountAmount = order.discount || 0;
+  const discountPct = subtotal > 0 ? ((discountAmount / subtotal) * 100).toFixed(2) : '0';
+  const grandTotal = order.totalAmount || 0;
+  const paymentMethod = (order as any).paymentMethod || (order as any).paymentMode || 'Cash';
 
-    const copies = paymentMethod.toLowerCase() === 'cash' ? ['Customer Copy'] : ['Customer Copy', 'Vendor Copy'];
+  const copies = paymentMethod.toLowerCase() === 'cash' ? ['Customer Copy'] : ['Customer Copy', 'Vendor Copy'];
 
-    printWindow.document.write(`
+  printWindow.document.write(`
     <html>
       <head>
         <title>Delivery Challan - ${order.id}</title>
@@ -58,8 +58,8 @@ export const printChallanV2 = (order: Order, products: Product[], customer?: Cus
       <body>
   `);
 
-    copies.forEach((copyType) => {
-        printWindow.document.write(`
+  copies.forEach((copyType) => {
+    printWindow.document.write(`
       <div class="challan-page">
         <div class="header">
           <h1>J.B Trade Link Pvt. Ltd.</h1>
@@ -89,18 +89,18 @@ export const printChallanV2 = (order: Order, products: Product[], customer?: Cus
           </thead>
           <tbody>
             ${order.items?.map((item: any, idx: number) => {
-            // Find product to get baseRate and discountedRate
-            const product = products.find(p => p.id === item.productId);
-            const baseRate = product?.baseRate || item.rate || 0;
-            const actualRate = item.rate || 0;
+      // Find product to get baseRate and discountedRate
+      const product = products.find(p => p.id === item.productId);
+      const baseRate = product?.baseRate || item.rate || 0;
+      const actualRate = item.rate || 0;
 
-            // Calculate values
-            const qty = item.qty || 0;
-            const subtotalAtBase = baseRate * qty;
-            const actualTotal = item.total || 0;
-            const discountPct = baseRate > 0 ? (((baseRate - actualRate) / baseRate) * 100) : 0;
+      // Calculate values
+      const qty = item.qty || 0;
+      const subtotalAtBase = baseRate * qty;
+      const actualTotal = item.total || 0;
+      const discountPct = baseRate > 0 ? (((baseRate - actualRate) / baseRate) * 100) : 0;
 
-            return `
+      return `
                 <tr>
                   <td style="text-align: center;">${idx + 1}</td>
                   <td>${item.productName}</td>
@@ -111,7 +111,7 @@ export const printChallanV2 = (order: Order, products: Product[], customer?: Cus
                   <td style="text-align: right; font-weight: bold;">${actualTotal.toFixed(2)}</td>
                 </tr>
               `;
-        }).join('')}
+    }).join('')}
           </tbody>
         </table>
         <div class="totals">
@@ -125,13 +125,13 @@ export const printChallanV2 = (order: Order, products: Product[], customer?: Cus
         </div>
       </div>
     `);
-    });
+  });
 
-    printWindow.document.write(`</body></html>`);
-    printWindow.document.close();
+  printWindow.document.write(`</body></html>`);
+  printWindow.document.close();
 
-    setTimeout(() => {
-        printWindow.focus();
-        printWindow.print();
-    }, 1000);
+  setTimeout(() => {
+    printWindow.focus();
+    printWindow.print();
+  }, 1000);
 };
