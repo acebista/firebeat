@@ -9,17 +9,17 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: React.ReactNode;
 }
 
-export const Button: React.FC<ButtonProps> = ({ 
-  variant = 'primary', 
-  size = 'md', 
-  isLoading, 
+export const Button: React.FC<ButtonProps> = ({
+  variant = 'primary',
+  size = 'md',
+  isLoading,
   className = '',
   icon,
-  children, 
-  ...props 
+  children,
+  ...props
 }) => {
   const baseStyles = "inline-flex items-center justify-center font-medium transition-all duration-200 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md";
-  
+
   const variants = {
     primary: "bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2",
     secondary: "bg-slate-100 text-slate-900 hover:bg-slate-200 active:bg-slate-300 focus:ring-2 focus:ring-slate-300 focus:ring-offset-2",
@@ -36,7 +36,7 @@ export const Button: React.FC<ButtonProps> = ({
   };
 
   return (
-    <button 
+    <button
       className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${className}`}
       disabled={isLoading || props.disabled}
       {...props}
@@ -120,7 +120,7 @@ export const Select: React.FC<SelectProps> = ({ label, options, error, helpText,
           ))}
         </select>
         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-slate-600">
-           <ChevronDown className="h-5 w-5" />
+          <ChevronDown className="h-5 w-5" />
         </div>
       </div>
       {error && <p className="mt-1.5 text-xs font-medium text-red-600">{error}</p>}
@@ -142,12 +142,12 @@ interface SearchableSelectProps {
   helpText?: string;
 }
 
-export const SearchableSelect: React.FC<SearchableSelectProps> = ({ 
-  label, 
-  options, 
-  value, 
-  onChange, 
-  placeholder = "Select...", 
+export const SearchableSelect: React.FC<SearchableSelectProps> = ({
+  label,
+  options,
+  value,
+  onChange,
+  placeholder = "Select...",
   className = "",
   disabled = false,
   error,
@@ -177,16 +177,21 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [selectedOption]);
 
-  // Initial sync of value
+  // Initial sync of value - also re-sync when options change
   useEffect(() => {
-    if (selectedOption) {
-      setSearchTerm(selectedOption.label);
-    } else {
+    // Find selected option from current options
+    const currentSelectedOption = options.find(o => o.value === value);
+    if (currentSelectedOption) {
+      setSearchTerm(currentSelectedOption.label);
+    } else if (!value) {
+      // Only clear if value is actually empty (not just missing from options temporarily)
       setSearchTerm("");
     }
-  }, [value, selectedOption]);
+    // Note: If value exists but option not found, keep existing searchTerm
+    // This handles the brief moment when value is set before options array updates
+  }, [value, options]);
 
-  const filteredOptions = options.filter(opt => 
+  const filteredOptions = options.filter(opt =>
     opt.label.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -226,13 +231,13 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
           readOnly={disabled}
           disabled={disabled}
         />
-        
+
         {/* Icons */}
         <div className="absolute inset-y-0 right-0 flex items-center pr-3">
           {value && !disabled && (
-             <button onClick={handleClear} className="text-slate-400 hover:text-slate-600 mr-2 transition-colors">
-               <X className="h-4 w-4" />
-             </button>
+            <button onClick={handleClear} className="text-slate-400 hover:text-slate-600 mr-2 transition-colors">
+              <X className="h-4 w-4" />
+            </button>
           )}
           <ChevronDown className={`h-5 w-5 text-slate-600 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
         </div>
@@ -256,7 +261,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
           )}
         </div>
       )}
-      
+
       {error && <p className="mt-1.5 text-xs font-medium text-red-600">{error}</p>}
       {helpText && !error && <p className="mt-1.5 text-xs text-slate-500">{helpText}</p>}
     </div>
@@ -306,7 +311,7 @@ interface TabListProps {
   onTabChange?: (tabId: string) => void;
 }
 
-export const TabList: React.FC<TabListProps> = ({ children, activeTab = '', onTabChange = () => {} }) => (
+export const TabList: React.FC<TabListProps> = ({ children, activeTab = '', onTabChange = () => { } }) => (
   <div className="border-b-2 border-slate-200 flex space-x-8 overflow-x-auto">
     {React.Children.map(children, (child) =>
       React.isValidElement(child) ? React.cloneElement(child as React.ReactElement<any>, { activeTab, onTabChange }) : child
@@ -321,16 +326,15 @@ interface TabProps {
   onTabChange?: (tabId: string) => void;
 }
 
-export const Tab: React.FC<TabProps> = ({ id, children, activeTab = '', onTabChange = () => {} }) => {
+export const Tab: React.FC<TabProps> = ({ id, children, activeTab = '', onTabChange = () => { } }) => {
   const isActive = activeTab === id;
   return (
     <button
       onClick={() => onTabChange(id)}
-      className={`py-3 px-1 font-semibold text-sm border-b-2 transition-all duration-200 whitespace-nowrap ${
-        isActive
+      className={`py-3 px-1 font-semibold text-sm border-b-2 transition-all duration-200 whitespace-nowrap ${isActive
           ? 'border-blue-600 text-blue-700'
           : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
-      }`}
+        }`}
     >
       {children}
     </button>
@@ -366,7 +370,7 @@ export const TabGroup: React.FC<TabGroupProps> = ({ children, activeTab, onTabCh
     <div className="w-full">
       {tabList && React.cloneElement(tabList as React.ReactElement<any>, { activeTab, onTabChange })}
       <div className="mt-6">
-        {tabPanels.map((panel) => 
+        {tabPanels.map((panel) =>
           React.isValidElement(panel) ? React.cloneElement(panel as React.ReactElement<any>, { activeTab }) : panel
         )}
       </div>
