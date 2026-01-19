@@ -123,7 +123,7 @@ export const CustomerService = {
 
     const { data, error } = await supabase
       .from(COLS.CUSTOMERS)
-      .insert({ ...customer, id })
+      .upsert({ ...customer, id })
       .select()
       .single();
     if (error) throw error;
