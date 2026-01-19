@@ -1063,8 +1063,8 @@ export const CreateOrder: React.FC = () => {
                             </button>
                         </div>
 
-                        {/* Compact Cart Items - Single line per item */}
-                        <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5">
+                        {/* Cart Items - Two-row layout for full product name visibility */}
+                        <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2">
                             {cart.map((item) => {
                                 const product = products.find(p => p.id === item.productId);
                                 const minQty = product?.minOrderQty || 1;
@@ -1074,59 +1074,60 @@ export const CreateOrder: React.FC = () => {
                                 return (
                                     <div
                                         key={item.productId}
-                                        className={`flex items-center justify-between gap-2 p-2 rounded-lg ${hasError ? 'bg-red-50 border border-red-200' : 'bg-gray-50'}`}
+                                        className={`p-2.5 rounded-lg ${hasError ? 'bg-red-50 border border-red-200' : 'bg-gray-50'}`}
                                     >
-                                        {/* Product Name - truncated */}
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-xs font-medium text-gray-900 truncate">{item.productName}</p>
-                                            <p className="text-[10px] text-gray-500">₹{item.rate.toFixed(0)}/ea</p>
-                                        </div>
-
-                                        {/* Inline Qty Controls */}
-                                        <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg">
-                                            <button
-                                                onClick={() => updateQty(item.productId, item.qty - 1)}
-                                                className="w-7 h-7 flex items-center justify-center text-gray-500 hover:bg-gray-100 rounded-l-lg"
-                                            >
-                                                <Minus size={12} />
-                                            </button>
-                                            <input
-                                                type="text"
-                                                inputMode="numeric"
-                                                pattern="[0-9]*"
-                                                value={item.qty}
-                                                onChange={(e) => {
-                                                    const val = e.target.value;
-                                                    // Allow empty for typing, treat as 0
-                                                    if (val === '') {
-                                                        updateQty(item.productId, 0);
-                                                    } else {
-                                                        const num = parseInt(val, 10);
-                                                        if (!isNaN(num)) {
-                                                            updateQty(item.productId, num);
-                                                        }
-                                                    }
-                                                }}
-                                                onFocus={(e) => e.target.select()}
-                                                className="w-12 text-center text-sm font-bold bg-transparent border-none outline-none focus:bg-indigo-50 focus:ring-1 focus:ring-indigo-300 rounded"
-                                            />
-                                            <button
-                                                onClick={() => updateQty(item.productId, item.qty + 1)}
-                                                className="w-7 h-7 flex items-center justify-center text-gray-500 hover:bg-gray-100 rounded-r-lg"
-                                            >
-                                                <Plus size={12} />
-                                            </button>
-                                        </div>
-
-                                        {/* Total + Delete */}
-                                        <div className="flex items-center gap-1">
-                                            <span className="text-sm font-bold text-gray-900 w-16 text-right">₹{item.total.toFixed(0)}</span>
+                                        {/* Row 1: Full Product Name + Delete */}
+                                        <div className="flex items-start justify-between gap-2 mb-2">
+                                            <p className="text-sm font-medium text-gray-900 leading-tight flex-1">{item.productName}</p>
                                             <button
                                                 onClick={() => removeFromCart(item.productId)}
-                                                className="p-1 text-red-400 hover:text-red-600"
+                                                className="p-1 text-red-400 hover:text-red-600 shrink-0"
                                             >
                                                 <Trash2 size={14} />
                                             </button>
+                                        </div>
+
+                                        {/* Row 2: Rate + Qty Controls + Total */}
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[11px] text-gray-500">₹{item.rate.toFixed(0)}/ea</span>
+
+                                            {/* Qty Controls */}
+                                            <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg">
+                                                <button
+                                                    onClick={() => updateQty(item.productId, item.qty - 1)}
+                                                    className="w-7 h-7 flex items-center justify-center text-gray-500 hover:bg-gray-100 rounded-l-lg"
+                                                >
+                                                    <Minus size={12} />
+                                                </button>
+                                                <input
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    pattern="[0-9]*"
+                                                    value={item.qty}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        if (val === '') {
+                                                            updateQty(item.productId, 0);
+                                                        } else {
+                                                            const num = parseInt(val, 10);
+                                                            if (!isNaN(num)) {
+                                                                updateQty(item.productId, num);
+                                                            }
+                                                        }
+                                                    }}
+                                                    onFocus={(e) => e.target.select()}
+                                                    className="w-12 text-center text-sm font-bold bg-transparent border-none outline-none focus:bg-indigo-50 focus:ring-1 focus:ring-indigo-300 rounded"
+                                                />
+                                                <button
+                                                    onClick={() => updateQty(item.productId, item.qty + 1)}
+                                                    className="w-7 h-7 flex items-center justify-center text-gray-500 hover:bg-gray-100 rounded-r-lg"
+                                                >
+                                                    <Plus size={12} />
+                                                </button>
+                                            </div>
+
+                                            {/* Total */}
+                                            <span className="text-sm font-bold text-gray-900 w-16 text-right">₹{item.total.toFixed(0)}</span>
                                         </div>
                                     </div>
                                 );
