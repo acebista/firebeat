@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, Input, Button, SearchableSelect } from '../../components/ui/Elements';
 import { Modal } from '../../components/ui/Modal';
 import { Search, Trash2, ShoppingBag, ShoppingCart, Building2, X, UserPlus, Phone, CreditCard, MapPin, Navigation, Save, Plus, Minus, ChevronUp, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
@@ -27,6 +27,8 @@ export const CreateOrder: React.FC = () => {
     const [orderDiscountPct, setOrderDiscountPct] = useState(0);
     const [isCartOpen, setIsCartOpen] = useState(false); // Mobile cart sheet
     const [paymentMode, setPaymentMode] = useState<'Cash' | 'Cheque' | 'Credit' | 'QR'>('Cash');
+    const [isPlacingOrder, setIsPlacingOrder] = useState(false); // Prevents double-submit
+    const orderPlacementRef = useRef(false); // Ref-based guard for race conditions
 
     // Filters / Selections
     const [selectedCustomer, setSelectedCustomer] = useState('');
@@ -565,89 +567,112 @@ export const CreateOrder: React.FC = () => {
     };
 
     const handlePlaceOrder = async () => {
-        // PHASE 1: Validate customer selection with proper UX
-        if (!selectedCustomer) {
-            toast.error("Please select a customer before placing order");
-            setIsCartOpen(true); // Keep cart open so user can see items
+        // ========== DOUBLE-SUBMIT PROTECTION ==========
+        // Guard 1: State-based (for UI/button disable)
+        if (isPlacingOrder) {
+            console.warn('[CreateOrder] Order already in progress, blocking duplicate click');
             return;
         }
 
-        if (cart.length === 0) {
-            toast.error("Cart is empty");
+        // Guard 2: Ref-based (for race conditions where state hasn't updated yet)
+        if (orderPlacementRef.current) {
+            console.warn('[CreateOrder] Order placement ref locked, blocking duplicate click');
             return;
         }
 
-        const errors = validateCart();
-        if (errors.length > 0) {
-            toast.error(`Fix these:\n${errors.map(e => "• " + e).join("\n")}`, { duration: 6000 });
-            return;
-        }
+        // Lock immediately using ref (synchronous, before any async operation)
+        orderPlacementRef.current = true;
+        setIsPlacingOrder(true);
 
-        const spName = selectedSalesperson === 'office' ? 'Office' : salespersons.find(s => s.id === selectedSalesperson)?.name || 'Unknown';
-        const custName = customers.find(c => c.id === selectedCustomer)?.name || 'Unknown';
+        try {
+            // PHASE 1: Validate customer selection with proper UX
+            if (!selectedCustomer) {
+                toast.error("Please select a customer before placing order");
+                setIsCartOpen(true); // Keep cart open so user can see items
+                return;
+            }
 
-        // Capture GPS
-        const captureGPS = (): Promise<string | null> => {
-            return new Promise((resolve) => {
-                if (!navigator.geolocation) {
-                    resolve(null);
-                    return;
-                }
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        resolve(`${position.coords.latitude},${position.coords.longitude}`);
-                    },
-                    () => {
+            if (cart.length === 0) {
+                toast.error("Cart is empty");
+                return;
+            }
+
+            const errors = validateCart();
+            if (errors.length > 0) {
+                toast.error(`Fix these:\n${errors.map(e => "• " + e).join("\n")}`, { duration: 6000 });
+                return;
+            }
+
+            const spName = selectedSalesperson === 'office' ? 'Office' : salespersons.find(s => s.id === selectedSalesperson)?.name || 'Unknown';
+            const custName = customers.find(c => c.id === selectedCustomer)?.name || 'Unknown';
+
+            // Capture GPS
+            const captureGPS = (): Promise<string | null> => {
+                return new Promise((resolve) => {
+                    if (!navigator.geolocation) {
                         resolve(null);
-                    },
-                    { timeout: 5000, enableHighAccuracy: true }
+                        return;
+                    }
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            resolve(`${position.coords.latitude},${position.coords.longitude}`);
+                        },
+                        () => {
+                            resolve(null);
+                        },
+                        { timeout: 5000, enableHighAccuracy: true }
+                    );
+                });
+            };
+
+            const gpsCoords = await captureGPS();
+
+            // Prepare order data WITHOUT id - id will be generated in retry loop
+            const orderData = {
+                customerId: selectedCustomer,
+                customerName: custName,
+                salespersonId: selectedSalesperson,
+                salespersonName: spName,
+                date: new Date().toISOString().split('T')[0],
+                totalItems: cart.reduce((a, b) => a + b.qty, 0),
+                totalAmount: finalTotal,
+                discount: discountAmount,
+                status: 'approved' as const,
+                items: cart,
+                remarks: '',
+                GPS: gpsCoords || undefined,
+                time: new Date().toISOString(),
+                paymentMethod: paymentMode
+            };
+
+            // Use server-side atomic ID generation (no collisions possible)
+            const result = await insertOrderWithId(orderData);
+
+            if (result.success && result.orderId) {
+                // PHASE 1: Clear draft after successful order
+                localStorage.removeItem(`draft_order_${user?.id}`);
+
+                toast.success(`✓ Order #${result.orderId} - ₹${finalTotal.toFixed(0)}`);
+                setCart([]);
+                setSelectedCompany('');
+                setOrderDiscountPct(0);
+                setIsCartOpen(false);
+            } else {
+                // Handle error
+                const errorMessage = result.error || 'Failed to place order. Please try again.';
+
+                toast.error(
+                    <div className="space-y-1">
+                        <p className="font-bold">Order Failed</p>
+                        <p className="text-sm opacity-90">{errorMessage}</p>
+                    </div>,
+                    { duration: 6000 }
                 );
-            });
-        };
-
-        const gpsCoords = await captureGPS();
-
-        // Prepare order data WITHOUT id - id will be generated in retry loop
-        const orderData = {
-            customerId: selectedCustomer,
-            customerName: custName,
-            salespersonId: selectedSalesperson,
-            salespersonName: spName,
-            date: new Date().toISOString().split('T')[0],
-            totalItems: cart.reduce((a, b) => a + b.qty, 0),
-            totalAmount: finalTotal,
-            discount: discountAmount,
-            status: 'approved' as const,
-            items: cart,
-            remarks: '',
-            GPS: gpsCoords || undefined,
-            time: new Date().toISOString(),
-            paymentMethod: paymentMode
-        };
-
-        // Use server-side atomic ID generation (no collisions possible)
-        const result = await insertOrderWithId(orderData);
-
-        if (result.success && result.orderId) {
-            // PHASE 1: Clear draft after successful order
-            localStorage.removeItem(`draft_order_${user?.id}`);
-
-            toast.success(`✓ Order #${result.orderId} - ₹${finalTotal.toFixed(0)}`);
-            setCart([]);
-            setSelectedCompany('');
-            setOrderDiscountPct(0);
-            setIsCartOpen(false);
-        } else {
-            // Handle error
-            const errorMessage = result.error || 'Failed to place order. Please try again.';
-
-            toast.error(
-                <div className="space-y-1">
-                    <p className="font-bold">Order Failed</p>
-                    <p className="text-sm opacity-90">{errorMessage}</p>
-                </div>,
-                { duration: 6000 }
-            );
+            }
+        } finally {
+            // Always unlock, whether success or failure
+            orderPlacementRef.current = false;
+            setIsPlacingOrder(false);
         }
     };
 
@@ -1125,11 +1150,23 @@ export const CreateOrder: React.FC = () => {
                                 </button>
                                 <button
                                     onClick={handlePlaceOrder}
-                                    disabled={cart.length === 0}
+                                    disabled={cart.length === 0 || isPlacingOrder}
                                     className="px-4 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-100"
                                 >
-                                    <Save className="h-5 w-5" />
-                                    Place Order
+                                    {isPlacingOrder ? (
+                                        <>
+                                            <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                            </svg>
+                                            Placing...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Save className="h-5 w-5" />
+                                            Place Order
+                                        </>
+                                    )}
                                 </button>
                             </div>
                         </div>

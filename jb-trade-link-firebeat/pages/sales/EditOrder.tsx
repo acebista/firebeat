@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, Input, Button, SearchableSelect } from '../../components/ui/Elements';
 import { Modal } from '../../components/ui/Modal';
 import { Search, Trash2, ShoppingBag, ShoppingCart, Building2, X, UserPlus, Phone, CreditCard, MapPin, Navigation, Save, Plus, Minus, ChevronUp } from 'lucide-react';
@@ -27,6 +27,8 @@ export const EditOrder: React.FC = () => {
     const [orderDiscountPct, setOrderDiscountPct] = useState(0); // User enters percentage
     const [paymentMode, setPaymentMode] = useState<'Cash' | 'Cheque' | 'Credit' | 'QR'>('Cash');
     const [isCartOpen, setIsCartOpen] = useState(false); // Mobile cart sheet
+    const [isUpdating, setIsUpdating] = useState(false); // Prevents double-submit
+    const updateRef = useRef(false); // Ref-based guard for race conditions
 
     // Filters / Selections
     const [selectedCustomer, setSelectedCustomer] = useState('');
@@ -360,34 +362,47 @@ export const EditOrder: React.FC = () => {
     };
 
     const handleUpdateOrder = async () => {
-        if (!selectedCustomer || cart.length === 0 || !id) return;
-
-        const errors = validateCart();
-        if (errors.length > 0) {
-            toast.error(`Cannot update order. Please fix the following issues:\n\n${errors.map(e => "• " + e).join("\n")}`);
+        // ========== DOUBLE-SUBMIT PROTECTION ==========
+        if (isUpdating || updateRef.current) {
+            console.warn('[EditOrder] Update already in progress, blocking duplicate click');
             return;
         }
-
-        const spName = selectedSalesperson === 'office' ? 'Office' : salespersons.find(s => s.id === selectedSalesperson)?.name || 'Unknown';
-        const custName = customers.find(c => c.id === selectedCustomer)?.name || 'Unknown';
-
-        const orderData = {
-            customerId: selectedCustomer,
-            customerName: custName,
-            salespersonId: selectedSalesperson,
-            salespersonName: spName,
-            totalItems: cart.reduce((a, b) => a + b.qty, 0),
-            totalAmount: finalTotal,
-            discount: discountAmount,
-            items: cart,
-            paymentMethod: paymentMode,
-            paymentMode: paymentMode, // Set both for backward/forward compatibility
-            // Keep original date/status/id
-        };
+        updateRef.current = true;
+        setIsUpdating(true);
 
         try {
+            if (!selectedCustomer || cart.length === 0 || !id) return;
+
+            const errors = validateCart();
+            if (errors.length > 0) {
+                toast.error(`Cannot update order. Please fix the following issues:\n\n${errors.map(e => "• " + e).join("\n")}`);
+                return;
+            }
+
+            const spName = selectedSalesperson === 'office' ? 'Office' : salespersons.find(s => s.id === selectedSalesperson)?.name || 'Unknown';
+            const custName = customers.find(c => c.id === selectedCustomer)?.name || 'Unknown';
+
+            // Calculate totals locally to avoid scope issues
+            const subtotal = cart.reduce((acc, item) => acc + item.total, 0);
+            const discAmount = (subtotal * orderDiscountPct) / 100;
+            const total = subtotal - discAmount;
+
+            const orderData = {
+                customerId: selectedCustomer,
+                customerName: custName,
+                salespersonId: selectedSalesperson,
+                salespersonName: spName,
+                totalItems: cart.reduce((a, b) => a + b.qty, 0),
+                totalAmount: total,
+                discount: discAmount,
+                items: cart,
+                paymentMethod: paymentMode,
+                paymentMode: paymentMode, // Set both for backward/forward compatibility
+                // Keep original date/status/id
+            };
+
             await OrderService.update(id, orderData);
-            toast.success(`Order Updated Successfully!\n\nID: ${id}\nTotal: ₹${finalTotal.toFixed(2)}`);
+            toast.success(`Order Updated Successfully!\n\nID: ${id}\nTotal: ₹${total.toFixed(2)}`);
             navigate('/sales/orders');
         } catch (e: any) {
             console.error('Order update failed:', e);
@@ -428,6 +443,10 @@ export const EditOrder: React.FC = () => {
                 </div>,
                 { duration: 6000 }
             );
+        } finally {
+            // Always unlock, whether success or failure
+            updateRef.current = false;
+            setIsUpdating(false);
         }
     };
 
