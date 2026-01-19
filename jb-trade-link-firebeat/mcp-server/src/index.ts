@@ -17,7 +17,9 @@ class SupabaseMCPServer {
   constructor() {
     // Use the same Supabase configuration as the main app
     this.supabaseUrl = process.env.VITE_SUPABASE_URL ?? 'https://qlosefnvwvmqeebfqdcg.supabase.co';
-    const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsb3NlZm53dm1xZWViZnFkY2ciLCJhdWQiOiJzdXBhYmFzZSIsInN1YiI6ImFub24iLCJpYXQiOjE2OTg0MTY0MDAsImV4cCI6MTkxNDA3MjQwMH0.DXK3r8bXG1bXoY9b1jz1YV7Zt1nU5H3v3Z5Z8vV6H3o';
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ??
+      process.env.VITE_SUPABASE_ANON_KEY ??
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsb3NlZm52d3ZtcWVlYmZxZGNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM1Nzc3ODIsImV4cCI6MjA3OTE1Mzc4Mn0.Jqrle6lGJmerRSCQkmpoEmz_ZV922TvwjLV5h-uFS7Y';
 
     this.supabase = createClient(this.supabaseUrl, supabaseKey, {
       auth: {

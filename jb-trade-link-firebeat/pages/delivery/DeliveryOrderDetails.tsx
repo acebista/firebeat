@@ -789,8 +789,9 @@ export const DeliveryOrderDetails: React.FC = () => {
                                         <div className="relative">
                                             <input
                                                 type="number"
-                                                value={entry.amount}
-                                                onChange={(e) => updatePaymentEntry(idx, 'amount', parseFloat(e.target.value) || 0)}
+                                                inputMode="decimal"
+                                                value={entry.amount === 0 ? '' : entry.amount}
+                                                onChange={(e) => updatePaymentEntry(idx, 'amount', e.target.value === '' ? 0 : parseFloat(e.target.value))}
                                                 placeholder="Amount"
                                                 className="w-full px-2 py-2 pr-8 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 font-semibold"
                                                 disabled={!canEdit}
@@ -1083,9 +1084,10 @@ export const DeliveryOrderDetails: React.FC = () => {
                                                 <div className="relative">
                                                     <input
                                                         type="number"
+                                                        inputMode="decimal"
                                                         step="0.01"
-                                                        value={entry.amount}
-                                                        onChange={(e) => updatePaymentEntry(idx, 'amount', parseFloat(e.target.value) || 0)}
+                                                        value={entry.amount === 0 ? '' : entry.amount}
+                                                        onChange={(e) => updatePaymentEntry(idx, 'amount', e.target.value === '' ? 0 : parseFloat(e.target.value))}
                                                         placeholder="Amount"
                                                         className="w-full px-2 py-2 pr-8 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-amber-500 font-semibold"
                                                     />

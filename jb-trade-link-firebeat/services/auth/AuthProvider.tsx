@@ -1,240 +1,164 @@
-import React, { createContext, useReducer, useEffect, useCallback } from 'react';
+import React, { createContext, useEffect, useCallback, useRef } from 'react';
 import { AuthState, AuthStatus, AuthContextValue } from './authTypes';
 import { supabase } from '../../lib/supabase';
-import { User } from '../../types';
-import { Session } from '@supabase/supabase-js';
 import { useUserStore } from './userStore';
-import { initSessionManager, clearSessionCache, setSessionCache } from '../sessionManager';
+import { getCachedSession, initSessionManager, clearSessionCache } from '../sessionManager';
+import { loadUserProfile } from './profileService';
 
-const initialState: AuthState = {
-    status: AuthStatus.LOADING,
-    message: 'Checking session...',
-};
-
-type AuthAction =
-    | { type: 'SET_LOADING'; message?: string }
-    | { type: 'SET_AUTHENTICATED'; user: User; session: Session }
-    | { type: 'SET_UNAUTHENTICATED' }
-    | { type: 'SET_ERROR'; error: any };
-
-function authReducer(state: AuthState, action: AuthAction): AuthState {
-    switch (action.type) {
-        case 'SET_LOADING':
-            return { status: AuthStatus.LOADING, message: action.message };
-        case 'SET_AUTHENTICATED':
-            return {
-                status: AuthStatus.AUTHENTICATED,
-                user: action.user,
-                session: action.session
-            };
-        case 'SET_UNAUTHENTICATED':
-            return { status: AuthStatus.UNAUTHENTICATED };
-        case 'SET_ERROR':
-            return { status: AuthStatus.ERROR, error: action.error };
-        default:
-            return state;
-    }
-}
+/**
+ * A+ ARCHITECTURE: AUTH PROVIDER (ORCHESTRATOR)
+ * --------------------------------------------
+ * This component coordinates the app lifecycle:
+ * 1. Bootstrapping (Session -> Profile -> Readiness)
+ * 2. Auth State Persistence
+ * 3. Global Inactivity
+ */
 
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [state, dispatch] = useReducer(authReducer, initialState);
-    const [isInitialized, setIsInitialized] = React.useState(false);
+    // We derive state from the store and local refs for process control
+    const {
+        user,
+        authStatus,
+        bootStatus,
+        error: storeError,
+        bootError,
+        setAuthenticated,
+        setUnauthenticated,
+        setBootStatus,
+        setAuthStatus,
+        setBootError,
+        logout: storeLogout
+    } = useUserStore();
 
-    // Initialize boot: rehydrate session (guards clear internally)
-    useEffect(() => {
-        const boot = async () => {
-            console.log('[AuthProvider] ========== BOOT START ==========');
-            console.time('[AuthProvider] Total boot time');
+    const isInitializedRef = useRef(false);
 
-            try {
-                // Initialize SessionManager first (sets up auth state listener)
-                initSessionManager();
+    // ==========================================
+    // PHASE 1: BOOT ORCHESTRATION
+    // ==========================================
+    const runBootInternal = useCallback(async (options: { background?: boolean } = {}) => {
+        const { background = false } = options;
 
-                // Rehydrate session - this now uses cached session manager
-                await useUserStore.getState().rehydrateFromSession();
+        if (!background) setBootStatus('checking');
 
-                const storeState = useUserStore.getState();
-                console.log('[AuthProvider] Boot complete. User:', storeState.user?.name || 'None');
-
-                if (storeState.user) {
-                    dispatch({
-                        type: 'SET_AUTHENTICATED',
-                        user: storeState.user,
-                        session: storeState.session
-                    });
-                } else {
-                    dispatch({ type: 'SET_UNAUTHENTICATED' });
-                }
-            } catch (err) {
-                console.error('[AuthProvider] Boot error:', err);
-                dispatch({ type: 'SET_ERROR', error: err });
-            } finally {
-                console.timeEnd('[AuthProvider] Total boot time');
-                console.log('[AuthProvider] ========== BOOT END ==========');
-                // Mark initialized even on error to prevent infinite loading
-                setIsInitialized(true);
+        // Boot timeout guard (20s)
+        const timeoutId = setTimeout(() => {
+            if (useUserStore.getState().bootStatus === 'checking') {
+                console.warn('[Boot] Timeout exceeded');
+                setBootError('Slow connection detected. Trying to proceed...');
             }
-        };
-        boot();
-    }, []);
+        }, 20000);
 
-    // Sync Supabase auth state changes across tabs
+        try {
+            console.log('[Boot] Orchestrating phases...');
+
+            // 1. Session Phase
+            const session = await getCachedSession();
+            if (!session?.user) {
+                setUnauthenticated();
+                return;
+            }
+
+            // 2. Profile Phase
+            const profile = await loadUserProfile(session.user.id);
+
+            // 3. Success Phase
+            setAuthenticated(profile);
+            console.log('[Boot] ✓ Success');
+
+        } catch (err: any) {
+            console.error('[Boot] Orchestration failed:', err);
+            clearSessionCache();
+            setUnauthenticated();
+            setBootError(err?.message || 'Failed to load user profile');
+        } finally {
+            clearTimeout(timeoutId);
+        }
+    }, [setAuthenticated, setUnauthenticated, setBootStatus, setBootError]);
+
+    // Initial Trigger
     useEffect(() => {
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-            console.log('[AuthProvider] Auth state changed:', event);
+        if (!isInitializedRef.current) {
+            isInitializedRef.current = true;
+            initSessionManager();
+            runBootInternal();
+        }
+    }, [runBootInternal]);
+
+    // ==========================================
+    // PHASE 2: AUTH REACTION (SUPABASE SYNC)
+    // ==========================================
+    useEffect(() => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+            console.log('[Auth] Supabase triggered:', event);
 
             if (event === 'SIGNED_OUT') {
                 useUserStore.getState().resetStore();
-                dispatch({ type: 'SET_UNAUTHENTICATED' });
             } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-                // If user is already authenticated, do a background update (no loading screen)
-                // If user is NOT authenticated (initial login), do full update
                 const currentUser = useUserStore.getState().user;
-                const isBackground = !!currentUser;
-
-                console.log(`[AuthProvider] Handling ${event} with background=${isBackground}`);
-                useUserStore.getState().rehydrateFromSession({ background: isBackground });
+                runBootInternal({ background: !!currentUser });
             }
         });
 
-        return () => {
-            subscription?.unsubscribe();
-        };
-    }, []);
+        return () => subscription?.unsubscribe();
+    }, [runBootInternal]);
 
-    // Subscribe to store changes to keep context in sync
-    useEffect(() => {
-        return useUserStore.subscribe(
-            (storeState) => ({
-                user: storeState.user,
-                session: storeState.session,
-                bootStatus: storeState.bootStatus,
-            }),
-            (snapshot) => {
-                if (snapshot.user) {
-                    dispatch({
-                        type: 'SET_AUTHENTICATED',
-                        user: snapshot.user,
-                        session: snapshot.session,
-                    });
-                } else if (snapshot.bootStatus === 'ready') {
-                    dispatch({ type: 'SET_UNAUTHENTICATED' });
-                }
-            }
-        );
-    }, []);
-
+    // ==========================================
+    // PHASE 3: INACTIVITY
+    // ==========================================
     useEffect(() => {
         const INACTIVITY_TIMEOUT = 3 * 60 * 60 * 1000;
         let inactivityTimer: NodeJS.Timeout;
 
-        const resetInactivityTimer = () => {
+        const resetTimer = () => {
             clearTimeout(inactivityTimer);
-            if (state.status === AuthStatus.AUTHENTICATED) {
+            if (authStatus === 'authenticated') {
                 inactivityTimer = setTimeout(() => {
-                    console.warn('[AuthProvider] User inactive for 3 hours, logging out...');
-                    logout();
+                    console.warn('[Auth] Inactivity timeout');
+                    storeLogout();
                 }, INACTIVITY_TIMEOUT);
             }
         };
 
         const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
-        events.forEach(event => {
-            window.addEventListener(event, resetInactivityTimer);
-        });
-
-        resetInactivityTimer();
+        events.forEach(ev => window.addEventListener(ev, resetTimer));
+        resetTimer();
 
         return () => {
             clearTimeout(inactivityTimer);
-            events.forEach(event => {
-                window.removeEventListener(event, resetInactivityTimer);
-            });
+            events.forEach(ev => window.removeEventListener(ev, resetTimer));
         };
-    }, [state.status]);
+    }, [authStatus, storeLogout]);
 
+    // ==========================================
+    // API FOR COMPONENTS
+    // ==========================================
     const login = useCallback(async (email: string, password: string) => {
-        try {
-            dispatch({ type: 'SET_LOADING', message: 'Signing in...' });
-
-            const { data, error } = await supabase.auth.signInWithPassword({
-                email,
-                password,
-            });
-
-            if (error) throw error;
-
-            const { session, user: authUser } = data;
-
-            if (!session || !authUser) {
-                throw new Error('No session created');
-            }
-
-            useUserStore.setState({ session });
-            await useUserStore.getState().rehydrateFromSession();
-
-            const storeState = useUserStore.getState();
-            dispatch({
-                type: 'SET_AUTHENTICATED',
-                user: storeState.user!,
-                session: storeState.session
-            });
-        } catch (error) {
-            console.error('[AuthProvider] Login error:', error);
-            dispatch({ type: 'SET_ERROR', error });
+        setAuthStatus('loading');
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) {
+            setAuthStatus('error');
             throw error;
         }
-    }, []);
-
-    const logout = useCallback(async () => {
-        try {
-            await useUserStore.getState().logout();
-            dispatch({ type: 'SET_UNAUTHENTICATED' });
-        } catch (error) {
-            console.error('[AuthProvider] Logout error:', error);
-            dispatch({ type: 'SET_ERROR', error });
-        }
-    }, []);
-
-    const refreshSession = useCallback(async () => {
-        try {
-            const { data, error } = await supabase.auth.refreshSession();
-            if (error) throw error;
-
-            if (data.session && data.user) {
-                useUserStore.setState({ session: data.session });
-                await useUserStore.getState().rehydrateFromSession();
-
-                const storeState = useUserStore.getState();
-                dispatch({
-                    type: 'SET_AUTHENTICATED',
-                    user: storeState.user!,
-                    session: storeState.session,
-                });
-            }
-        } catch (error) {
-            console.error('[AuthProvider] Session refresh failed:', error);
-            await logout();
-        }
-    }, [logout]);
-
-    const isAuthenticated = state.status === AuthStatus.AUTHENTICATED;
-    const isLoading = state.status === AuthStatus.LOADING;
-    const user = state.status === AuthStatus.AUTHENTICATED ? state.user : null;
-    const error = state.status === AuthStatus.ERROR ? state.error : null;
+        if (!data.session) throw new Error('Auth failed');
+        await runBootInternal();
+    }, [setAuthStatus, runBootInternal]);
 
     const value: AuthContextValue = {
-        state,
+        state: {
+            status: authStatus as any,
+            user: user as any,
+            error: storeError || bootError
+        },
         login,
-        logout,
-        refreshSession,
-        isAuthenticated,
-        isLoading,
-        isInitialized,
-        user,
-        error,
+        logout: storeLogout,
+        refreshSession: async () => { }, // Handled by supabase internally
+        isAuthenticated: authStatus === 'authenticated',
+        isLoading: bootStatus === 'checking' || authStatus === 'loading',
+        isInitialized: bootStatus === 'ready',
+        user: user as any,
+        error: (storeError || bootError) as any,
     };
 
     return (
