@@ -1090,7 +1090,26 @@ export const CreateOrder: React.FC = () => {
                                             >
                                                 <Minus size={12} />
                                             </button>
-                                            <span className="w-8 text-center text-sm font-bold">{item.qty}</span>
+                                            <input
+                                                type="text"
+                                                inputMode="numeric"
+                                                pattern="[0-9]*"
+                                                value={item.qty}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    // Allow empty for typing, treat as 0
+                                                    if (val === '') {
+                                                        updateQty(item.productId, 0);
+                                                    } else {
+                                                        const num = parseInt(val, 10);
+                                                        if (!isNaN(num)) {
+                                                            updateQty(item.productId, num);
+                                                        }
+                                                    }
+                                                }}
+                                                onFocus={(e) => e.target.select()}
+                                                className="w-12 text-center text-sm font-bold bg-transparent border-none outline-none focus:bg-indigo-50 focus:ring-1 focus:ring-indigo-300 rounded"
+                                            />
                                             <button
                                                 onClick={() => updateQty(item.productId, item.qty + 1)}
                                                 className="w-7 h-7 flex items-center justify-center text-gray-500 hover:bg-gray-100 rounded-r-lg"
