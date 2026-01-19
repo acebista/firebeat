@@ -118,12 +118,10 @@ export const CustomerService = {
     return allCustomers;
   },
   add: async (customer: Omit<Customer, 'id'>) => {
-    // Generate a unique ID if not provided
-    const id = (customer as any).id || `cust_${crypto.randomUUID().split('-')[0]}`;
-
+    // Let Supabase generate the UUID automatically
     const { data, error } = await supabase
       .from(COLS.CUSTOMERS)
-      .upsert({ ...customer, id })
+      .insert(customer)
       .select()
       .single();
     if (error) throw error;
