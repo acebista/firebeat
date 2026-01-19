@@ -337,6 +337,19 @@ export const DeliveryOrderDetails: React.FC = () => {
             return;
         }
 
+        // VALIDATION: Require collection amount for non-credit payments
+        const hasOnlyCredit = paymentEntries.every(p => p.method === 'credit');
+        if (!hasOnlyCredit && totalCollected <= 0) {
+            toast.error("Collection amount is required. Enter the amount collected or mark as credit if no payment received.");
+            return;
+        }
+
+        // Warn if collected amount is 0 but not all credit
+        if (totalCollected === 0 && !hasOnlyCredit) {
+            toast.error("Cannot mark as delivered without any collection. Use Credit method if no payment was received.");
+            return;
+        }
+
         if (!window.confirm("Confirm delivery and payment recording?")) return;
 
         setProcessing(true);
@@ -447,6 +460,15 @@ export const DeliveryOrderDetails: React.FC = () => {
         const totalCollected = editStatus === 'cancelled'
             ? 0
             : paymentEntries.reduce((sum, p) => sum + (p.method !== 'credit' ? Number(p.amount) : 0), 0);
+
+        // VALIDATION: Require collection amount for non-credit payments when keeping as delivered
+        if (editStatus === 'delivered') {
+            const hasOnlyCredit = paymentEntries.every(p => p.method === 'credit');
+            if (!hasOnlyCredit && totalCollected <= 0) {
+                toast.error("Collection amount is required. Enter the amount collected or mark as credit if no payment received.");
+                return;
+            }
+        }
 
         const confirmMsg = editStatus === 'cancelled'
             ? "Are you sure you want to mark this as a FAILED delivery? This will reset payment data."

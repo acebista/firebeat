@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, Input, Button, SearchableSelect } from '../../components/ui/Elements';
 import { Modal } from '../../components/ui/Modal';
-import { Search, Trash2, ShoppingBag, ShoppingCart, Building2, X, UserPlus, Phone, CreditCard, MapPin, Navigation, Save, Plus, Minus, ChevronUp, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+import { Search, Trash2, ShoppingBag, ShoppingCart, Building2, X, UserPlus, Phone, CreditCard, MapPin, Navigation, Save, Plus, Minus, ChevronUp, ZoomIn, ZoomOut, RotateCcw, FileText } from 'lucide-react';
 import { Product, OrderItem, Customer, Order, Company, Salesperson } from '../../types';
 import { useAuth } from '../../services/auth';
 import { ProductService, CustomerService, CompanyService, OrderService, UserService } from '../../services/db';
@@ -27,6 +27,7 @@ export const CreateOrder: React.FC = () => {
     const [orderDiscountPct, setOrderDiscountPct] = useState(0);
     const [isCartOpen, setIsCartOpen] = useState(false); // Mobile cart sheet
     const [paymentMode, setPaymentMode] = useState<'Cash' | 'Cheque' | 'Credit' | 'QR'>('Cash');
+    const [vatRequired, setVatRequired] = useState(false);
     const [isPlacingOrder, setIsPlacingOrder] = useState(false); // Prevents double-submit
     const orderPlacementRef = useRef(false); // Ref-based guard for race conditions
 
@@ -206,6 +207,7 @@ export const CreateOrder: React.FC = () => {
                                             if (draft.selectedSalesperson) setSelectedSalesperson(draft.selectedSalesperson);
                                             if (draft.orderDiscountPct) setOrderDiscountPct(draft.orderDiscountPct);
                                             if (draft.paymentMode) setPaymentMode(draft.paymentMode);
+                                            if (draft.vatRequired !== undefined) setVatRequired(draft.vatRequired);
                                             toast.success('Draft restored!');
                                             toast.dismiss(t.id);
                                         }}
@@ -245,6 +247,7 @@ export const CreateOrder: React.FC = () => {
                 selectedSalesperson,
                 orderDiscountPct,
                 paymentMode,
+                vatRequired,
                 savedAt: new Date().toISOString()
             };
             localStorage.setItem(`draft_order_${user?.id}`, JSON.stringify(draftData));
@@ -252,7 +255,7 @@ export const CreateOrder: React.FC = () => {
             // Clear draft if cart is empty and no customer selected
             localStorage.removeItem(`draft_order_${user?.id}`);
         }
-    }, [cart, selectedCustomer, selectedCompany, orderDiscountPct, selectedSalesperson, user?.id, paymentMode]);
+    }, [cart, selectedCustomer, selectedCompany, orderDiscountPct, selectedSalesperson, user?.id, paymentMode, vatRequired]);
 
     // PHASE 1: Load last order when customer is selected
     useEffect(() => {
@@ -429,21 +432,27 @@ export const CreateOrder: React.FC = () => {
 
     const handleGetLocation = () => {
         if (!navigator.geolocation) {
-            toast.error("Geolocation not supported");
+            toast.error("Geolocation not supported by this browser");
             return;
         }
         setIsGettingLocation(true);
+        const toastId = toast.loading("Requesting GPS permission...");
         navigator.geolocation.getCurrentPosition(
             (position) => {
                 const { latitude, longitude } = position.coords;
                 setNewCustomerLocation(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
                 setIsGettingLocation(false);
-                toast.success("Location captured!");
+                toast.success("Location locked!", { id: toastId });
             },
-            () => {
-                toast.error("Unable to get location");
+            (err) => {
+                let msg = "Unable to get location";
+                if (err.code === 1) msg = "Location Access Denied. Please enable GPS in settings.";
+                else if (err.code === 3) msg = "GPS Timeout. Please try again outside.";
+
+                toast.error(msg, { id: toastId });
                 setIsGettingLocation(false);
-            }
+            },
+            { timeout: 10000, enableHighAccuracy: true }
         );
     };
 
@@ -606,21 +615,31 @@ export const CreateOrder: React.FC = () => {
             const spName = selectedSalesperson === 'office' ? 'Office' : salespersons.find(s => s.id === selectedSalesperson)?.name || 'Unknown';
             const custName = customers.find(c => c.id === selectedCustomer)?.name || 'Unknown';
 
-            // Capture GPS
+            // Capture GPS with user feedback
             const captureGPS = (): Promise<string | null> => {
                 return new Promise((resolve) => {
                     if (!navigator.geolocation) {
                         resolve(null);
                         return;
                     }
+
+                    // Only show toast if it takes a moment
+                    const timer = setTimeout(() => {
+                        toast.loading("Capturing sale location...", { id: 'gps-load' });
+                    }, 500);
+
                     navigator.geolocation.getCurrentPosition(
                         (position) => {
+                            clearTimeout(timer);
+                            toast.success("Location recorded", { id: 'gps-load' });
                             resolve(`${position.coords.latitude},${position.coords.longitude}`);
                         },
                         () => {
+                            clearTimeout(timer);
+                            toast.dismiss('gps-load');
                             resolve(null);
                         },
-                        { timeout: 5000, enableHighAccuracy: true }
+                        { timeout: 4000, enableHighAccuracy: true }
                     );
                 });
             };
@@ -642,7 +661,8 @@ export const CreateOrder: React.FC = () => {
                 remarks: '',
                 GPS: gpsCoords || undefined,
                 time: new Date().toISOString(),
-                paymentMethod: paymentMode
+                paymentMethod: paymentMode,
+                vat_required: vatRequired
             };
 
             // Use server-side atomic ID generation (no collisions possible)
@@ -1134,6 +1154,30 @@ export const CreateOrder: React.FC = () => {
                                     </div>
                                 </div>
 
+                                {/* VAT Choice */}
+                                <div className="flex items-center justify-between py-3 border-t border-blue-100">
+                                    <div className="flex items-center gap-2">
+                                        <div className={`p-2 rounded-lg ${vatRequired ? 'bg-purple-100 text-purple-600' : 'bg-gray-100 text-gray-400'}`}>
+                                            <FileText className="h-4 w-4" />
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-bold text-gray-700">VAT Bill Required?</p>
+                                            <p className="text-[10px] text-gray-500">{vatRequired ? 'Individual VAT Bill will be created' : 'Will be combined in daily VAT'}</p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setVatRequired(!vatRequired)}
+                                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${vatRequired ? 'bg-purple-600' : 'bg-gray-200'
+                                            }`}
+                                    >
+                                        <span
+                                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${vatRequired ? 'translate-x-6' : 'translate-x-1'
+                                                }`}
+                                        />
+                                    </button>
+                                </div>
+
                                 <div className="flex justify-between font-bold text-lg text-gray-900 pt-3 border-t-2 border-indigo-100">
                                     <span>Total</span>
                                     <span className="text-indigo-700">₹{finalTotal.toFixed(2)}</span>
@@ -1213,7 +1257,8 @@ export const CreateOrder: React.FC = () => {
                     />
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Location (Optional)</label>
+                        <label className="block text-sm font-bold text-indigo-900 mb-0.5">Shop Location (Recommended)</label>
+                        <p className="text-[10px] text-gray-500 mb-2">Help drivers find this shop by saving current GPS</p>
                         <div className="flex gap-2">
                             <input
                                 type="text"

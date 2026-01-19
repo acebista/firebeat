@@ -29,7 +29,7 @@ Gupta General Store,9876543210,ABCDE1234F,50000,1200,"28.4595, 77.0266",Sector 1
   products: `Company,Item Name,Rate,Primary Discount,K,L,M,N,O,Category
 Parle,Parle-G 100g,10,0,2,24,0,0,1,Biscuits`,
 
-  orders: `id,customerId,customerName,salespersonId,salespersonName,date,totalItems,totalAmount,status,items,remarks,assignedTripId,discount,GPS,time,paymentMethod,vatRequired?
+  orders: `id,customerId,customerName,salespersonId,salespersonName,date,totalItems,totalAmount,status,items,remarks,assignedTripId,discount,GPS,time,paymentMethod,vat_required
 250325-001,ad97bdd1-4ced-4d5c-b215-64aab8e8e45d,Rezi Kirana pasal,5937213a-3380-46c6-8d13-88e45039a3df,Shushant Budathoki,2025-03-25,2,672.59,completed,"[{""qty"": 24, ""rate"": 7.42, ""total"": 178.14, ""productName"": ""Butter 20-20""}]",,0,"27.715034, 85.324468",2025-03-25T00:00:00Z,Cash,false`,
 
   purchases: `billId,date,vendorName,productName,qty,rate,taxMode
@@ -265,7 +265,7 @@ export const SystemHealth: React.FC = () => {
           GPS: gps,
           time: timestamp,
           paymentMethod: cleanString(row.paymentMethod),
-          'vatRequired?': row['vatRequired?'] === 'true' || row['vatRequired?'] === true
+          vat_required: row.vat_required === 'true' || row.vat_required === true || row['vatRequired?'] === 'true' || row['vatRequired?'] === true
         };
       } catch (err) {
         console.error('Error parsing row:', row, err);

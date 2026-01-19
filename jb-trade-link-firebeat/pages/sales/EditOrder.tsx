@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, Input, Button, SearchableSelect } from '../../components/ui/Elements';
 import { Modal } from '../../components/ui/Modal';
-import { Search, Trash2, ShoppingBag, ShoppingCart, Building2, X, UserPlus, Phone, CreditCard, MapPin, Navigation, Save, Plus, Minus, ChevronUp } from 'lucide-react';
+import { Search, Trash2, ShoppingBag, ShoppingCart, Building2, X, UserPlus, Phone, CreditCard, MapPin, Navigation, Save, Plus, Minus, ChevronUp, FileText } from 'lucide-react';
 import { Product, OrderItem, Customer, Order, Company, Salesperson } from '../../types';
 import { useAuth } from '../../services/auth';
 import { ProductService, CustomerService, CompanyService, OrderService, UserService } from '../../services/db';
@@ -26,6 +26,7 @@ export const EditOrder: React.FC = () => {
     const [cart, setCart] = useState<OrderItem[]>([]);
     const [orderDiscountPct, setOrderDiscountPct] = useState(0); // User enters percentage
     const [paymentMode, setPaymentMode] = useState<'Cash' | 'Cheque' | 'Credit' | 'QR'>('Cash');
+    const [vatRequired, setVatRequired] = useState(false);
     const [isCartOpen, setIsCartOpen] = useState(false); // Mobile cart sheet
     const [isUpdating, setIsUpdating] = useState(false); // Prevents double-submit
     const updateRef = useRef(false); // Ref-based guard for race conditions
@@ -125,6 +126,7 @@ export const EditOrder: React.FC = () => {
                         setSelectedCustomer(order.customerId);
                         setSelectedSalesperson(order.salespersonId);
                         if (order.paymentMethod || order.paymentMode) setPaymentMode((order.paymentMethod || order.paymentMode) as any);
+                        if (order.vat_required !== undefined) setVatRequired(order.vat_required);
 
                         // Calculate discount pct from amount if needed
                         const subTotal = order.items.reduce((sum: number, i: any) => sum + (i.total || 0), 0);
@@ -398,6 +400,7 @@ export const EditOrder: React.FC = () => {
                 items: cart,
                 paymentMethod: paymentMode,
                 paymentMode: paymentMode, // Set both for backward/forward compatibility
+                vat_required: vatRequired,
                 // Keep original date/status/id
             };
 
@@ -943,6 +946,30 @@ export const EditOrder: React.FC = () => {
                                 </Button>
                             </div>
                         </div>
+                    </div>
+
+                    {/* VAT Choice */}
+                    <div className="flex items-center justify-between py-3 border-t border-indigo-100">
+                        <div className="flex items-center gap-2">
+                            <div className={`p-2 rounded-lg ${vatRequired ? 'bg-purple-100 text-purple-600' : 'bg-gray-100 text-gray-400'}`}>
+                                <FileText className="h-4 w-4" />
+                            </div>
+                            <div>
+                                <p className="text-xs font-bold text-gray-700">VAT Bill Required?</p>
+                                <p className="text-[10px] text-gray-500">{vatRequired ? 'Individual VAT Bill will be created' : 'Will be combined in daily VAT'}</p>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setVatRequired(!vatRequired)}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${vatRequired ? 'bg-purple-600' : 'bg-gray-200'
+                                }`}
+                        >
+                            <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${vatRequired ? 'translate-x-6' : 'translate-x-1'
+                                    }`}
+                            />
+                        </button>
                     </div>
                 </div>
             )}

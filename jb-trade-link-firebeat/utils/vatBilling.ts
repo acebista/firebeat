@@ -252,6 +252,7 @@ export const generateVatBills = (rows: DeliveryReportRow[], forcedIndividualIds:
         invoiceVat: number;
         invoiceGross: number;
         invoiceDiscount: number;
+        vat_required?: boolean;
     }
     const entries: ParsedEntry[] = [];
 
@@ -290,7 +291,8 @@ export const generateVatBills = (rows: DeliveryReportRow[], forcedIndividualIds:
             invoiceTaxable,
             invoiceVat,
             invoiceGross,
-            invoiceDiscount
+            invoiceDiscount,
+            vat_required: row.order?.vat_required
         });
     });
 
@@ -298,7 +300,7 @@ export const generateVatBills = (rows: DeliveryReportRow[], forcedIndividualIds:
     const combinedToPack: PackableChunk[] = [];
 
     entries.forEach(entry => {
-        const isIndividual = entry.paymentMethod === 'credit' || entry.paymentMethod === 'cheque' || !!entry.customerPAN || forcedIndividualIds.includes(entry.invoiceId);
+        const isIndividual = entry.paymentMethod === 'credit' || entry.paymentMethod === 'cheque' || !!entry.customerPAN || forcedIndividualIds.includes(entry.invoiceId) || !!entry.vat_required;
 
         if (isIndividual) {
             // Split individual by line count limit only (INV-123-A, INV-123-B)

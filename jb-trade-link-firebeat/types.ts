@@ -125,6 +125,7 @@ export interface Order {
   payment_method_at_delivery?: string;
   // Rescheduling tracking
   rescheduled_from?: string; // Original date if order was rescheduled
+  vat_required?: boolean;
 }
 
 

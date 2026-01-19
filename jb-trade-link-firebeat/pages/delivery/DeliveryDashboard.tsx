@@ -437,7 +437,13 @@ export const DeliveryDashboard: React.FC = () => {
   };
 
   const handleQuickDeliver = async (order: Order) => {
-    if (!window.confirm(`Mark ${order.customerName}'s invoice as delivered with full cash collection?`)) return;
+    // VALIDATION: Prevent delivery without valid collection amount
+    if (!order.totalAmount || order.totalAmount <= 0) {
+      toast.error("Cannot quick deliver an order with zero amount. Please edit the order first.");
+      return;
+    }
+
+    if (!window.confirm(`Mark ${order.customerName}'s invoice as delivered with full cash collection of ₹${order.totalAmount.toLocaleString()}?`)) return;
 
     setIsQuickProcessing(true);
     const tId = toast.loading('Processing delivery...');
