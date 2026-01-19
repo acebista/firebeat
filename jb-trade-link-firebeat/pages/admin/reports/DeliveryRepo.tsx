@@ -31,6 +31,7 @@ export interface DeliveryReportRow {
     date: string;
     order: Order; // Full order for drill-down
     salesReturn?: SalesReturn; // Linked return if exists
+    payments?: any[]; // Ledger payments for accurate breakdown
 }
 
 export interface DeliveryReportData {
@@ -465,23 +466,38 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
                                         <td className="px-3 py-2 text-right text-red-600">₹{row.discount.toFixed(2)}</td>
                                         <td className="px-3 py-2 text-right font-semibold text-gray-900">₹{row.netAmount.toFixed(2)}</td>
                                         <td className="px-3 py-2 text-center">
-                                            {row.paymentMethod.toLowerCase() === 'multiple' ? (
+                                            {/* PREFER LEDGER PAYMENTS */}
+                                            {row.payments && row.payments.length > 0 ? (
                                                 <div className="flex flex-col gap-1">
-                                                    {parsePaymentBreakdown(row.order)?.map((entry, idx) => (
-                                                        <div key={idx} className="flex items-center justify-center gap-1">
-                                                            <Badge color={getPaymentColor(entry.method) as any}>
-                                                                {entry.method}
+                                                    {row.payments.map((p, pIdx) => (
+                                                        <div key={pIdx} className="flex items-center justify-center gap-1">
+                                                            <Badge color={getPaymentColor(p.method || 'cash') as any}>
+                                                                {capitalize(p.method || 'cash')}
                                                             </Badge>
-                                                            <span className="text-xs text-gray-600">₹{entry.amount.toFixed(0)}</span>
+                                                            <span className="text-xs text-gray-600">₹{Number(p.amount).toFixed(0)}</span>
                                                         </div>
-                                                    )) || (
-                                                            <Badge color="purple">Multiple</Badge>
-                                                        )}
+                                                    ))}
                                                 </div>
                                             ) : (
-                                                <Badge color={getPaymentColor(row.paymentMethod) as any}>
-                                                    {capitalize(row.paymentMethod)}
-                                                </Badge>
+                                                /* OLD FALLBACK (if no payments array) */
+                                                row.paymentMethod.toLowerCase() === 'multiple' ? (
+                                                    <div className="flex flex-col gap-1">
+                                                        {parsePaymentBreakdown(row.order)?.map((entry, idx) => (
+                                                            <div key={idx} className="flex items-center justify-center gap-1">
+                                                                <Badge color={getPaymentColor(entry.method) as any}>
+                                                                    {entry.method}
+                                                                </Badge>
+                                                                <span className="text-xs text-gray-600">₹{entry.amount.toFixed(0)}</span>
+                                                            </div>
+                                                        )) || (
+                                                                <Badge color="purple">Multiple</Badge>
+                                                            )}
+                                                    </div>
+                                                ) : (
+                                                    <Badge color={getPaymentColor(row.paymentMethod) as any}>
+                                                        {capitalize(row.paymentMethod)}
+                                                    </Badge>
+                                                )
                                             )}
                                         </td>
                                         <td className="px-3 py-2 text-right font-bold text-emerald-600">

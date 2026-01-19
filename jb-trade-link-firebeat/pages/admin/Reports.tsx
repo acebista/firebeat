@@ -513,7 +513,8 @@ export const Reports: React.FC = () => {
           hasReturnsInRemarks: !salesReturn && (order.remarks || '').includes('Returns:'),
           date: order.date,
           order,
-          salesReturn
+          salesReturn,
+          payments: invoicePayments
         };
       });
 
@@ -544,64 +545,53 @@ export const Reports: React.FC = () => {
         totalAmount: filteredRows.reduce((sum, r) => sum + r.netAmount, 0),
         totalCollected: filteredRows.reduce((sum, r) => sum + r.collectedAmount, 0),
         paymentBreakdown: filteredRows.reduce((breakdown, row) => {
-          const method = (row.paymentMethod || 'cash').toString().toLowerCase();
-          const isDelivered = row.status === 'delivered' || row.status === 'completed';
+          // STRATEGY: Use Ledger Payments if available (Source of Truth)
+          // If no payments in ledger -> It is effectively CREDIT (or 0 collection)
 
-          if (method === 'multiple' && (row.order.remarks || '').includes('Payments:')) {
-            // Parse distribution from remarks (e.g., "Payments: CASH: ₹1000, QR: ₹500")
-            const remarks = row.order.remarks || '';
-            const paymentMatch = remarks.match(/Payments:\s*([^|]+)/);
+          if (row.payments && row.payments.length > 0) {
+            // We have actual ledger entries - aggregate them
+            row.payments.forEach((p: any) => {
+              let method = (p.method || 'cash').toLowerCase();
+              if (method === 'qr_code') method = 'qr';
+              const amount = Number(p.amount);
 
-            let parsed = false;
-            if (paymentMatch) {
-              const paymentsStr = paymentMatch[1];
-              const regex = /(\w+):\s*₹?(\d+(?:\.\d+)?)/g;
-              let match;
-              while ((match = regex.exec(paymentsStr)) !== null) {
-                const extractedMethod = match[1].toLowerCase();
-                const extractedAmount = parseFloat(match[2]);
-
-                if (!breakdown[extractedMethod]) {
-                  breakdown[extractedMethod] = { count: 0, amount: 0 };
-                }
-                breakdown[extractedMethod].count++;
-                breakdown[extractedMethod].amount += extractedAmount;
-                parsed = true;
+              if (!breakdown[method]) {
+                breakdown[method] = { count: 0, amount: 0 };
               }
-            }
+              breakdown[method].count++; // Note: This counts payments, not invoices. 
+              // If we want invoice count, we'd need a Set<string> of invoiceIds per method. 
+              // But standard practice here is likely summing value. 
+              // For count, let's keep it simple: 1 payment = 1 count increment.
+              breakdown[method].amount += amount;
+            });
 
-            // Fallback if regex dispatch fails but it is marked multiple
-            if (!parsed) {
-              if (!breakdown['multiple']) breakdown['multiple'] = { count: 0, amount: 0 };
-              breakdown['multiple'].count++;
-              breakdown['multiple'].amount += row.collectedAmount;
-            }
-          } else if (method === 'credit') {
-            // CREDIT: Intentional deferred payment - show full netAmount as receivable
-            // Credit orders are NOT shortfalls; the customer intentionally pays later
-            if (!breakdown['credit']) {
-              breakdown['credit'] = { count: 0, amount: 0 };
-            }
-            breakdown['credit'].count++;
-            breakdown['credit'].amount += row.netAmount; // Full amount is the receivable
-          } else {
-            // CASH, QR, CHEQUE, etc. - show what was actually collected
-            if (!breakdown[method]) {
-              breakdown[method] = { count: 0, amount: 0 };
-            }
-            breakdown[method].count++;
-            breakdown[method].amount += row.collectedAmount;
-
-            // SHORTFALL: Gap between invoice value and collected amount
-            // Applies to Cash, QR, Cheque - any method where we expect payment now
-            // Example: Cheque invoice ₹2435, cheque for ₹2400 → CHEQUE: ₹2400, SHORTFALL: ₹35
+            // Calculate shortfall only if delivered and collected < netAmount
+            const isDelivered = row.status === 'delivered' || row.status === 'completed';
             if (isDelivered && row.netAmount > row.collectedAmount) {
+              // Check if the difference is significant (floating point safety)
               const shortfall = row.netAmount - row.collectedAmount;
-              if (!breakdown['shortfall']) {
-                breakdown['shortfall'] = { count: 0, amount: 0 };
+              if (shortfall > 1) { // Ignore <1 rupee differences
+                if (!breakdown['shortfall']) {
+                  breakdown['shortfall'] = { count: 0, amount: 0 };
+                }
+                breakdown['shortfall'].count++;
+                breakdown['shortfall'].amount += shortfall;
               }
-              breakdown['shortfall'].count++;
-              breakdown['shortfall'].amount += shortfall;
+            }
+
+          } else {
+            // No measurements in ledger.
+            // If delivered, it's fully CREDIT.
+            // If not delivered/cancelled, we ignore it for collection summary.
+            const isDelivered = row.status === 'delivered' || row.status === 'completed';
+
+            if (isDelivered) {
+              // Full Credit
+              if (!breakdown['credit']) {
+                breakdown['credit'] = { count: 0, amount: 0 };
+              }
+              breakdown['credit'].count++;
+              breakdown['credit'].amount += row.netAmount;
             }
           }
 
