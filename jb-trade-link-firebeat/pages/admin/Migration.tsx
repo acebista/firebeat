@@ -318,7 +318,7 @@ export const Migration: React.FC = () => {
                 'Mode of Payment', 'Payment Method', 'Payment mode', 'Payment'
             ]);
             const vatStatusIdx = findHeaderIndex(headers, [
-                'VAT Status', 'VAT', 'VAT Required?', 'VAT Required'
+                'VAT Status', 'VAT', 'VAT Required?', 'VAT Required', 'vat_required'
             ]);
 
             // Support both naming conventions for discount
@@ -433,10 +433,10 @@ export const Migration: React.FC = () => {
 
                         orderItems.push({
                             productId: product.id,
-                            quantity,
-                            price: quantity > 0 ? amount / quantity : 0,
-                            amount,
-                            tempProductName: col.name
+                            productName: col.name, // Correct field name
+                            qty: quantity,         // Correct field name
+                            rate: quantity > 0 ? amount / quantity : 0, // Correct field name
+                            total: amount          // Correct field name
                         });
                     }
                 });
@@ -455,6 +455,8 @@ export const Migration: React.FC = () => {
                         id: invoiceNo,
                         customerId: customer.id,
                         customerName: customer.name,
+                        customerPhone: customer.phone,
+                        customerPan: customer.panNumber,
 
                         salespersonId: user.id,
                         salespersonName: user.name,
@@ -467,8 +469,8 @@ export const Migration: React.FC = () => {
                         totalAmount: parseAmount(row[totalIdx]),
                         discount: discountIdx !== -1 ? parseAmount(row[discountIdx]) : 0,
 
-                        // NEW fields
-                        'vatRequired?': vatRequired,
+                        // Updated to match DB column name
+                        vat_required: vatRequired,
                         paymentMethod,
 
                         items: orderItems,
@@ -798,7 +800,7 @@ export const Migration: React.FC = () => {
                             const created = await CustomerService.add(newCust as any);
                             finalCustomerId = created.id;
                             // Critical: Update cache so subsequent orders in this batch find it
-                            idMappings.current.customers.set(String(o.customerId || ''), finalCustomerId);
+                            idMappings.current.customers.set(String(o.customerId || ''), finalCustomerId || String(o.customerId || ''));
                             allCustomers.push(created as any);
                             fallbackMethod = 'CreatedOnFly';
                         } catch (err) {
@@ -826,14 +828,23 @@ export const Migration: React.FC = () => {
                     };
                 });
 
+                // Only include fields that actually exist in the orders table
                 const orderWithCorrectIds = {
-                    ...o,
+                    id: o.id,
                     customerId: finalCustomerId,
-                    // Ensure name matches the resolved customer for consistency in DB
                     customerName: allCustomers.find((c: any) => c.id === finalCustomerId)?.name || o.customerName,
                     salespersonId: finalSalespersonId,
-                    // Use mapped product IDs in items
-                    items: mappedItems
+                    salespersonName: o.salespersonName,
+                    date: o.date,
+                    time: o.time,
+                    GPS: o.GPS,
+                    totalItems: o.totalItems,
+                    totalAmount: o.totalAmount,
+                    discount: o.discount || 0,
+                    vat_required: o.vat_required || false,
+                    paymentMethod: o.paymentMethod || 'Cash',
+                    items: mappedItems,
+                    status: o.status || 'completed'
                 };
                 ordersToInsert.push(orderWithCorrectIds);
             }

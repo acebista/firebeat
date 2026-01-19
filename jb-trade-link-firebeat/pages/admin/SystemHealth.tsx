@@ -18,7 +18,7 @@ interface CheckResult {
   duration?: number;
 }
 
-type ImportType = 'customers' | 'products' | 'orders' | 'purchases' | 'returns';
+type ImportType = 'customers' | 'products' | 'orders' | 'purchases' | 'returns' | 'sales_matrix';
 const BATCH_SIZE = 400;
 
 // --- TEMPLATES ---
@@ -36,7 +36,10 @@ Parle,Parle-G 100g,10,0,2,24,0,0,1,Biscuits`,
 PR-001,2025-02-15,Parle Distributor,Parle-G 100g,100,8.5,EXCLUSIVE`,
 
   returns: `invoiceNumber,date,customerName,returnType,productName,qtyGood,qtyDamaged,rate
-INV-1001,2025-02-22,Gupta General Store,partial,Parle-G 100g,0,2,10`
+INV-1001,2025-02-22,Gupta General Store,partial,Parle-G 100g,0,2,10`,
+
+  sales_matrix: `Salesperson,Invoice Number,Customer Name,Phone Number,PAN Number,Mode of Payment,VatStatus,Subtotal,Discount,Total,Product Name 1,Product Name 2
+Hemraj Pathak,260118-2001,Gyawali store anamnagar,9808392743,,Cash,VAT,1540.08,77,1463.08,24 | 1540.08,`
 };
 
 const cleanString = (val: any) => (val ? String(val).trim() : '');
@@ -143,6 +146,7 @@ export const SystemHealth: React.FC = () => {
         await smartImportProducts(parsedData);
       } else {
         if (importType === 'orders') await importOrders(parsedData);
+        if (importType === 'sales_matrix') await smartImportSalesMatrix(parsedData);
         if (importType === 'purchases') await importPurchases(parsedData);
         if (importType === 'returns') await importReturns(parsedData);
       }
@@ -281,6 +285,95 @@ export const SystemHealth: React.FC = () => {
     }
   };
 
+  const smartImportSalesMatrix = async (rows: any[]) => {
+    addLog(`Processing Sales Matrix with ${rows.length} rows...`, 'info');
+
+    // 1. Fetch Lookups
+    const { data: users } = await supabase.from(COLS.USERS).select('id, name');
+    const { data: customers } = await supabase.from(COLS.CUSTOMERS).select('id, name');
+    const { data: products } = await supabase.from(COLS.PRODUCTS).select('id, name, baseRate');
+
+    const userMap = new Map((users || []).map(u => [cleanString(u.name).toLowerCase(), u.id]));
+    const customerMap = new Map((customers || []).map(c => [cleanString(c.name).toLowerCase(), c.id]));
+    const productMap = new Map((products || []).map(p => [cleanString(p.name), p]));
+
+    const metaHeaders = ['Salesperson', 'Invoice Number', 'Customer Name', 'Phone Number', 'PAN Number', 'Mode of Payment', 'VatStatus', 'Subtotal', 'Discount', 'Total'];
+
+    const orders = rows.map(row => {
+      try {
+        const invoiceNumber = cleanString(row['Invoice Number'] || row['invoiceNumber']);
+        if (!invoiceNumber) return null;
+
+        const salespersonName = cleanString(row['Salesperson']);
+        const customerName = cleanString(row['Customer Name']);
+
+        const salespersonId = userMap.get(salespersonName.toLowerCase()) || 'office';
+        const customerId = customerMap.get(customerName.toLowerCase()) || `cust_${createKey(customerName)}`;
+
+        // Identification of product columns
+        const items: any[] = [];
+        let totalItems = 0;
+
+        Object.keys(row).forEach(key => {
+          if (metaHeaders.includes(key)) return;
+          const val = cleanString(row[key]);
+          if (!val || !val.includes('|')) return;
+
+          const [qtyStr, amountStr] = val.split('|').map(s => s.trim());
+          const qty = parseInt(qtyStr) || 0;
+          const total = parseFloat(amountStr) || 0;
+
+          if (qty > 0) {
+            const product = productMap.get(key);
+            items.push({
+              productId: product?.id || `prod_${createKey(key)}`,
+              productName: key,
+              qty,
+              rate: product?.baseRate || (total / qty),
+              total
+            });
+            totalItems += qty;
+          }
+        });
+
+        // Use invoice date from ID if possible (format: YYMMDD-...)
+        let dateStr = new Date().toISOString().split('T')[0];
+        if (invoiceNumber.match(/^\d{6}/)) {
+          const y = '20' + invoiceNumber.substring(0, 2);
+          const m = invoiceNumber.substring(2, 4);
+          const d = invoiceNumber.substring(4, 6);
+          dateStr = `${y}-${m}-${d}`;
+        }
+
+        return {
+          id: invoiceNumber,
+          customerId,
+          customerName,
+          salespersonId,
+          salespersonName,
+          date: dateStr,
+          totalItems,
+          totalAmount: parseFloat(row['Total']) || items.reduce((sum, it) => sum + it.total, 0),
+          discount: parseFloat(row['Discount']) || 0,
+          status: 'completed',
+          items,
+          paymentMethod: cleanString(row['Mode of Payment'] || 'Cash').toLowerCase(),
+          vat_required: cleanString(row['VatStatus']).toUpperCase() === 'VAT',
+          time: new Date().toISOString()
+        };
+      } catch (err) {
+        console.error('Row parse error', err);
+        return null;
+      }
+    }).filter(Boolean);
+
+    if (orders.length > 0) {
+      await runBatchUpsert(COLS.ORDERS, orders, 'orders');
+    } else {
+      addLog('No valid matrix rows parsed', 'error');
+    }
+  };
+
   const importPurchases = async (rows: any[]) => {
     // Simplified import
     addLog("Purchase import not fully implemented in this demo version.", "info");
@@ -344,7 +437,8 @@ export const SystemHealth: React.FC = () => {
                     options={[
                       { label: 'Customers', value: 'customers' },
                       { label: 'Products', value: 'products' },
-                      { label: 'Sales Orders', value: 'orders' },
+                      { label: 'Sales Orders (Standard)', value: 'orders' },
+                      { label: 'Sales Orders (Matrix/Spreadsheet)', value: 'sales_matrix' },
                     ]}
                   />
                 </div>

@@ -399,7 +399,6 @@ export const EditOrder: React.FC = () => {
                 discount: discAmount,
                 items: cart,
                 paymentMethod: paymentMode,
-                paymentMode: paymentMode, // Set both for backward/forward compatibility
                 vat_required: vatRequired,
                 // Keep original date/status/id
             };

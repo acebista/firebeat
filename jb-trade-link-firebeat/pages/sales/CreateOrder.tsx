@@ -543,8 +543,7 @@ export const CreateOrder: React.FC = () => {
         const invoiceId = idResult.invoiceId;
         const orderWithId = {
             ...orderData,
-            id: invoiceId,
-            paymentMode: orderData.paymentMethod // Ensure legacy field is also set
+            id: invoiceId
         };
 
         // Step 2: Insert the order with the server-assigned ID
