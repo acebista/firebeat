@@ -58,6 +58,8 @@ export const CreateOrder: React.FC = () => {
     const [isGettingLocation, setIsGettingLocation] = useState(false);
     const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
     const [permissionStatus, setPermissionStatus] = useState<'unknown' | 'granted' | 'denied' | 'prompt'>('unknown');
+    const [preCaughtGps, setPreCaughtGps] = useState<string | null>(null);
+    const [gpsStatus, setGpsStatus] = useState<'idle' | 'capturing' | 'ready' | 'error'>('idle');
 
     // Zoom state - persisted to localStorage
     const [zoomLevel, setZoomLevel] = useState(() => {
@@ -575,6 +577,29 @@ export const CreateOrder: React.FC = () => {
         return errors;
     };
 
+    const handleCaptureGpsPreemptively = () => {
+        if (!navigator.geolocation) {
+            toast.error("GPS not supported");
+            return;
+        }
+        setGpsStatus('capturing');
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                const coords = `${pos.coords.latitude},${pos.coords.longitude}`;
+                setPreCaughtGps(coords);
+                setGpsStatus('ready');
+                toast.success("Location locked for order");
+            },
+            (err) => {
+                setGpsStatus('error');
+                console.error("GPS error", err);
+                if (err.code === 1) toast.error("Location permission denied");
+                else toast.error("Could not get location. Try again?");
+            },
+            { timeout: 10000, enableHighAccuracy: true }
+        );
+    };
+
     const handlePlaceOrder = async () => {
         // ========== DOUBLE-SUBMIT PROTECTION ==========
         // Guard 1: State-based (for UI/button disable)
@@ -618,6 +643,12 @@ export const CreateOrder: React.FC = () => {
             // Capture GPS with user feedback
             const captureGPS = (): Promise<string | null> => {
                 return new Promise((resolve) => {
+                    // Use pre-captured if available
+                    if (preCaughtGps) {
+                        resolve(preCaughtGps);
+                        return;
+                    }
+
                     if (!navigator.geolocation) {
                         resolve(null);
                         return;
@@ -1175,6 +1206,34 @@ export const CreateOrder: React.FC = () => {
                                             className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${vatRequired ? 'translate-x-6' : 'translate-x-1'
                                                 }`}
                                         />
+                                    </button>
+                                </div>
+
+                                {/* GPS Status & Retry */}
+                                <div className="flex items-center justify-between py-3 border-t border-blue-100">
+                                    <div className="flex items-center gap-2">
+                                        <div className={`p-2 rounded-lg ${gpsStatus === 'ready' ? 'bg-green-100 text-green-600' : gpsStatus === 'error' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-400'}`}>
+                                            <MapPin className={`h-4 w-4 ${gpsStatus === 'capturing' ? 'animate-bounce' : ''}`} />
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-bold text-gray-700">Order Location</p>
+                                            <p className="text-[10px] text-gray-500">
+                                                {gpsStatus === 'ready' ? 'Location Locked ✓' : gpsStatus === 'capturing' ? 'Capturing...' : gpsStatus === 'error' ? 'GPS Failed - Tap to retry' : 'Will capture on submit'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={handleCaptureGpsPreemptively}
+                                        disabled={gpsStatus === 'capturing'}
+                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border-2 ${gpsStatus === 'ready'
+                                            ? 'bg-green-50 border-green-200 text-green-700'
+                                            : gpsStatus === 'error'
+                                                ? 'bg-red-50 border-red-200 text-red-700 animate-pulse'
+                                                : 'bg-white border-gray-200 text-gray-600 hover:border-indigo-300'
+                                            }`}
+                                    >
+                                        {gpsStatus === 'ready' ? 'Retake' : 'Capture'}
                                     </button>
                                 </div>
 
