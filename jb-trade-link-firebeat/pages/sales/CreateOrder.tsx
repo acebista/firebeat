@@ -1039,221 +1039,172 @@ export const CreateOrder: React.FC = () => {
                 </button>
             )}
 
-            {/* Bottom Sheet Cart (Mobile) */}
+            {/* Bottom Sheet Cart (Mobile) - COMPACT REDESIGN */}
             {isCartOpen && (
                 <div className="fixed inset-0 z-50 flex flex-col bg-black/50" onClick={() => setIsCartOpen(false)}>
                     <div
-                        className="mt-auto bg-white rounded-t-3xl max-h-[85vh] flex flex-col animate-in slide-in-from-bottom duration-300"
+                        className="mt-auto bg-white rounded-t-3xl max-h-[55vh] flex flex-col animate-in slide-in-from-bottom duration-300"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        {/* Cart Header */}
-                        <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-indigo-50 rounded-t-3xl">
-                            <div className="flex items-center gap-3">
-                                <ShoppingBag className="h-6 w-6 text-indigo-600" />
+                        {/* Compact Cart Header with Total */}
+                        <div className="p-3 border-b border-gray-200 flex items-center justify-between bg-indigo-50 rounded-t-3xl">
+                            <div className="flex items-center gap-2">
+                                <ShoppingBag className="h-5 w-5 text-indigo-600" />
                                 <div>
-                                    <h3 className="font-bold text-indigo-900">Current Order</h3>
-                                    <p className="text-xs text-indigo-600">{cart.length} items</p>
+                                    <span className="font-bold text-indigo-900 text-sm">{cart.length} items</span>
+                                    <span className="text-indigo-600 text-sm ml-2">₹{finalTotal.toFixed(0)}</span>
                                 </div>
                             </div>
                             <button
                                 onClick={() => setIsCartOpen(false)}
-                                className="p-2 hover:bg-indigo-100 rounded-full transition-colors"
+                                className="p-1.5 hover:bg-indigo-100 rounded-full transition-colors"
                             >
-                                <ChevronUp className="h-6 w-6 text-indigo-600" />
+                                <ChevronUp className="h-5 w-5 text-indigo-600" />
                             </button>
                         </div>
 
-                        {/* Cart Items */}
-                        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                        {/* Compact Cart Items - Single line per item */}
+                        <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5">
                             {cart.map((item) => {
                                 const product = products.find(p => p.id === item.productId);
                                 const minQty = product?.minOrderQty || 1;
                                 const multiple = product?.orderMultiple || 1;
-                                const isMinError = item.qty < minQty;
-                                const isMultipleError = item.qty % multiple !== 0;
-                                const hasError = isMinError || isMultipleError;
+                                const hasError = item.qty < minQty || item.qty % multiple !== 0;
 
                                 return (
                                     <div
                                         key={item.productId}
-                                        className={`bg-white border-2 rounded-xl p-3 ${hasError ? 'border-red-300 bg-red-50' : 'border-gray-200'
-                                            }`}
+                                        className={`flex items-center justify-between gap-2 p-2 rounded-lg ${hasError ? 'bg-red-50 border border-red-200' : 'bg-gray-50'}`}
                                     >
-                                        <div className="flex justify-between items-start mb-3">
-                                            <div className="flex-1 min-w-0 pr-2">
-                                                <h4 className="text-sm font-bold text-gray-900 line-clamp-1">{item.productName}</h4>
-                                                {item.schemeAppliedText && (
-                                                    <p className="text-xs text-green-600 font-medium mt-0.5">{item.schemeAppliedText}</p>
-                                                )}
-                                                {hasError && (
-                                                    <div className="flex flex-col mt-1 text-xs font-bold text-red-600">
-                                                        {isMinError && <span>• Min: {minQty}</span>}
-                                                        {isMultipleError && <span>• Multiple of: {multiple}</span>}
-                                                    </div>
-                                                )}
-                                            </div>
+                                        {/* Product Name - truncated */}
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-xs font-medium text-gray-900 truncate">{item.productName}</p>
+                                            <p className="text-[10px] text-gray-500">₹{item.rate.toFixed(0)}/ea</p>
+                                        </div>
+
+                                        {/* Inline Qty Controls */}
+                                        <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg">
                                             <button
-                                                onClick={() => removeFromCart(item.productId)}
-                                                className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors shrink-0"
+                                                onClick={() => updateQty(item.productId, item.qty - 1)}
+                                                className="w-7 h-7 flex items-center justify-center text-gray-500 hover:bg-gray-100 rounded-l-lg"
                                             >
-                                                <Trash2 size={16} />
+                                                <Minus size={12} />
+                                            </button>
+                                            <span className="w-8 text-center text-sm font-bold">{item.qty}</span>
+                                            <button
+                                                onClick={() => updateQty(item.productId, item.qty + 1)}
+                                                className="w-7 h-7 flex items-center justify-center text-gray-500 hover:bg-gray-100 rounded-r-lg"
+                                            >
+                                                <Plus size={12} />
                                             </button>
                                         </div>
 
-                                        <div className="flex items-center justify-between">
-                                            {/* Quantity Controls */}
-                                            <div className="flex items-center border-2 border-gray-300 rounded-lg overflow-hidden">
-                                                <button
-                                                    onClick={() => updateQty(item.productId, item.qty - 1)}
-                                                    className="px-3 py-2 bg-gray-50 hover:bg-gray-100 active:bg-gray-200 transition-colors"
-                                                >
-                                                    <Minus size={16} className="text-gray-600" />
-                                                </button>
-                                                <input
-                                                    type="number"
-                                                    className="w-16 text-center text-base font-bold border-none bg-white focus:ring-0"
-                                                    value={item.qty}
-                                                    onChange={(e) => updateQty(item.productId, parseInt(e.target.value) || 0)}
-                                                />
-                                                <button
-                                                    onClick={() => updateQty(item.productId, item.qty + 1)}
-                                                    className="px-3 py-2 bg-gray-50 hover:bg-gray-100 active:bg-gray-200 transition-colors"
-                                                >
-                                                    <Plus size={16} className="text-gray-600" />
-                                                </button>
-                                            </div>
-
-                                            {/* Price */}
-                                            <div className="text-right">
-                                                <p className="text-xs text-gray-500">@ ₹{item.rate.toFixed(2)}</p>
-                                                <p className="text-lg font-bold text-gray-900">₹{item.total.toFixed(2)}</p>
-                                            </div>
+                                        {/* Total + Delete */}
+                                        <div className="flex items-center gap-1">
+                                            <span className="text-sm font-bold text-gray-900 w-16 text-right">₹{item.total.toFixed(0)}</span>
+                                            <button
+                                                onClick={() => removeFromCart(item.productId)}
+                                                className="p-1 text-red-400 hover:text-red-600"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
                                         </div>
                                     </div>
                                 );
                             })}
                         </div>
 
-                        {/* Cart Footer - Totals & Actions */}
-                        <div className="p-4 border-t border-gray-200 bg-gray-50 space-y-3">
-                            {/* Totals & Discount */}
-                            <div className="space-y-2 text-sm">
-                                <div className="flex justify-between text-gray-600">
-                                    <span>Subtotal</span>
-                                    <span className="font-medium">₹{subtotalAmount.toFixed(2)}</span>
-                                </div>
-
-                                <div className="flex items-center justify-between py-2 border-t border-blue-100">
-                                    <label className="text-xs font-medium text-gray-600">Discount %:</label>
-                                    <div className="flex items-center gap-2">
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            max="100"
-                                            step="0.1"
-                                            value={orderDiscountPct}
-                                            onChange={(e) => setOrderDiscountPct(Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))}
-                                            className="w-20 px-3 py-2 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                                            placeholder="0"
-                                        />
-                                        {orderDiscountPct > 0 && (
-                                            <span className="text-sm text-red-600 font-medium">
-                                                -₹{discountAmount.toFixed(2)}
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Payment Mode Selection */}
-                                <div className="space-y-2 py-3 border-t border-blue-100">
-                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Collection Method</label>
-                                    <div className="grid grid-cols-4 gap-2">
-                                        {(['Cash', 'Cheque', 'Credit', 'QR'] as const).map((mode) => (
-                                            <button
-                                                key={mode}
-                                                type="button"
-                                                onClick={() => setPaymentMode(mode)}
-                                                className={`py-2 text-xs font-bold rounded-lg border-2 transition-all ${paymentMode === mode
-                                                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm scale-105'
-                                                    : 'bg-white border-gray-200 text-gray-500 hover:border-indigo-200'
-                                                    }`}
-                                            >
-                                                {mode}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* VAT Choice */}
-                                <div className="flex items-center justify-between py-3 border-t border-blue-100">
-                                    <div className="flex items-center gap-2">
-                                        <div className={`p-2 rounded-lg ${vatRequired ? 'bg-purple-100 text-purple-600' : 'bg-gray-100 text-gray-400'}`}>
-                                            <FileText className="h-4 w-4" />
-                                        </div>
-                                        <div>
-                                            <p className="text-xs font-bold text-gray-700">VAT Bill Required?</p>
-                                            <p className="text-[10px] text-gray-500">{vatRequired ? 'Individual VAT Bill will be created' : 'Will be combined in daily VAT'}</p>
-                                        </div>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => setVatRequired(!vatRequired)}
-                                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${vatRequired ? 'bg-purple-600' : 'bg-gray-200'
-                                            }`}
-                                    >
-                                        <span
-                                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${vatRequired ? 'translate-x-6' : 'translate-x-1'
+                        {/* Compact Footer - Collapsible Options */}
+                        <div className="border-t border-gray-200 bg-white">
+                            {/* Quick Options Row */}
+                            <div className="px-3 py-2 flex items-center justify-between gap-2 border-b border-gray-100">
+                                {/* Payment Mode - Compact Pills */}
+                                <div className="flex gap-1">
+                                    {(['Cash', 'Cheque', 'Credit', 'QR'] as const).map((mode) => (
+                                        <button
+                                            key={mode}
+                                            type="button"
+                                            onClick={() => setPaymentMode(mode)}
+                                            className={`px-2.5 py-1 text-[10px] font-bold rounded-full transition-all ${paymentMode === mode
+                                                ? 'bg-indigo-600 text-white'
+                                                : 'bg-gray-100 text-gray-500'
                                                 }`}
-                                        />
-                                    </button>
+                                        >
+                                            {mode}
+                                        </button>
+                                    ))}
                                 </div>
 
-                                {/* GPS Status & Retry */}
-                                <div className="flex items-center justify-between py-3 border-t border-blue-100">
-                                    <div className="flex items-center gap-2">
-                                        <div className={`p-2 rounded-lg ${gpsStatus === 'ready' ? 'bg-green-100 text-green-600' : gpsStatus === 'error' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-400'}`}>
-                                            <MapPin className={`h-4 w-4 ${gpsStatus === 'capturing' ? 'animate-bounce' : ''}`} />
-                                        </div>
-                                        <div>
-                                            <p className="text-xs font-bold text-gray-700">Order Location</p>
-                                            <p className="text-[10px] text-gray-500">
-                                                {gpsStatus === 'ready' ? 'Location Locked ✓' : gpsStatus === 'capturing' ? 'Capturing...' : gpsStatus === 'error' ? 'GPS Failed - Tap to retry' : 'Will capture on submit'}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={handleCaptureGpsPreemptively}
-                                        disabled={gpsStatus === 'capturing'}
-                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border-2 ${gpsStatus === 'ready'
-                                            ? 'bg-green-50 border-green-200 text-green-700'
-                                            : gpsStatus === 'error'
-                                                ? 'bg-red-50 border-red-200 text-red-700 animate-pulse'
-                                                : 'bg-white border-gray-200 text-gray-600 hover:border-indigo-300'
-                                            }`}
-                                    >
-                                        {gpsStatus === 'ready' ? 'Retake' : 'Capture'}
-                                    </button>
-                                </div>
-
-                                <div className="flex justify-between font-bold text-lg text-gray-900 pt-3 border-t-2 border-indigo-100">
-                                    <span>Total</span>
-                                    <span className="text-indigo-700">₹{finalTotal.toFixed(2)}</span>
+                                {/* Discount Input - Compact */}
+                                <div className="flex items-center gap-1">
+                                    <span className="text-[10px] text-gray-500">Disc:</span>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        max="100"
+                                        value={orderDiscountPct}
+                                        onChange={(e) => setOrderDiscountPct(Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))}
+                                        className="w-12 px-1.5 py-1 text-xs border border-gray-200 rounded text-center"
+                                        placeholder="0"
+                                    />
+                                    <span className="text-[10px] text-gray-500">%</span>
                                 </div>
                             </div>
 
-                            {/* Action Buttons */}
-                            <div className="grid grid-cols-2 gap-3 pt-2">
+                            {/* Secondary Options - Inline */}
+                            <div className="px-3 py-2 flex items-center justify-between gap-3 border-b border-gray-100">
+                                {/* VAT Toggle - Compact */}
+                                <button
+                                    type="button"
+                                    onClick={() => setVatRequired(!vatRequired)}
+                                    className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-bold border transition-all ${vatRequired
+                                        ? 'bg-purple-100 border-purple-300 text-purple-700'
+                                        : 'bg-gray-50 border-gray-200 text-gray-500'
+                                        }`}
+                                >
+                                    <FileText className="h-3 w-3" />
+                                    VAT Bill
+                                </button>
+
+                                {/* GPS Status - Compact */}
+                                <button
+                                    type="button"
+                                    onClick={handleCaptureGpsPreemptively}
+                                    disabled={gpsStatus === 'capturing'}
+                                    className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-bold border transition-all ${gpsStatus === 'ready'
+                                        ? 'bg-green-100 border-green-300 text-green-700'
+                                        : gpsStatus === 'error'
+                                            ? 'bg-red-100 border-red-300 text-red-600'
+                                            : 'bg-gray-50 border-gray-200 text-gray-500'
+                                        }`}
+                                >
+                                    <MapPin className={`h-3 w-3 ${gpsStatus === 'capturing' ? 'animate-pulse' : ''}`} />
+                                    {gpsStatus === 'ready' ? 'Location ✓' : gpsStatus === 'error' ? 'GPS Failed' : 'Capture'}
+                                </button>
+
+                                {/* Clear Cart - Compact */}
                                 <button
                                     onClick={clearCart}
-                                    className="px-4 py-3 rounded-xl border-2 border-red-200 text-red-600 font-medium hover:bg-red-50 active:scale-95 transition-all"
+                                    className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold bg-red-50 border border-red-200 text-red-600"
                                 >
-                                    Clear Cart
+                                    <Trash2 className="h-3 w-3" />
+                                    Clear
                                 </button>
+                            </div>
+
+                            {/* Total + Place Order - Always Visible */}
+                            <div className="px-3 py-3 flex items-center justify-between gap-3">
+                                <div>
+                                    <p className="text-[10px] text-gray-500 uppercase">Total</p>
+                                    <p className="text-xl font-bold text-indigo-700">₹{finalTotal.toFixed(2)}</p>
+                                    {orderDiscountPct > 0 && (
+                                        <p className="text-[10px] text-red-500">-₹{discountAmount.toFixed(0)} disc</p>
+                                    )}
+                                </div>
                                 <button
                                     onClick={handlePlaceOrder}
                                     disabled={cart.length === 0 || isPlacingOrder}
-                                    className="px-4 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-100"
+                                    className="flex-1 max-w-[180px] px-4 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-200"
                                 >
                                     {isPlacingOrder ? (
                                         <>
@@ -1275,8 +1226,6 @@ export const CreateOrder: React.FC = () => {
                     </div>
                 </div>
             )}
-
-            {/* Add Customer Modal - Mobile Optimized */}
             <Modal isOpen={isAddCustomerOpen} onClose={() => setAddCustomerOpen(false)} title="Add Customer">
                 <form onSubmit={(e) => { e.preventDefault(); handleAddCustomer(); }} className="space-y-4">
                     <Input
