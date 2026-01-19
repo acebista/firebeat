@@ -45,8 +45,8 @@ export const SalesPrintChallans: React.FC = () => {
 
         setPrinting(true);
         try {
-            // Print all challans in landscape mode (matching admin verification page)
-            printChallans(orders, 'landscape');
+            // Print all challans in portrait mode
+            printChallans(orders, 'portrait');
             toast.success(`Printing ${orders.length} challans`);
         } catch (error) {
             console.error('Print failed:', error);
@@ -151,9 +151,9 @@ export const SalesPrintChallans: React.FC = () => {
                                 <div className="flex-1">
                                     <div className="flex items-center gap-3">
                                         <span className={`w-2 h-2 rounded-full ${order.status === 'delivered' ? 'bg-green-500' :
-                                                order.status === 'dispatched' ? 'bg-blue-500' :
-                                                    order.status === 'approved' ? 'bg-yellow-500' :
-                                                        'bg-gray-400'
+                                            order.status === 'dispatched' ? 'bg-blue-500' :
+                                                order.status === 'approved' ? 'bg-yellow-500' :
+                                                    'bg-gray-400'
                                             }`} />
                                         <div>
                                             <p className="font-medium text-gray-900">{order.customerName}</p>
@@ -178,7 +178,7 @@ export const SalesPrintChallans: React.FC = () => {
                 <Card className="p-4 bg-blue-50 border-blue-200">
                     <h4 className="font-medium text-blue-900 mb-2">📋 Print Tips</h4>
                     <ul className="text-sm text-blue-700 space-y-1">
-                        <li>• The challan will be printed in landscape mode for better readability</li>
+                        <li>• The challan will be printed in portrait mode for better readability</li>
                         <li>• Each order will be printed on a separate page</li>
                         <li>• Make sure your printer settings are set to "Fit to Page" for best results</li>
                     </ul>
