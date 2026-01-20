@@ -82,11 +82,15 @@ export const CustomerManagement: React.FC = () => {
 
   const handleSave = async () => {
     try {
-      // Validate form data
+      // Validate form data - handle zero values correctly (0 is valid)
       const dataToValidate = {
         ...formData,
-        creditLimit: formData.creditLimit ? Number(formData.creditLimit) : undefined,
-        creditDays: formData.creditDays ? Number(formData.creditDays) : undefined,
+        creditLimit: formData.creditLimit !== undefined
+          ? Number(formData.creditLimit)
+          : undefined,
+        creditDays: formData.creditDays !== undefined
+          ? Number(formData.creditDays)
+          : undefined,
       };
 
       const validatedData = customerSchema.parse(dataToValidate);
@@ -94,7 +98,9 @@ export const CustomerManagement: React.FC = () => {
 
       if (currentCustomer) {
         await CustomerService.update(currentCustomer.id, validatedData);
+        // Use functional update to avoid stale closures
         setCustomers(prev => prev.map(c => c.id === currentCustomer.id ? { ...c, ...validatedData } as Customer : c));
+        toast.success(`${validatedData.name} updated successfully!`);
       } else {
         const newCustomer = {
           ...validatedData,
@@ -103,7 +109,9 @@ export const CustomerManagement: React.FC = () => {
           status: 'active'
         } as Omit<Customer, 'id'>;
         const saved = await CustomerService.add(newCustomer);
-        setCustomers([...customers, saved]);
+        // Use functional update to avoid stale closures
+        setCustomers(prev => [...prev, saved]);
+        toast.success(`${saved.name} added successfully!`);
       }
       setModalOpen(false);
     } catch (e: any) {
@@ -115,9 +123,10 @@ export const CustomerManagement: React.FC = () => {
           }
         });
         setValidationErrors(errors);
+        toast.error("Please fix the validation errors");
       } else {
-        console.error(e);
-        toast.error("Failed to save customer");
+        console.error('Customer save error:', e);
+        toast.error(e?.message || "Failed to save customer");
       }
     }
   };

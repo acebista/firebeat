@@ -480,7 +480,8 @@ export const CreateOrder: React.FC = () => {
             };
 
             const saved = await CustomerService.add(newCust);
-            setCustomers([...customers, saved]);
+            // Use functional update to avoid stale closures
+            setCustomers(prev => [...prev, saved]);
             setSelectedCustomer(saved.id);
             setAddCustomerOpen(false);
 
@@ -500,9 +501,11 @@ export const CreateOrder: React.FC = () => {
                     }
                 });
                 setValidationErrors(errors);
+                toast.error("Please fix the validation errors");
             } else {
-                console.error(e);
-                toast.error("Failed to create customer");
+                console.error('[CreateOrder] Customer save error:', e);
+                const errorMessage = e?.message || e?.error?.message || "Failed to create customer";
+                toast.error(errorMessage);
             }
         }
     };
