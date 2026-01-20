@@ -89,16 +89,15 @@ export const printChallanV2 = (order: Order, products: Product[], customer?: Cus
           </thead>
           <tbody>
             ${order.items?.map((item: any, idx: number) => {
-      // Find product to get baseRate and discountedRate
-      const product = products.find(p => p.id === item.productId);
-      const baseRate = product?.baseRate || item.rate || 0;
-      const actualRate = item.rate || 0;
+      // Use saved baseRate or fall back to netRate
+      const qty = item.qty || 0;
+      const netRate = item.rate || 0;
+      const baseRate = item.baseRate || netRate;
 
       // Calculate values
-      const qty = item.qty || 0;
       const subtotalAtBase = baseRate * qty;
-      const actualTotal = item.total || 0;
-      const discountPct = baseRate > 0 ? (((baseRate - actualRate) / baseRate) * 100) : 0;
+      const finalTotal = item.total || (qty * netRate);
+      const discountAmount = Math.max(0, subtotalAtBase - finalTotal);
 
       return `
                 <tr>
@@ -107,8 +106,8 @@ export const printChallanV2 = (order: Order, products: Product[], customer?: Cus
                   <td style="text-align: center;">${qty}</td>
                   <td style="text-align: right;">${baseRate.toFixed(2)}</td>
                   <td style="text-align: right;">${subtotalAtBase.toFixed(2)}</td>
-                  <td style="text-align: right;">${discountPct.toFixed(2)}%</td>
-                  <td style="text-align: right; font-weight: bold;">${actualTotal.toFixed(2)}</td>
+                  <td style="text-align: right;">${discountAmount.toFixed(2)}</td>
+                  <td style="text-align: right; font-weight: bold;">${finalTotal.toFixed(2)}</td>
                 </tr>
               `;
     }).join('')}

@@ -170,25 +170,27 @@ export const ChallanPrint: React.FC<ChallanPrintProps> = ({
           {orderItems?.map((item, index) => {
             // Handle both database field formats
             const qty = Number(item.qty || item.quantity) || 0;
-            const rate = Number(item.rate || item.price) || 0;
-            const total = Number(item.total || item.amount) || (qty * rate);
+            const netRate = Number(item.rate || item.price) || 0;
+            const baseRate = Number(item.baseRate) || netRate;
+
+            const subtotalAtBase = baseRate * qty;
+            const finalTotal = Number(item.total || item.amount) || (qty * netRate);
+            const itemDiscountAmount = Math.max(0, subtotalAtBase - finalTotal);
+
             const productName = item.productName || item.tempProductName || 'undefined';
 
-            console.log(`[ChallanPrint] Rendering item ${index}: ${productName}, qty: ${qty}, rate: ${rate}, total: ${total}`);
+            console.log(`[ChallanPrint] Rendering item ${index}: ${productName}, qty: ${qty}, baseRate: ${baseRate}, netRate: ${netRate}, total: ${finalTotal}`);
 
-            const itemDiscount = (item.discountPct || 0) > 0
-              ? total * ((item.discountPct || 0) / 100)
-              : 0;
             return (
               <tr key={index}>
                 <td style={{ border: '1px solid black', padding: '6px', textAlign: 'center' }}>{index + 1}</td>
                 <td style={{ border: '1px solid black', padding: '6px' }}>{productName}</td>
                 <td style={{ border: '1px solid black', padding: '6px', textAlign: 'center' }}>{qty}</td>
-                <td style={{ border: '1px solid black', padding: '6px', textAlign: 'right' }}>{rate.toFixed(2)}</td>
-                <td style={{ border: '1px solid black', padding: '6px', textAlign: 'right' }}>{total.toFixed(2)}</td>
-                <td style={{ border: '1px solid black', padding: '6px', textAlign: 'right' }}>{itemDiscount.toFixed(2)}</td>
+                <td style={{ border: '1px solid black', padding: '6px', textAlign: 'right' }}>{baseRate.toFixed(2)}</td>
+                <td style={{ border: '1px solid black', padding: '6px', textAlign: 'right' }}>{subtotalAtBase.toFixed(2)}</td>
+                <td style={{ border: '1px solid black', padding: '6px', textAlign: 'right' }}>{itemDiscountAmount.toFixed(2)}</td>
                 <td style={{ border: '1px solid black', padding: '6px', textAlign: 'right', fontWeight: 'bold' }}>
-                  {(total - itemDiscount).toFixed(2)}
+                  {finalTotal.toFixed(2)}
                 </td>
               </tr>
             );
@@ -356,21 +358,23 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
             <tbody>
               ${order.items?.map((item, index) => {
     const qty = Number(item.qty || item.quantity) || 0;
-    const rate = Number(item.rate || item.price) || 0;
-    const total = Number(item.total || item.amount) || (qty * rate);
+    const netRate = Number(item.rate || item.price) || 0;
+    const baseRate = Number(item.baseRate) || netRate;
+
+    const subtotalAtBase = baseRate * qty;
+    const finalTotal = Number(item.total || item.amount) || (qty * netRate);
+    const itemDiscountAmount = Math.max(0, subtotalAtBase - finalTotal);
+
     const productName = item.productName || item.tempProductName || 'undefined';
-    const itemDiscount = (item.discountPct || 0) > 0
-      ? total * ((item.discountPct || 0) / 100)
-      : 0;
     return `
                     <tr>
                       <td style="text-align: center;">${index + 1}</td>
                       <td>${productName}</td>
                       <td style="text-align: center;">${qty}</td>
-                      <td style="text-align: right;">${rate.toFixed(2)}</td>
-                      <td style="text-align: right;">${total.toFixed(2)}</td>
-                      <td style="text-align: right;">${itemDiscount.toFixed(2)}</td>
-                      <td style="text-align: right; font-weight: bold;">${(total - itemDiscount).toFixed(2)}</td>
+                      <td style="text-align: right;">${baseRate.toFixed(2)}</td>
+                      <td style="text-align: right;">${subtotalAtBase.toFixed(2)}</td>
+                      <td style="text-align: right;">${itemDiscountAmount.toFixed(2)}</td>
+                      <td style="text-align: right; font-weight: bold;">${finalTotal.toFixed(2)}</td>
                     </tr>
                   `;
   }).join('')}
@@ -481,21 +485,23 @@ export const printChallans = (
                 <tbody>
                   ${order.items?.map((item, index) => {
       const qty = Number(item.qty || item.quantity) || 0;
-      const rate = Number(item.rate || item.price) || 0;
-      const total = Number(item.total || item.amount) || (qty * rate);
+      const netRate = Number(item.rate || item.price) || 0;
+      const baseRate = Number(item.baseRate) || netRate;
+
+      const subtotalAtBase = baseRate * qty;
+      const finalTotal = Number(item.total || item.amount) || (qty * netRate);
+      const itemDiscountAmount = Math.max(0, subtotalAtBase - finalTotal);
+
       const productName = item.productName || item.tempProductName || 'undefined';
-      const itemDiscount = (item.discountPct || 0) > 0
-        ? total * ((item.discountPct || 0) / 100)
-        : 0;
       return `
                     <tr>
                       <td style="text-align: center;">${index + 1}</td>
                       <td>${productName}</td>
                       <td style="text-align: center;">${qty}</td>
-                      <td style="text-align: right;">${rate.toFixed(2)}</td>
-                      <td style="text-align: right;">${total.toFixed(2)}</td>
-                      <td style="text-align: right;">${itemDiscount.toFixed(2)}</td>
-                      <td style="text-align: right; font-weight: bold;">${(total - itemDiscount).toFixed(2)}</td>
+                      <td style="text-align: right;">${baseRate.toFixed(2)}</td>
+                      <td style="text-align: right;">${subtotalAtBase.toFixed(2)}</td>
+                      <td style="text-align: right;">${itemDiscountAmount.toFixed(2)}</td>
+                      <td style="text-align: right; font-weight: bold;">${finalTotal.toFixed(2)}</td>
                     </tr>
                   `;
     }).join('')}
