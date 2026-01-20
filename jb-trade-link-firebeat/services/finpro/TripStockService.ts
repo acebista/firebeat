@@ -10,6 +10,7 @@
  */
 
 import { supabase } from '../../lib/supabase';
+import { Order } from '../../types';
 
 // ============================================================================
 // TYPES
@@ -206,21 +207,43 @@ export const TripStockService = {
     },
 
     /**
+     * Internal helper to fetch all orders associated with a trip, 
+     * even if assignedTripId was cleared (e.g. for rescheduled orders).
+     */
+    getOrdersForTrip: async (tripId: string): Promise<Order[]> => {
+        // 1. Get trip to get orderIds array (source of truth for what went on the truck)
+        const { data: trip } = await supabase.from('trips').select('orderIds').eq('id', tripId).single();
+
+        // 2. Fetch orders actually assigned to this trip currently
+        const { data: assignedOrders } = await supabase.from('orders').select('*').eq('assignedTripId', tripId);
+
+        const orders: Order[] = assignedOrders || [];
+
+        if (trip?.orderIds && trip.orderIds.length > 0) {
+            const existingIds = new Set(orders.map(o => o.id));
+            const missingIds = trip.orderIds.filter((id: string) => !existingIds.has(id));
+
+            if (missingIds.length > 0) {
+                const { data: missingOrders } = await supabase.from('orders').select('*').in('id', missingIds);
+                if (missingOrders) {
+                    orders.push(...(missingOrders as any[]));
+                }
+            }
+        }
+        return orders;
+    },
+
+    /**
      * Calculate gross delivered quantities (full order qty, no returns subtracted)
      * Used for physical stock reconciliation
      */
     calculateGrossDeliveredQuantities: async (tripId: string): Promise<Map<string, number>> => {
-        const { data: orders, error } = await supabase
-            .from('orders')
-            .select('id, items')
-            .eq('assignedTripId', tripId)
-            .in('status', ['delivered', 'completed']);
-
-        if (error) throw error;
+        const orders = await TripStockService.getOrdersForTrip(tripId);
+        const deliveredOrders = orders.filter(o => ['delivered', 'completed'].includes(o.status));
 
         const grossMap = new Map<string, number>();
 
-        for (const order of orders || []) {
+        for (const order of deliveredOrders) {
             let items = order.items;
             if (typeof items === 'string') {
                 try { items = JSON.parse(items); } catch (e) { continue; }
@@ -228,8 +251,8 @@ export const TripStockService = {
             if (!Array.isArray(items)) continue;
 
             for (const item of items) {
-                const productId = item.productId || item.product_id;
-                const qty = Number(item.qty || item.quantity) || 0;
+                const productId = (item as any).productId || (item as any).product_id;
+                const qty = Number((item as any).qty || (item as any).quantity) || 0;
                 if (productId && qty > 0) {
                     const current = grossMap.get(productId) || 0;
                     grossMap.set(productId, current + qty);
@@ -245,19 +268,14 @@ export const TripStockService = {
      */
     calculateNetDeliveredQuantities: async (tripId: string): Promise<Map<string, number>> => {
         // Get all delivered orders for this trip
-        const { data: orders, error } = await supabase
-            .from('orders')
-            .select('id, items, remarks, status')
-            .eq('assignedTripId', tripId)
-            .in('status', ['delivered', 'completed']);
-
-        if (error) throw error;
+        const orders = await TripStockService.getOrdersForTrip(tripId);
+        const deliveredOrders = orders.filter(o => ['delivered', 'completed'].includes(o.status));
 
         const deliveredQty = new Map<string, number>();
 
-        for (const order of orders || []) {
+        for (const order of deliveredOrders) {
             // Parse items
-            let items = order.items;
+            let items = order.items as any;
             if (typeof items === 'string') {
                 try {
                     items = JSON.parse(items);
@@ -275,7 +293,7 @@ export const TripStockService = {
             for (const item of items) {
                 const productId = item.productId || item.product_id;
                 const orderQty = Number(item.qty || item.quantity) || 0;
-                const productName = item.productName || item.tempProductName || '';
+                const productName = (item.productName || item.tempProductName || '').trim();
 
                 // Subtract returns
                 const returnQty = returnMap.get(productName.toLowerCase()) || 0;
@@ -308,16 +326,12 @@ export const TripStockService = {
         if (loads.length === 0) {
             console.log(`[TripStockService] No trip_loads for ${tripId}, deriving from orders...`);
 
-            // Get ALL orders assigned to this trip (regardless of status)
-            // This includes delivered, cancelled, dispatched etc.
-            const { data: allOrders, error } = await supabase
-                .from('orders')
-                .select('id, items, status')
-                .eq('assignedTripId', tripId);
+            // Use our helper to get ALL orders ever associated with this trip
+            const allOrders = await TripStockService.getOrdersForTrip(tripId);
 
-            if (!error && allOrders) {
+            if (allOrders.length > 0) {
                 for (const order of allOrders) {
-                    let items = order.items;
+                    let items = order.items as any;
                     if (typeof items === 'string') {
                         try { items = JSON.parse(items); } catch (e) { continue; }
                     }
@@ -384,27 +398,26 @@ export const TripStockService = {
             /**
              * PHYSICAL RECONCILIATION LOGIC (Truck Reality)
              * 
-             * 1. Truck Returned: Items not sold (includes cancelled orders + customer returns)
-             *    Loaded - Net Delivered = What should be physically on truck.
-             *    Net Delivered already subtracts customer returns from remarks.
+             * 1. Total items that should be back in the van = Loaded - Net Delivered
+             *    (Net Delivered = Sold - Returns, so this gives Unsold + Returned)
              */
-            const truckReturned = Math.max(0, loaded - netDelivered);
+            const totalItemsBack = Math.max(0, loaded - netDelivered);
 
             /**
-             * 2. Truck Damaged: Items damaged during transit (from trip_unloads)
+             * 2. Truck Damaged: Items physically recorded as damaged in trip_unloads
              */
             const truckDamaged = unload.damaged;
 
             /**
-             * 3. Expected Unload: What warehouse sees at EOD
-             *    expected_unload = truckReturned + truckDamaged
-             * 
-             * Examples:
-             * 1. Loaded=132, NetSold=48 -> truckReturned=84 -> ExpectedUnload=84
-             * 2. Loaded=100, NetSold=0 (all cancelled) -> truckReturned=100 -> ExpectedUnload=100
-             * 3. Loaded=100, NetSold=80, truckDamaged=5 -> ExpectedUnload=25
+             * 3. Truck Returned (Good): The non-damaged portion of totalItemsBack
              */
-            const expected_unload = truckReturned + truckDamaged;
+            const truckReturnedGood = Math.max(0, totalItemsBack - truckDamaged);
+
+            /**
+             * 4. Expected Unload: Total physical items (Good + Damaged)
+             *    expected_unload = totalItemsBack
+             */
+            const expected_unload = totalItemsBack;
 
             // Actual unload = what was physically counted (manual entry)
             const actual_unload = unload.unsold + unload.damaged;
@@ -417,8 +430,8 @@ export const TripStockService = {
                 product_name: productNameMap.get(productId) || 'Unknown',
                 qty_loaded: loaded,
                 qty_gross_delivered: grossDelivered,
-                qty_truck_returned: truckReturned,
-                qty_truck_damaged: truckDamaged,
+                qty_truck_returned: truckReturnedGood, // Only good items
+                qty_truck_damaged: truckDamaged,      // Only damaged items
                 qty_net_delivered: netDelivered,
                 qty_returned: returnedPickup,
                 qty_damaged: damagedPickup,
@@ -447,31 +460,24 @@ export const TripStockService = {
         const returnsMap = new Map<string, number>();
 
         // 1. Get returns from order remarks
-        const { data: orders } = await supabase
-            .from('orders')
-            .select('id, items, remarks')
-            .eq('assignedTripId', tripId)
-            .in('status', ['delivered', 'completed']);
+        const orders = await TripStockService.getOrdersForTrip(tripId);
+        const deliveredOrders = orders.filter(o => ['delivered', 'completed'].includes(o.status));
 
-        for (const order of orders || []) {
+        for (const order of deliveredOrders) {
             const remarkReturns = parseReturnsFromRemarks(order.remarks || '');
 
             // Map product names back to IDs
-            let items = order.items;
-            if (typeof items === 'string') {
-                try { items = JSON.parse(items); } catch (e) { continue; }
-            }
+            let items = order.items as any;
+            if (typeof items === 'string') try { items = JSON.parse(items); } catch (e) { items = []; }
 
-            if (!Array.isArray(items)) continue;
-
-            for (const item of items) {
+            for (const item of Array.isArray(items) ? items : []) {
+                const name = (item.productName || item.tempProductName || '').trim().toLowerCase();
                 const productId = item.productId || item.product_id;
-                const productName = (item.productName || item.tempProductName || '').toLowerCase();
-                const returnQty = remarkReturns.get(productName) || 0;
-
-                if (productId && returnQty > 0) {
+                if (remarkReturns.has(name) && productId) {
+                    const qty = remarkReturns.get(name) || 0;
                     const current = returnsMap.get(productId) || 0;
-                    returnsMap.set(productId, current + returnQty);
+                    returnsMap.set(productId, current + qty);
+                    remarkReturns.delete(name); // Don't count twice if same name appears
                 }
             }
         }
@@ -515,31 +521,24 @@ export const TripStockService = {
         const damagesMap = new Map<string, number>();
 
         // 1. Get damages from order remarks
-        const { data: orders } = await supabase
-            .from('orders')
-            .select('id, items, remarks')
-            .eq('assignedTripId', tripId)
-            .in('status', ['delivered', 'completed']);
+        const orders = await TripStockService.getOrdersForTrip(tripId);
+        const deliveredOrders = orders.filter(o => ['delivered', 'completed'].includes(o.status));
 
-        for (const order of orders || []) {
+        for (const order of deliveredOrders) {
             const remarkDamages = parseDamagesFromRemarks(order.remarks || '');
 
             // Map product names back to IDs
-            let items = order.items;
-            if (typeof items === 'string') {
-                try { items = JSON.parse(items); } catch (e) { continue; }
-            }
+            let items = order.items as any;
+            if (typeof items === 'string') try { items = JSON.parse(items); } catch (e) { items = []; }
 
-            if (!Array.isArray(items)) continue;
-
-            for (const item of items) {
+            for (const item of Array.isArray(items) ? items : []) {
+                const name = (item.productName || item.tempProductName || '').trim().toLowerCase();
                 const productId = item.productId || item.product_id;
-                const productName = (item.productName || item.tempProductName || '').toLowerCase();
-                const damageQty = remarkDamages.get(productName) || 0;
-
-                if (productId && damageQty > 0) {
+                if (remarkDamages.has(name) && productId) {
+                    const qty = remarkDamages.get(name) || 0;
                     const current = damagesMap.get(productId) || 0;
-                    damagesMap.set(productId, current + damageQty);
+                    damagesMap.set(productId, current + qty);
+                    remarkDamages.delete(name);
                 }
             }
         }
@@ -864,18 +863,23 @@ export const TripStockService = {
  */
 function parseReturnsFromRemarks(remarks: string): Map<string, number> {
     const returnMap = new Map<string, number>();
-    if (!remarks || !remarks.includes('Returns:')) return returnMap;
+    if (!remarks) return returnMap;
 
-    const match = remarks.match(/Returns:\s*([^|]+)/);
+    // Support both "Returns:" and "Returned:" 
+    const match = remarks.match(/(?:Returns?|Returned):\s*([^|]*)/i);
     if (!match) return returnMap;
 
-    const parts = match[1].split(',').map(p => p.trim());
-    parts.forEach(part => {
-        const m = part.match(/(.+)\((\d+)\)/);
-        if (m) {
-            returnMap.set(m[1].trim().toLowerCase(), parseInt(m[2]));
+    const itemsStr = match[1];
+    // Global match for Product Name (qty)
+    const itemRegex = /([^,()]+)\s*\((\d+(?:\.\d+)?)\)/g;
+    let m;
+    while ((m = itemRegex.exec(itemsStr)) !== null) {
+        const name = m[1].trim().toLowerCase();
+        const qty = parseFloat(m[2]);
+        if (name && qty > 0) {
+            returnMap.set(name, (returnMap.get(name) || 0) + qty);
         }
-    });
+    }
 
     return returnMap;
 }
@@ -886,19 +890,23 @@ function parseReturnsFromRemarks(remarks: string): Map<string, number> {
  */
 function parseDamagesFromRemarks(remarks: string): Map<string, number> {
     const damageMap = new Map<string, number>();
-    if (!remarks || (!remarks.includes('Damages:') && !remarks.includes('Damaged:'))) return damageMap;
+    if (!remarks) return damageMap;
 
     // Try both "Damages:" and "Damaged:" patterns
-    const match = remarks.match(/Damag(?:es?|ed):\s*([^|]+)/i);
+    const match = remarks.match(/Damag(?:es?|ed):\s*([^|]*)/i);
     if (!match) return damageMap;
 
-    const parts = match[1].split(',').map(p => p.trim());
-    parts.forEach(part => {
-        const m = part.match(/(.+)\((\d+)\)/);
-        if (m) {
-            damageMap.set(m[1].trim().toLowerCase(), parseInt(m[2]));
+    const itemsStr = match[1];
+    // Global match for Product Name (qty), optionally followed by - reason
+    const itemRegex = /([^,()]+)\s*\((\d+(?:\.\d+)?)\)/g;
+    let m;
+    while ((m = itemRegex.exec(itemsStr)) !== null) {
+        const name = m[1].trim().toLowerCase();
+        const qty = parseFloat(m[2]);
+        if (name && qty > 0) {
+            damageMap.set(name, (damageMap.get(name) || 0) + qty);
         }
-    });
+    }
 
     return damageMap;
 }

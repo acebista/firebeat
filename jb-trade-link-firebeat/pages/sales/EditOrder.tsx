@@ -331,8 +331,9 @@ export const EditOrder: React.FC = () => {
 
         try {
             const saved = await CustomerService.add(newCust);
-            setCustomers([...customers, saved]);
+            setCustomers(prev => [...prev, saved]);
             setSelectedCustomer(saved.id);
+            toast.success("Customer added successfully!");
             setAddCustomerOpen(false);
 
             // Reset
@@ -342,6 +343,7 @@ export const EditOrder: React.FC = () => {
             setNewCustomerRoute('');
             setNewCustomerLocation('');
         } catch (e) {
+            console.error('[EditOrder] Customer creation failed:', e);
             toast.error("Failed to create customer");
         }
     };

@@ -317,9 +317,9 @@ export const MyOrders: React.FC = () => {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-center">
                                             <Badge color={
-                                                order.status === 'approved' ? 'green' :
+                                                order.status === 'approved' ? 'emerald' :
                                                     order.status === 'cancelled' ? 'red' :
-                                                        order.status === 'dispatched' ? 'blue' : 'gray'
+                                                        order.status === 'dispatched' ? 'blue' : 'slate'
                                             }>
                                                 {order.status.toUpperCase()}
                                             </Badge>
@@ -373,7 +373,7 @@ export const MyOrders: React.FC = () => {
                             </div>
                             <div className="text-right">
                                 <Badge color={
-                                    selectedOrder.status === 'approved' ? 'green' :
+                                    selectedOrder.status === 'approved' ? 'emerald' :
                                         selectedOrder.status === 'cancelled' ? 'red' : 'blue'
                                 }>
                                     {selectedOrder.status.toUpperCase()}

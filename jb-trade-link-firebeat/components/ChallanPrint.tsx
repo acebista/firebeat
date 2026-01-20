@@ -254,9 +254,92 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
   const discountPct = subtotal > 0 ? ((discountAmount / subtotal) * 100).toFixed(2) : '0';
   const grandTotal = order.totalAmount || 0;
 
+  const paymentMode = ((order as any).paymentMethod || order.paymentMode || 'Cash').toLowerCase();
+  const copiesCount = (paymentMode === 'cheque' || paymentMode === 'credit') ? 2 : 1;
+
   const pageSize = orientation === 'portrait'
     ? { width: '210mm', height: '297mm' }
     : { width: '297mm', height: '210mm' };
+
+  // Generate the challan HTML for each copy
+  const challansHtml = Array.from({ length: copiesCount }).map((_, i) => {
+    const label = copiesCount > 1 ? (i === 0 ? 'Original Copy' : 'Duplicate Copy') : 'Customer Copy';
+    return `
+        <div class="container">
+          ${qrUrl ? `
+            <div class="qr-container">
+              <img src="${qrUrl}" alt="Location QR Code" style="width: 120px; height: 120px;" />
+              <span class="qr-label">Customer Location</span>
+            </div>
+          ` : ''}
+
+          <div class="header">
+            <h1>J.B Trade Link Pvt. Ltd.</h1>
+            <h2>Delivery Challan</h2>
+            <p>Phone: 9802379658</p>
+            <p style="font-weight: bold;">${label}</p>
+          </div>
+
+          <div class="details">
+            <div><strong>Invoice No:</strong> ${order.id}</div>
+            <div><strong>Salesman:</strong> ${order.salespersonName} &nbsp;&nbsp;&nbsp; <strong>Phone:</strong> ${order.salespersonPhone || 'N/A'}</div>
+            <div><strong>Customer Name:</strong> ${order.customerName} &nbsp;&nbsp;&nbsp; <strong>Phone:</strong> ${order.customerPhone || 'N/A'}</div>
+            <div><strong>PAN Number:</strong> ${order.customerPAN || 'N/A'}</div>
+            <div><strong>Payment Mode:</strong> ${(order as any).paymentMethod || order.paymentMode || 'Cash'}</div>
+            <div><strong>Products Sold:</strong></div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Product</th>
+                <th>Qty</th>
+                <th>Rate</th>
+                <th>SubTotal</th>
+                <th>Disc</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${order.items?.map((item, index) => {
+      const qty = Number(item.qty || item.quantity) || 0;
+      const netRate = Number(item.rate || item.price) || 0;
+      const baseRate = Number(item.baseRate) || netRate;
+
+      const subtotalAtBase = baseRate * qty;
+      const finalTotal = Number(item.total || item.amount) || (qty * netRate);
+      const itemDiscountAmount = Math.max(0, subtotalAtBase - finalTotal);
+
+      const productName = item.productName || item.tempProductName || 'undefined';
+      return `
+                    <tr>
+                      <td style="text-align: center;">${index + 1}</td>
+                      <td>${productName}</td>
+                      <td style="text-align: center;">${qty}</td>
+                      <td style="text-align: right;">${baseRate.toFixed(2)}</td>
+                      <td style="text-align: right;">${subtotalAtBase.toFixed(2)}</td>
+                      <td style="text-align: right;">${itemDiscountAmount.toFixed(2)}</td>
+                      <td style="text-align: right; font-weight: bold;">${finalTotal.toFixed(2)}</td>
+                    </tr>
+                  `;
+    }).join('')}
+            </tbody>
+          </table>
+
+          <div class="totals">
+            <div><strong>Sub Total: Rs. ${subtotal.toFixed(2)}</strong></div>
+            ${discountAmount > 0 ? `<div><strong>Discount (${discountPct}%): Rs. ${discountAmount.toFixed(2)}</strong></div>` : ''}
+            <div class="grand-total">Grand Total: Rs. ${grandTotal.toFixed(2)}</div>
+          </div>
+
+          <div class="signatures">
+            <div>For J.B. Trade Link: _______________________</div>
+            <div>Customer Signature: _______________________</div>
+          </div>
+        </div>
+    `;
+  }).join('');
 
   printWindow.document.write(`
     <html>
@@ -319,79 +402,7 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
         </style>
       </head>
       <body>
-        <div class="container">
-          ${qrUrl ? `
-            <div class="qr-container">
-              <img src="${qrUrl}" alt="Location QR Code" style="width: 120px; height: 120px;" />
-              <span class="qr-label">Customer Location</span>
-            </div>
-          ` : ''}
-
-          <div class="header">
-            <h1>J.B Trade Link Pvt. Ltd.</h1>
-            <h2>Delivery Challan</h2>
-            <p>Phone: 9802379658</p>
-            <p style="font-weight: bold;">Customer Copy</p>
-          </div>
-
-          <div class="details">
-            <div><strong>Invoice No:</strong> ${order.id}</div>
-            <div><strong>Salesman:</strong> ${order.salespersonName} &nbsp;&nbsp;&nbsp; <strong>Phone:</strong> ${order.salespersonPhone || 'N/A'}</div>
-            <div><strong>Customer Name:</strong> ${order.customerName} &nbsp;&nbsp;&nbsp; <strong>Phone:</strong> ${order.customerPhone || 'N/A'}</div>
-            <div><strong>PAN Number:</strong> ${order.customerPAN || 'N/A'}</div>
-            <div><strong>Payment Mode:</strong> ${(order as any).paymentMethod || order.paymentMode || 'Cash'}</div>
-            <div><strong>Products Sold:</strong></div>
-          </div>
-
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Product</th>
-                <th>Qty</th>
-                <th>Rate</th>
-                <th>SubTotal</th>
-                <th>Disc</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${order.items?.map((item, index) => {
-    const qty = Number(item.qty || item.quantity) || 0;
-    const netRate = Number(item.rate || item.price) || 0;
-    const baseRate = Number(item.baseRate) || netRate;
-
-    const subtotalAtBase = baseRate * qty;
-    const finalTotal = Number(item.total || item.amount) || (qty * netRate);
-    const itemDiscountAmount = Math.max(0, subtotalAtBase - finalTotal);
-
-    const productName = item.productName || item.tempProductName || 'undefined';
-    return `
-                    <tr>
-                      <td style="text-align: center;">${index + 1}</td>
-                      <td>${productName}</td>
-                      <td style="text-align: center;">${qty}</td>
-                      <td style="text-align: right;">${baseRate.toFixed(2)}</td>
-                      <td style="text-align: right;">${subtotalAtBase.toFixed(2)}</td>
-                      <td style="text-align: right;">${itemDiscountAmount.toFixed(2)}</td>
-                      <td style="text-align: right; font-weight: bold;">${finalTotal.toFixed(2)}</td>
-                    </tr>
-                  `;
-  }).join('')}
-            </tbody>
-          </table>
-
-          <div class="totals">
-            <div><strong>Sub Total: Rs. ${subtotal.toFixed(2)}</strong></div>
-            ${discountAmount > 0 ? `<div><strong>Discount (${discountPct}%): Rs. ${discountAmount.toFixed(2)}</strong></div>` : ''}
-            <div class="grand-total">Grand Total: Rs. ${grandTotal.toFixed(2)}</div>
-          </div>
-
-          <div class="signatures">
-            <div>For J.B. Trade Link: _______________________</div>
-            <div>Customer Signature: _______________________</div>
-          </div>
-        </div>
+        ${challansHtml}
       </body>
     </html>
   `);
@@ -421,7 +432,10 @@ export const printChallans = (
     ? { width: '210mm', height: '297mm' }
     : { width: '297mm', height: '210mm' };
 
-  const challanHtml = orders.map(order => {
+  const challanHtml = (orders || []).flatMap(order => {
+    const paymentMode = ((order as any).paymentMethod || order.paymentMode || 'Cash').toLowerCase();
+    const copiesCount = (paymentMode === 'cheque' || paymentMode === 'credit') ? 2 : 1;
+
     const customerLocation = getCustomerLocation?.(order);
 
     // Parse GPS coordinates for QR code
@@ -444,7 +458,9 @@ export const printChallans = (
     const discountPct = subtotal > 0 ? ((discountAmount / subtotal) * 100).toFixed(2) : '0';
     const grandTotal = order.totalAmount || 0;
 
-    return `
+    return Array.from({ length: copiesCount }).map((_, i) => {
+      const label = copiesCount > 1 ? (i === 0 ? 'Original Copy' : 'Duplicate Copy') : 'Customer Copy';
+      return `
           <div class="challan-page">
             <div class="container">
               ${qrUrl ? `
@@ -458,7 +474,7 @@ export const printChallans = (
                 <h1>J.B Trade Link Pvt. Ltd.</h1>
                 <h2>Delivery Challan</h2>
                 <p>Phone: 9802379658</p>
-                <p style="font-weight: bold;">Customer Copy</p>
+                <p style="font-weight: bold;">${label}</p>
               </div>
 
               <div class="details">
@@ -484,27 +500,27 @@ export const printChallans = (
                 </thead>
                 <tbody>
                   ${order.items?.map((item, index) => {
-      const qty = Number(item.qty || item.quantity) || 0;
-      const netRate = Number(item.rate || item.price) || 0;
-      const baseRate = Number(item.baseRate) || netRate;
+        const qty = Number(item.qty || item.quantity) || 0;
+        const netRate = Number(item.rate || item.price) || 0;
+        const baseRate = Number(item.baseRate) || netRate;
 
-      const subtotalAtBase = baseRate * qty;
-      const finalTotal = Number(item.total || item.amount) || (qty * netRate);
-      const itemDiscountAmount = Math.max(0, subtotalAtBase - finalTotal);
+        const subtotalAtBase = baseRate * qty;
+        const finalTotal = Number(item.total || item.amount) || (qty * netRate);
+        const itemDiscountAmount = Math.max(0, subtotalAtBase - finalTotal);
 
-      const productName = item.productName || item.tempProductName || 'undefined';
-      return `
-                    <tr>
-                      <td style="text-align: center;">${index + 1}</td>
-                      <td>${productName}</td>
-                      <td style="text-align: center;">${qty}</td>
-                      <td style="text-align: right;">${baseRate.toFixed(2)}</td>
-                      <td style="text-align: right;">${subtotalAtBase.toFixed(2)}</td>
-                      <td style="text-align: right;">${itemDiscountAmount.toFixed(2)}</td>
-                      <td style="text-align: right; font-weight: bold;">${finalTotal.toFixed(2)}</td>
-                    </tr>
-                  `;
-    }).join('')}
+        const productName = item.productName || item.tempProductName || 'undefined';
+        return `
+                        <tr>
+                          <td style="text-align: center;">${index + 1}</td>
+                          <td>${productName}</td>
+                          <td style="text-align: center;">${qty}</td>
+                          <td style="text-align: right;">${baseRate.toFixed(2)}</td>
+                          <td style="text-align: right;">${subtotalAtBase.toFixed(2)}</td>
+                          <td style="text-align: right;">${itemDiscountAmount.toFixed(2)}</td>
+                          <td style="text-align: right; font-weight: bold;">${finalTotal.toFixed(2)}</td>
+                        </tr>
+                      `;
+      }).join('')}
                 </tbody>
               </table>
 
@@ -521,6 +537,7 @@ export const printChallans = (
             </div>
           </div>
         `;
+    });
   }).join('');
 
   printWindow.document.write(`

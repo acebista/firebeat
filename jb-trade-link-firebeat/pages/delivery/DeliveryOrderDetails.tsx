@@ -125,21 +125,33 @@ export const DeliveryOrderDetails: React.FC = () => {
                     setOrder(orderData);
                     setAmountCollected(orderData.totalAmount.toString());
 
-                    // Initialize payment entries based on order status
+                    // Initialize payment entries based on order status and remarks
                     const existingPaymentMethod = (orderData as any).payment_method_at_delivery || (orderData as any).paymentMode || 'cash';
                     const existingPaymentAmount = (orderData as any).payment_collected !== undefined
                         ? Number((orderData as any).payment_collected)
-                        : orderData.totalAmount;
+                        : (orderData.totalAmount - (orderData.discount || 0));
 
-                    setPaymentEntries([{
-                        method: existingPaymentMethod as any,
-                        amount: existingPaymentAmount
-                    }]);
-
-                    // Initialize remarks from existing order remarks for edit mode
-                    if (orderData.remarks) {
-                        setRemarks(''); // Start fresh in edit, but show existing in display
+                    // Check if multiple payments are in remarks
+                    if (existingPaymentMethod.toString().toLowerCase() === 'multiple' && orderData.remarks) {
+                        const parsedPayments = parsePaymentBreakdownFromRemarks(orderData.remarks);
+                        if (parsedPayments && parsedPayments.length > 0) {
+                            setPaymentEntries(parsedPayments);
+                        } else {
+                            // Fallback to single entry
+                            setPaymentEntries([{
+                                method: 'cash',
+                                amount: existingPaymentAmount
+                            }]);
+                        }
+                    } else {
+                        setPaymentEntries([{
+                            method: existingPaymentMethod as any,
+                            amount: existingPaymentAmount
+                        }]);
                     }
+
+                    // Initialize remarks
+                    setRemarks(orderData.remarks || '');
 
                     // Fetch customer details
                     if (orderData.customerId) {
@@ -162,46 +174,40 @@ export const DeliveryOrderDetails: React.FC = () => {
         loadData();
     }, [id]);
 
-    // Parse existing returns and damages from remarks when entering edit mode
+    // Parse existing returns and damages from remarks when entering edit mode or when order changes
     useEffect(() => {
-        console.log('[DeliveryOrderDetails] Remarks parsing useEffect triggered', {
-            isEditing,
-            hasOrder: !!order,
-            hasRemarks: !!order?.remarks,
-            remarks: order?.remarks
-        });
+        // Reset states whenever we start editing or order changes
+        if (isEditing) {
+            setReturnItems([]);
+            setDamages([]);
+        }
 
         if (isEditing && order?.remarks) {
             const remarks = order.remarks;
-            console.log('[DeliveryOrderDetails] Parsing remarks:', remarks);
 
-            // Parse Returns: ProductName(qty), ProductName2(qty)
+            // 1. Parse Returns: Returns: ProductName(qty), ProductName2(qty)
             const returnsMatch = remarks.match(/Returns:\s*([^|]+)/);
-            console.log('[DeliveryOrderDetails] Returns match:', returnsMatch);
-
             if (returnsMatch) {
                 const returnsStr = returnsMatch[1].trim();
-                console.log('[DeliveryOrderDetails] Returns string:', returnsStr);
-                const returnRegex = /([^(]+)\((\d+)\)/g;
+                // Regex matches product name followed by qty in parens.
+                // Handles leading commas by ignoring them in the first capture group.
+                const returnRegex = /([^,()]+)\s*\((\d+(?:\.\d+)?)\)/g;
                 const parsedReturns: ReturnItem[] = [];
                 let match;
 
                 while ((match = returnRegex.exec(returnsStr)) !== null) {
                     const productName = match[1].trim();
-                    const returnQty = parseInt(match[2]);
-                    console.log('[DeliveryOrderDetails] Found return:', { productName, returnQty });
+                    const returnQty = parseFloat(match[2]);
 
                     // Find the product in order items to get rate and original qty
                     const orderItem = order.items?.find(item =>
-                        (item.productName || item.tempProductName || '').toLowerCase() === productName.toLowerCase()
+                        (item.productName || item.tempProductName || '').trim().toLowerCase() === productName.toLowerCase()
                     );
-
-                    console.log('[DeliveryOrderDetails] Matched order item:', orderItem);
 
                     if (orderItem) {
                         parsedReturns.push({
                             productId: orderItem.productId || '',
-                            productName: productName,
+                            productName: orderItem.productName || productName, // Prefer normalized name from item
                             originalQty: Number(orderItem.qty || orderItem.quantity || 0),
                             returnQty: returnQty,
                             rate: Number(orderItem.rate || orderItem.price || 0)
@@ -209,41 +215,35 @@ export const DeliveryOrderDetails: React.FC = () => {
                     }
                 }
 
-                console.log('[DeliveryOrderDetails] Parsed returns:', parsedReturns);
                 if (parsedReturns.length > 0) {
                     setReturnItems(parsedReturns);
-                    console.log('[DeliveryOrderDetails] Set return items:', parsedReturns);
                 }
             }
 
-            // Parse Damages: ProductName(qty) - reason, ProductName2(qty) - reason
-            const damagesMatch = remarks.match(/Damages:\s*([^|]+)/);
-            console.log('[DeliveryOrderDetails] Damages match:', damagesMatch);
-
+            // 2. Parse Damages: Damages: ProductName(qty) - reason, ProductName2(qty) - reason
+            // Also handle "Damaged:" variant
+            const damagesMatch = remarks.match(/Damag(?:es?|ed):\s*([^|]+)/i);
             if (damagesMatch) {
                 const damagesStr = damagesMatch[1].trim();
-                console.log('[DeliveryOrderDetails] Damages string:', damagesStr);
-                const damageRegex = /([^(]+)\((\d+)\)\s*-\s*([^,]+)/g;
+                // Regex matches product name, qty in parens, and then the reason after a dash.
+                const damageRegex = /([^,()]+)\s*\((\d+(?:\.\d+)?)\)(?:\s*-\s*([^,|]+))?/g;
                 const parsedDamages: DamageItem[] = [];
                 let match;
 
                 while ((match = damageRegex.exec(damagesStr)) !== null) {
                     const productName = match[1].trim();
-                    const quantity = parseInt(match[2]);
+                    const quantity = parseFloat(match[2]);
                     const reason = match[3].trim();
-                    console.log('[DeliveryOrderDetails] Found damage:', { productName, quantity, reason });
 
                     // Find the product in order items to get rate and product ID
                     const orderItem = order.items?.find(item =>
-                        (item.productName || item.tempProductName || '').toLowerCase() === productName.toLowerCase()
+                        (item.productName || item.tempProductName || '').trim().toLowerCase() === productName.toLowerCase()
                     );
-
-                    console.log('[DeliveryOrderDetails] Matched order item:', orderItem);
 
                     if (orderItem) {
                         parsedDamages.push({
                             productId: orderItem.productId || '',
-                            productName: productName,
+                            productName: orderItem.productName || productName,
                             quantity: quantity,
                             reason: reason,
                             rate: Number(orderItem.rate || orderItem.price || 0)
@@ -251,16 +251,12 @@ export const DeliveryOrderDetails: React.FC = () => {
                     }
                 }
 
-                console.log('[DeliveryOrderDetails] Parsed damages:', parsedDamages);
                 if (parsedDamages.length > 0) {
                     setDamages(parsedDamages);
-                    console.log('[DeliveryOrderDetails] Set damages:', parsedDamages);
                 }
             }
         }
-        // Note: Removed the clearing logic here - it was causing issues
-        // Returns and damages will be cleared when the component unmounts or when explicitly needed
-    }, [isEditing, order]);
+    }, [isEditing, order?.id, order?.remarks]);
 
 
     const calculateOriginalTotal = () => {
@@ -697,6 +693,30 @@ export const DeliveryOrderDetails: React.FC = () => {
         } finally {
             setProcessing(false);
         }
+    };
+
+    /**
+     * Parse payment breakdown from order remarks
+     * Format: "Payments: CASH: ₹1000, QR: ₹500"
+     */
+    const parsePaymentBreakdownFromRemarks = (remarks: string): PaymentEntry[] => {
+        const paymentMatch = remarks.match(/Payments:\s*([^|]+)/);
+        if (!paymentMatch) return [];
+
+        const paymentsStr = paymentMatch[1];
+        const entries: PaymentEntry[] = [];
+
+        // Match patterns like "CASH: ₹1000" or "QR: ₹500 (ref123)"
+        const regex = /([A-Za-z]+):\s*₹?(\d+(?:\.\d+)?)/g;
+        let match;
+        while ((match = regex.exec(paymentsStr)) !== null) {
+            entries.push({
+                method: match[1].toLowerCase() as any,
+                amount: parseFloat(match[2])
+            });
+        }
+
+        return entries.length > 0 ? entries : [];
     };
 
     if (loading) return <div className="p-8 text-center">Loading details...</div>;
