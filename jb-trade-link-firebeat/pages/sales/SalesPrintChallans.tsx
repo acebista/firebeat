@@ -26,8 +26,8 @@ export const SalesPrintChallans: React.FC = () => {
         try {
             // Get orders for the selected date, filtered by salesperson
             const allOrders = await OrderService.getOrdersFiltered(selectedDate, selectedDate, user.id);
-            // Filter only non-cancelled orders
-            const validOrders = allOrders.filter(o => o.status !== 'cancelled');
+            // Filter non-cancelled orders AND exclude rescheduled orders (they belong to a different day/salesperson)
+            const validOrders = allOrders.filter(o => o.status !== 'cancelled' && !o.rescheduled_from);
             setOrders(validOrders);
         } catch (error) {
             console.error('Failed to load orders:', error);

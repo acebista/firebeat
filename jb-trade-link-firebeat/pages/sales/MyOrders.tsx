@@ -126,7 +126,8 @@ export const MyOrders: React.FC = () => {
 
     const isEditable = (order: Order) => {
         const today = new Date().toISOString().split('T')[0];
-        return order.date === today;
+        // Only allow editing if order is today's date AND is NOT a rescheduled order
+        return order.date === today && !order.rescheduled_from;
     };
 
     // Calculate stats

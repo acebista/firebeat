@@ -70,8 +70,8 @@ export const SalesDashboard: React.FC = () => {
       const orderDate = new Date(o.date);
       const orderDateStr = o.date; // YYYY-MM-DD
 
-      // Today
-      if (orderDateStr === today) {
+      // Today - only count if NOT a rescheduled order (rescheduled orders belong to original salesperson)
+      if (orderDateStr === today && !o.rescheduled_from) {
         todaySales += o.totalAmount;
         todayOrders++;
       }
