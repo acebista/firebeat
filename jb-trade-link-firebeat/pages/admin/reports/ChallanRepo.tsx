@@ -49,14 +49,38 @@ export const ChallanReport: React.FC<{ data: ChallanValidationRow[] }> = ({ data
     // Sort by invoice number (ascending)
     validOrders.sort((a, b) => a.id.localeCompare(b.id));
 
-    // Enrich orders with phone numbers
+    // Check for orders missing GPS data
+    const ordersWithoutGPS = validOrders.filter(o => {
+      const gps = (o as any)?.GPS;
+      if (!gps || typeof gps !== 'string') return true;
+      const parts = gps.split(',').map((p: string) => p.trim());
+      return !(parts.length === 2 && !isNaN(Number(parts[0])) && !isNaN(Number(parts[1])));
+    });
+
+    if (ordersWithoutGPS.length > 0) {
+      const proceed = window.confirm(
+        `⚠️ ${ordersWithoutGPS.length} of ${validOrders.length} order(s) are missing GPS location data.\n\n` +
+        `Customers without location:\n${ordersWithoutGPS.slice(0, 5).map(o => `• ${o.customerName}`).join('\n')}` +
+        `${ordersWithoutGPS.length > 5 ? `\n... and ${ordersWithoutGPS.length - 5} more` : ''}\n\n` +
+        `QR codes will not appear on these challans.\n\n` +
+        `Print anyway?`
+      );
+      if (!proceed) return;
+    }
+
     // Orders are already enriched by OrderService
     const enrichedOrders = [...validOrders];
 
-    // Get customer location function - use GPS from order or enriched location
+    // Get GPS coordinates for QR code - only return valid lat,lng format
     const getCustomerLocation = (order: Order) => {
-      // GPS field has format: "27.715034, 85.324468" (lat, long)
-      return (order as any)?.GPS || order.customerLocation;
+      const gps = (order as any)?.GPS;
+      if (gps && typeof gps === 'string') {
+        const parts = gps.split(',').map((p: string) => p.trim());
+        if (parts.length === 2 && !isNaN(Number(parts[0])) && !isNaN(Number(parts[1]))) {
+          return gps;
+        }
+      }
+      return undefined; // No valid GPS - QR won't appear
     };
 
     // Use the new printChallans function with orientation support
@@ -72,8 +96,15 @@ export const ChallanReport: React.FC<{ data: ChallanValidationRow[] }> = ({ data
 
     const enrichedOrder = { ...order };
 
-    // Use the new printChallan function with GPS location from order
-    const customerLocation = (order as any)?.GPS || order.customerLocation; // Fallback to what was previously fetched
+    // Use GPS location from order - only if valid coordinates
+    const gps = (order as any)?.GPS;
+    let customerLocation: string | undefined;
+    if (gps && typeof gps === 'string') {
+      const parts = gps.split(',').map((p: string) => p.trim());
+      if (parts.length === 2 && !isNaN(Number(parts[0])) && !isNaN(Number(parts[1]))) {
+        customerLocation = gps;
+      }
+    }
     printChallan(enrichedOrder, customerLocation, orientation);
   };
 

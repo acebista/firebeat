@@ -46,14 +46,41 @@ export const SalesPrintChallans: React.FC = () => {
             return;
         }
 
+        // Check for orders missing GPS data
+        const ordersWithoutGPS = orders.filter(o => {
+            const gps = (o as any)?.GPS;
+            if (!gps || typeof gps !== 'string') return true;
+            const parts = gps.split(',').map((p: string) => p.trim());
+            return !(parts.length === 2 && !isNaN(Number(parts[0])) && !isNaN(Number(parts[1])));
+        });
+
+        if (ordersWithoutGPS.length > 0) {
+            const proceed = window.confirm(
+                `⚠️ ${ordersWithoutGPS.length} order(s) are missing GPS location data.\n\n` +
+                `Customers without location:\n${ordersWithoutGPS.slice(0, 5).map(o => `• ${o.customerName}`).join('\n')}` +
+                `${ordersWithoutGPS.length > 5 ? `\n... and ${ordersWithoutGPS.length - 5} more` : ''}\n\n` +
+                `QR codes will not appear on these challans.\n\n` +
+                `To fix: Re-create orders with "Capture GPS" enabled before placing.\n\n` +
+                `Print anyway?`
+            );
+            if (!proceed) return;
+        }
+
         setPrinting(true);
         try {
             // Orders are already enriched by OrderService
             const enrichedOrders = [...orders];
 
-            // Get customer location function - use enriched location metadata
+            // Get GPS coordinates for QR code - only return valid lat,lng format
             const getCustomerLocation = (order: Order) => {
-                return (order as any)?.GPS || order.customerLocation;
+                const gps = (order as any)?.GPS;
+                if (gps && typeof gps === 'string') {
+                    const parts = gps.split(',').map((p: string) => p.trim());
+                    if (parts.length === 2 && !isNaN(Number(parts[0])) && !isNaN(Number(parts[1]))) {
+                        return gps;
+                    }
+                }
+                return undefined; // No valid GPS - QR code won't appear
             };
 
             // Print all challans in portrait mode
