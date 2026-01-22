@@ -3,14 +3,13 @@ import { Card, Button, Badge } from '../../../components/ui/Elements';
 import { ChallanValidationRow } from '../../../types/reports';
 import { Printer, CheckCircle, AlertTriangle, Layout as LayoutIcon } from 'lucide-react';
 import { printChallan, printChallans } from '../../../components/ChallanPrint';
-import { OrderService, CustomerService, ProductService } from '../../../services/db';
-import { Order, Customer, Product } from '../../../types';
+import { OrderService, CustomerService, ProductService, UserService } from '../../../services/db';
+import { Order, Customer, Product, User } from '../../../types';
 import toast from 'react-hot-toast';
 
 export const ChallanReport: React.FC<{ data: ChallanValidationRow[] }> = ({ data }) => {
   const issuesCount = data.filter(r => r.status === 'MISMATCH').length;
   const [orders, setOrders] = useState<Order[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
@@ -23,13 +22,11 @@ export const ChallanReport: React.FC<{ data: ChallanValidationRow[] }> = ({ data
     setLoading(true);
     try {
       const orderIds = data.map(d => d.orderId);
-      const [ordersData, customersData, productsData] = await Promise.all([
+      const [ordersData, productsData] = await Promise.all([
         OrderService.getOrdersByIds(orderIds),
-        CustomerService.getAll(),
         ProductService.getAll()
       ]);
       setOrders(ordersData);
-      setCustomers(customersData);
       setProducts(productsData);
     } catch (error) {
       console.error('Failed to load orders:', error);
@@ -52,14 +49,18 @@ export const ChallanReport: React.FC<{ data: ChallanValidationRow[] }> = ({ data
     // Sort by invoice number (ascending)
     validOrders.sort((a, b) => a.id.localeCompare(b.id));
 
-    // Get customer location function - use GPS from order
+    // Enrich orders with phone numbers
+    // Orders are already enriched by OrderService
+    const enrichedOrders = [...validOrders];
+
+    // Get customer location function - use GPS from order or enriched location
     const getCustomerLocation = (order: Order) => {
       // GPS field has format: "27.715034, 85.324468" (lat, long)
-      return (order as any)?.GPS;
+      return (order as any)?.GPS || order.customerLocation;
     };
 
     // Use the new printChallans function with orientation support
-    printChallans(validOrders, orientation, getCustomerLocation);
+    printChallans(enrichedOrders, orientation, getCustomerLocation);
   };
 
   const handlePrintSingle = (orderId: string) => {
@@ -69,9 +70,11 @@ export const ChallanReport: React.FC<{ data: ChallanValidationRow[] }> = ({ data
       return;
     }
 
+    const enrichedOrder = { ...order };
+
     // Use the new printChallan function with GPS location from order
-    const customerLocation = (order as any)?.GPS;
-    printChallan(order, customerLocation, orientation);
+    const customerLocation = (order as any)?.GPS || order.customerLocation; // Fallback to what was previously fetched
+    printChallan(enrichedOrder, customerLocation, orientation);
   };
 
   return (
@@ -94,11 +97,10 @@ export const ChallanReport: React.FC<{ data: ChallanValidationRow[] }> = ({ data
           <div className="flex gap-1 border border-gray-300 rounded-lg p-1 bg-gray-50">
             <button
               onClick={() => setOrientation('portrait')}
-              className={`px-3 py-1 text-sm font-medium rounded flex items-center gap-1 transition ${
-                orientation === 'portrait'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-100'
-              }`}
+              className={`px-3 py-1 text-sm font-medium rounded flex items-center gap-1 transition ${orientation === 'portrait'
+                ? 'bg-indigo-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-100'
+                }`}
               title="Portrait (210mm × 297mm)"
             >
               <LayoutIcon className="h-4 w-4" />
@@ -106,11 +108,10 @@ export const ChallanReport: React.FC<{ data: ChallanValidationRow[] }> = ({ data
             </button>
             <button
               onClick={() => setOrientation('landscape')}
-              className={`px-3 py-1 text-sm font-medium rounded flex items-center gap-1 transition ${
-                orientation === 'landscape'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-100'
-              }`}
+              className={`px-3 py-1 text-sm font-medium rounded flex items-center gap-1 transition ${orientation === 'landscape'
+                ? 'bg-indigo-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-100'
+                }`}
               title="Landscape (297mm × 210mm)"
             >
               <LayoutIcon className="h-4 w-4 rotate-90" />
@@ -149,7 +150,7 @@ export const ChallanReport: React.FC<{ data: ChallanValidationRow[] }> = ({ data
                     <td className="px-4 py-2 text-center">{row.itemsCount}</td>
                     <td className="px-4 py-2 text-right">₹{row.expectedTotal.toLocaleString()}</td>
                     <td className="px-4 py-2 text-center">
-                      <Badge color={row.status === 'MATCH' ? 'green' : 'red'}>{row.status}</Badge>
+                      <Badge color={row.status === 'MATCH' ? 'emerald' : 'red'}>{row.status}</Badge>
                     </td>
                     <td className="px-4 py-2 text-center no-print">
                       {row.status === 'MATCH' && (

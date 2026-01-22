@@ -114,8 +114,7 @@ export const MyOrders: React.FC = () => {
 
     const handlePrint = (e: React.MouseEvent, order: Order) => {
         e.stopPropagation();
-        const customer = customers.find(c => c.id === order.customerId);
-        printChallanV2(order, products, customer);
+        printChallanV2(order, products);
     };
 
     const handleEdit = (e: React.MouseEvent, order: Order) => {

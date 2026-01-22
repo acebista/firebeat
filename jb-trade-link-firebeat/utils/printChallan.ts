@@ -104,8 +104,12 @@ export const printChallanV2 = (order: Order, products: Product[], customer?: Cus
             <div><strong>Invoice No:</strong> ${order.id}</div>
             <div style="display: flex; gap: 20px;">
               <div><strong>Salesman:</strong> ${order.salespersonName}</div>
+              <div><strong>Phone:</strong> ${order.salespersonPhone || (order as any).salesperson_phone || 'N/A'}</div>
             </div>
-            <div><strong>Customer Name:</strong> ${order.customerName}</div>
+            <div style="display: flex; gap: 20px;">
+              <div><strong>Customer Name:</strong> ${order.customerName}</div>
+              <div><strong>Phone:</strong> ${order.customerPhone || (order as any).customer_phone || customer?.phone || 'N/A'}</div>
+            </div>
             <div><strong>Payment Mode:</strong> ${paymentMethod}</div>
             <div style="margin-top: 10px;"><strong>Products Sold:</strong></div>
           </div>

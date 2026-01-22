@@ -116,6 +116,7 @@ export interface Order {
   salespersonPhone?: string;
   customerPhone?: string;
   customerPAN?: string;
+  customerLocation?: string;
   paymentMode?: string; // Legacy - use paymentMethod instead
   paymentMethod?: string; // Primary field - matches DB column
   // Delivery and reporting fields
@@ -153,6 +154,7 @@ export interface Route {
 export interface Salesperson {
   id: string;
   name: string;
+  phone?: string;        // contact number
   code?: string;         // optional code like "SP01"
 }
 

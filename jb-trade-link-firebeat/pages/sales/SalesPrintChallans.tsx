@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Card, Button } from '../../components/ui/Elements';
 import { Printer, Calendar, FileText, Loader2 } from 'lucide-react';
 import { useAuth } from '../../services/auth';
-import { OrderService } from '../../services/db';
-import { Order } from '../../types';
+import { OrderService, CustomerService, UserService } from '../../services/db';
+import { Order, Customer, User } from '../../types';
 import { printChallans } from '../../components/ChallanPrint';
 import toast from 'react-hot-toast';
 
@@ -11,6 +11,8 @@ export const SalesPrintChallans: React.FC = () => {
     const { user } = useAuth();
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [orders, setOrders] = useState<Order[]>([]);
+    const [customers, setCustomers] = useState<Customer[]>([]);
+    const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(false);
     const [printing, setPrinting] = useState(false);
 
@@ -24,8 +26,9 @@ export const SalesPrintChallans: React.FC = () => {
 
         setLoading(true);
         try {
-            // Get orders for the selected date, filtered by salesperson
+            // Get orders, customers, and users
             const allOrders = await OrderService.getOrdersFiltered(selectedDate, selectedDate, user.id);
+
             // Filter non-cancelled orders AND exclude rescheduled orders (they belong to a different day/salesperson)
             const validOrders = allOrders.filter(o => o.status !== 'cancelled' && !o.rescheduled_from);
             setOrders(validOrders);
@@ -45,8 +48,16 @@ export const SalesPrintChallans: React.FC = () => {
 
         setPrinting(true);
         try {
+            // Orders are already enriched by OrderService
+            const enrichedOrders = [...orders];
+
+            // Get customer location function - use enriched location metadata
+            const getCustomerLocation = (order: Order) => {
+                return (order as any)?.GPS || order.customerLocation;
+            };
+
             // Print all challans in portrait mode
-            printChallans(orders, 'portrait');
+            printChallans(enrichedOrders, 'portrait', getCustomerLocation);
             toast.success(`Printing ${orders.length} challans`);
         } catch (error) {
             console.error('Print failed:', error);

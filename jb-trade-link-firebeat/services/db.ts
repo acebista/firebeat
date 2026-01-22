@@ -62,6 +62,54 @@ const fetchVehicles = async (): Promise<Vehicle[]> => {
 
 // --- Specific Services ---
 
+// Helper to enhance order data with phone numbers and other metadata from linked tables
+const enrichOrders = async (orders: Order[]): Promise<Order[]> => {
+  if (!orders || orders.length === 0) return [];
+
+  try {
+    // Collect unique IDs
+    const customerIds = Array.from(new Set(orders.map(o => o.customerId).filter(Boolean)));
+    const salespersonIds = Array.from(new Set(orders.map(o => o.salespersonId).filter(Boolean)));
+    const salespersonNames = Array.from(new Set(orders.map(o => o.salespersonName).filter(Boolean)));
+
+    // Fetch data in parallel
+    const fetchUsers = async () => {
+      if (salespersonIds.length === 0 && salespersonNames.length === 0) return { data: [] };
+
+      const filters = [];
+      if (salespersonIds.length > 0) filters.push(`id.in.("${salespersonIds.join('","')}")`);
+      if (salespersonNames.length > 0) filters.push(`name.in.("${salespersonNames.join('","')}")`);
+
+      return supabase.from(COLS.USERS).select('id, name, phone').or(filters.join(','));
+    };
+
+    const [customersRes, usersRes] = await Promise.all([
+      customerIds.length > 0 ? supabase.from(COLS.CUSTOMERS).select('id, phone, panNumber, locationText, routeName').in('id', customerIds) : Promise.resolve({ data: [] }),
+      fetchUsers()
+    ]);
+
+    const customerMap = new Map((customersRes.data || []).map(c => [c.id, c]));
+    const userMap = new Map((usersRes.data || []).map(u => [u.id, u]));
+    const userNameMap = new Map((usersRes.data || []).map(u => [u.name, u]));
+
+    return orders.map(o => {
+      const cust = customerMap.get(o.customerId) as any;
+      const user = userMap.get(o.salespersonId) || userNameMap.get(o.salespersonName);
+
+      return {
+        ...o,
+        customerPhone: cust?.phone || o.customerPhone,
+        customerPAN: cust?.panNumber || o.customerPAN,
+        customerLocation: cust?.locationText || cust?.routeName || o.customerLocation,
+        salespersonPhone: user?.phone || o.salespersonPhone
+      };
+    });
+  } catch (err) {
+    console.error('[enrichOrders] Failed to enrich orders:', err);
+    return orders; // Return original orders if enrichment fails
+  }
+};
+
 export const ProductService = {
   getAll: () => fetchCollection<Product>(COLS.PRODUCTS),
   add: async (product: Omit<Product, 'id'>) => {
@@ -205,7 +253,8 @@ export const OrderService = {
       if (data && data.length > 0) {
         batchNum++;
         totalCount += data.length;
-        onBatch(data as Order[], batchNum);
+        const enrichedBatch = await enrichOrders(data as Order[]);
+        onBatch(enrichedBatch, batchNum);
         from += batchSize;
         hasMore = data.length === batchSize;
       } else {
@@ -382,7 +431,8 @@ export const OrderService = {
   getById: async (id: string) => {
     const { data, error } = await supabase.from(COLS.ORDERS).select('*').eq('id', id).single();
     if (error) return null;
-    return data as Order;
+    const enriched = await enrichOrders([data as Order]);
+    return enriched[0];
   },
   update: async (id: string, data: Partial<Order>) => {
     const { error } = await supabase.from(COLS.ORDERS).update(data).eq('id', id);
@@ -407,23 +457,23 @@ export const OrderService = {
 
     const { data, error } = await query.order('id', { ascending: true });
     if (error) throw error;
-    return data as Order[];
+    return enrichOrders(data as Order[]);
   },
   getBySalesperson: async (spId: string) => {
     const { data, error } = await supabase.from(COLS.ORDERS).select('*').eq('salespersonId', spId);
     if (error) throw error;
-    return data as Order[];
+    return enrichOrders(data as Order[]);
   },
   getOrdersByIds: async (ids: string[]) => {
     if (ids.length === 0) return [];
     const { data, error } = await supabase.from(COLS.ORDERS).select('*').in('id', ids);
     if (error) throw error;
-    return data as Order[];
+    return enrichOrders(data as Order[]);
   },
   getOrdersByDateRange: async (startDate: string, endDate: string) => {
     const { data, error } = await supabase.from(COLS.ORDERS).select('*').gte('date', startDate).lte('date', endDate);
     if (error) throw error;
-    return data as Order[];
+    return enrichOrders(data as Order[]);
   },
   getOrdersFiltered: async (startDate: string, endDate: string, salespersonId?: string) => {
     let query = supabase.from(COLS.ORDERS).select('*').gte('date', startDate).lte('date', endDate);
@@ -437,7 +487,7 @@ export const OrderService = {
 
     const { data, error } = await query;
     if (error) throw error;
-    return data as Order[];
+    return enrichOrders(data as Order[]);
   },
 
   // PHASE 1: Get last order for a customer
@@ -510,7 +560,7 @@ export const OrderService = {
         hasMore = false;
       }
     }
-    return allOrders;
+    return enrichOrders(allOrders);
   },
 
   delete: async (id: string) => {
