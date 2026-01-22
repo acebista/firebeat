@@ -397,7 +397,7 @@ export const DeliveryDashboard: React.FC = () => {
         for (const order of pendingOrders) {
           await OrderService.update(order.id, {
             status: 'approved',
-            assignedTripId: undefined,
+            assignedTripId: null,
             date: tomorrowStr,
             remarks: `Rescheduled to ${tomorrowStr}. ${order.remarks || ''}`
           } as any);

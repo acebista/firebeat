@@ -32,15 +32,15 @@ const generateOrders = (count: number, dateStr: string): SalesOrder[] => {
   const orders: SalesOrder[] = [];
   for (let i = 1; i <= count; i++) {
     const route = ROUTES[Math.floor(Math.random() * ROUTES.length)];
-    
+
     // Introduce "Office" orders (~20% probability)
     const isOfficeOrder = Math.random() < 0.2;
-    const sp = isOfficeOrder 
-      ? { id: 'office', name: 'Office' } 
+    const sp = isOfficeOrder
+      ? { id: 'office', name: 'Office' }
       : SALESPERSONS[Math.floor(Math.random() * SALESPERSONS.length)];
 
     const amount = Math.floor(Math.random() * 5000) + 500;
-    
+
     orders.push({
       id: `so-${dateStr}-${i}`,
       orderNumber: `SO-${dateStr.replace(/-/g, '')}-${1000 + i}`,
@@ -55,7 +55,7 @@ const generateOrders = (count: number, dateStr: string): SalesOrder[] => {
       totalAmount: amount,
       totalCases: Math.floor(Math.random() * 10) + 1,
       status: 'pending',
-      assignedTripId: undefined
+      assignedTripId: null
     });
   }
   return orders;
@@ -83,7 +83,7 @@ export const MockDispatchService = {
   getTripsByDate: (date: string) => {
     return mockTrips.filter(t => t.deliveryDate === date);
   },
-  
+
   getTripById: (id: string) => {
     return mockTrips.find(t => t.id === id);
   },
@@ -109,25 +109,25 @@ export const MockDispatchService = {
 
     // Update trip
     mockTrips = mockTrips.map(t => {
-        if (t.id === tripId) {
-            // Add unique route names if not present
-            const newRouteNames = new Set(t.routeNames);
-            const newRouteIds = new Set(t.routeIds);
-            ordersToAdd.forEach(o => {
-                newRouteNames.add(o.routeName);
-                newRouteIds.add(o.routeId);
-            });
+      if (t.id === tripId) {
+        // Add unique route names if not present
+        const newRouteNames = new Set(t.routeNames);
+        const newRouteIds = new Set(t.routeIds);
+        ordersToAdd.forEach(o => {
+          newRouteNames.add(o.routeName);
+          newRouteIds.add(o.routeId);
+        });
 
-            return {
-                ...t,
-                orderIds: [...t.orderIds, ...orderIds],
-                totalAmount: t.totalAmount + additionalAmount,
-                totalOrders: t.totalOrders + additionalOrders,
-                routeNames: Array.from(newRouteNames),
-                routeIds: Array.from(newRouteIds)
-            };
-        }
-        return t;
+        return {
+          ...t,
+          orderIds: [...t.orderIds, ...orderIds],
+          totalAmount: t.totalAmount + additionalAmount,
+          totalOrders: t.totalOrders + additionalOrders,
+          routeNames: Array.from(newRouteNames),
+          routeIds: Array.from(newRouteIds)
+        };
+      }
+      return t;
     });
 
     // 2. Update Orders
@@ -159,7 +159,7 @@ export const MockDispatchService = {
     // Update Order
     mockOrders = mockOrders.map(o => {
       if (o.id === orderId) {
-        return { ...o, status: 'pending', assignedTripId: undefined };
+        return { ...o, status: 'pending', assignedTripId: null };
       }
       return o;
     });

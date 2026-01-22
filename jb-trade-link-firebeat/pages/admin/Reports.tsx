@@ -249,7 +249,10 @@ const calculateMetrics = (orders: Order[], filters: ReportFilterState, products:
     itemsCount: o.totalItems
   }));
 
-  return { salesRows, rescheduledSalesRows, dispatchRows, rescheduledDispatchRows, schemeRows, challanRows };
+  // 5. Extract unique salespeople from all orders
+  const salespeople = Array.from(new Set(activeOrders.map(o => o.salespersonName))).filter(Boolean).sort();
+
+  return { salesRows, rescheduledSalesRows, dispatchRows, rescheduledDispatchRows, schemeRows, challanRows, salespeople };
 };
 
 
@@ -275,8 +278,9 @@ export const Reports: React.FC = () => {
     dispatchRows: DispatchRow[],
     rescheduledDispatchRows: DispatchRow[],
     schemeRows: SchemeRow[],
-    challanRows: ChallanValidationRow[]
-  }>({ salesRows: [], rescheduledSalesRows: [], dispatchRows: [], rescheduledDispatchRows: [], schemeRows: [], challanRows: [] });
+    challanRows: ChallanValidationRow[],
+    salespeople: string[]
+  }>({ salesRows: [], rescheduledSalesRows: [], dispatchRows: [], rescheduledDispatchRows: [], schemeRows: [], challanRows: [], salespeople: [] });
 
   const [deliveryReportData, setDeliveryReportData] = useState<DeliveryReportData>({
     rows: [],
@@ -761,7 +765,7 @@ export const Reports: React.FC = () => {
       {!loading && (
         <>
           {activeTab === 'sales' && <SalesReport data={reportData.salesRows} rescheduledData={reportData.rescheduledSalesRows} />}
-          {activeTab === 'dispatch' && <DispatchReport data={reportData.dispatchRows} rescheduledData={reportData.rescheduledDispatchRows} />}
+          {activeTab === 'dispatch' && <DispatchReport data={reportData.dispatchRows} rescheduledData={reportData.rescheduledDispatchRows} salespeople={reportData.salespeople} />}
           {activeTab === 'scheme' && <SchemeReport data={reportData.schemeRows} />}
           {activeTab === 'damage' && <DamagedGoodsReport />}
           {activeTab === 'challan' && <ChallanReport data={reportData.challanRows} />}

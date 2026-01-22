@@ -209,7 +209,7 @@ export const DispatchTripDetails: React.FC = () => {
         for (const order of pendingOrders) {
           await OrderService.update(order.id, {
             status: 'approved',
-            assignedTripId: undefined,
+            assignedTripId: null,
             date: tomorrowStr,
             remarks: `Rescheduled to ${tomorrowStr}. ${order.remarks || ''}`
           } as any);
@@ -297,7 +297,7 @@ export const DispatchTripDetails: React.FC = () => {
       </div>
 
       {/* Info Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="p-4 flex items-center gap-4 bg-white">
           <div className="bg-indigo-100 p-3 rounded-full">
             <Truck className="h-6 w-6 text-indigo-600" />
@@ -325,6 +325,22 @@ export const DispatchTripDetails: React.FC = () => {
           <div>
             <p className="text-sm text-gray-600">Total Value</p>
             <p className="font-bold text-black">₹{trip.totalAmount.toLocaleString()}</p>
+          </div>
+        </Card>
+        <Card className="p-4 bg-white">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="bg-purple-100 p-2 rounded-full">
+              <span className="text-lg">👤</span>
+            </div>
+            <p className="text-sm text-gray-600">Salespeople</p>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {Array.from(new Set(orders.map(o => o.salespersonName))).map(name => (
+              <span key={name} className="inline-block bg-purple-50 text-purple-700 text-xs font-medium px-2 py-1 rounded">
+                {name}
+              </span>
+            ))}
+            {orders.length === 0 && <span className="text-xs text-gray-400">No orders assigned</span>}
           </div>
         </Card>
       </div>

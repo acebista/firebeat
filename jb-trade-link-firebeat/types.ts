@@ -109,7 +109,7 @@ export interface Order {
   status: 'approved' | 'dispatched' | 'delivered' | 'cancelled' | 'completed';
   items: OrderItem[];
   remarks?: string;
-  assignedTripId?: string;
+  assignedTripId?: string | null;
   GPS?: string;
   time?: string;
   // Additional fields for challan/invoice printing
@@ -170,7 +170,7 @@ export interface SalesOrder {
   totalAmount: number;
   totalCases?: number;   // optional – derived from items in future
   status: OrderStatus;
-  assignedTripId?: string; // null/undefined if not assigned to a dispatch trip yet
+  assignedTripId?: string | null; // null/undefined if not assigned to a dispatch trip yet
 }
 
 export interface DeliveryPerson {

@@ -643,7 +643,7 @@ export const DeliveryOrderDetails: React.FC = () => {
                 status: 'approved',
                 date: newDate, // CRITICAL: Move order to the new date
                 rescheduled_from: originalDate, // Track original date for reports
-                assignedTripId: undefined,
+                assignedTripId: null,
                 remarks: `Rescheduled from ${originalDate} to ${newDate}${remarks ? ` | ${remarks}` : ''}`
             } as any);
 
@@ -682,7 +682,7 @@ export const DeliveryOrderDetails: React.FC = () => {
         try {
             await OrderService.update(order.id, {
                 status: 'cancelled',
-                assignedTripId: undefined,
+                assignedTripId: null,
                 remarks: `Delivery Attempt Failed: ${reason} | ${order.remarks || ''}`
             });
             toast.success("Delivery failure recorded.");

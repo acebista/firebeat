@@ -1,15 +1,16 @@
 import React from 'react';
 import { Card, Button } from '../../../components/ui/Elements';
 import { DispatchRow } from '../../../types/reports';
-import { Printer, CalendarClock } from 'lucide-react';
+import { Printer, CalendarClock, Users } from 'lucide-react';
 import { printContent } from '../../../lib/printUtils';
 
 interface DispatchReportProps {
   data: DispatchRow[];
   rescheduledData?: DispatchRow[];
+  salespeople?: string[]; // Unique salesperson names
 }
 
-export const DispatchReport: React.FC<DispatchReportProps> = ({ data, rescheduledData = [] }) => {
+export const DispatchReport: React.FC<DispatchReportProps> = ({ data, rescheduledData = [], salespeople = [] }) => {
   const handlePrint = () => {
     printContent('Dispatch / Packing List', 'dispatch-report-table');
   };
@@ -76,6 +77,23 @@ export const DispatchReport: React.FC<DispatchReportProps> = ({ data, reschedule
           <Printer className="mr-2 h-4 w-4" /> Print Packing List
         </Button>
       </div>
+
+      {/* Salespeople Summary */}
+      {salespeople.length > 0 && (
+        <Card className="p-4 bg-purple-50 border border-purple-200">
+          <div className="flex items-center gap-2 mb-2">
+            <Users className="h-5 w-5 text-purple-600" />
+            <span className="font-medium text-purple-800">Salespeople ({salespeople.length})</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {salespeople.map(name => (
+              <span key={name} className="inline-block bg-white text-purple-700 text-sm font-medium px-3 py-1 rounded-full border border-purple-300">
+                {name}
+              </span>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <Card className="overflow-hidden">
         <div className="overflow-x-auto" id="dispatch-report-table">
