@@ -15,6 +15,7 @@ export interface User {
   base_salary?: number | null; // Monthly base salary
   comp_plan_type?: 'fixed' | 'commission'; // Compensation plan
   commission_rate_set?: string | null; // Optional reference to a company rate set
+  allow_override_customer_validation?: boolean; // Admin override for customer data
 }
 
 export interface Customer {

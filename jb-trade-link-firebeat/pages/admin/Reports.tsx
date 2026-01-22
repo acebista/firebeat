@@ -404,9 +404,26 @@ export const Reports: React.FC = () => {
         return rescheduledFrom >= deliveryFilters.startDate && rescheduledFrom <= deliveryFilters.endDate;
       });
 
+      // 3. CRITICAL Fix for Cash Discrepancy: Fetch orders from TRIPS delivered in this range
+      // This catches orders created earlier (e.g. yesterday) but delivered in a trip today.
+      const tripsInRange = await TripService.getByDateRange(
+        deliveryFilters.startDate,
+        deliveryFilters.endDate
+      );
+
+      const tripOrderIds = tripsInRange.flatMap(t => t.orderIds || []);
+
+      // Fetch these specific orders if there are any
+      let tripOrders: Order[] = [];
+      if (tripOrderIds.length > 0) {
+        // Handle chunking if too many IDs (supabase 'in' limit)
+        // OrderService.getOrdersByIds usually handles this, but let's be safe if huge
+        tripOrders = await OrderService.getOrdersByIds(tripOrderIds);
+      }
+
       // Combine and deduplicate
       const orderMap = new Map<string, Order>();
-      [...orders, ...rescheduledOrders].forEach(o => orderMap.set(o.id, o));
+      [...orders, ...rescheduledOrders, ...tripOrders].forEach(o => orderMap.set(o.id, o));
       orders = Array.from(orderMap.values());
 
       // Filter orders for the delivery report

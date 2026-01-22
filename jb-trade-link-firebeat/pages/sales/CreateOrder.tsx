@@ -61,6 +61,12 @@ export const CreateOrder: React.FC = () => {
     const [preCaughtGps, setPreCaughtGps] = useState<string | null>(null);
     const [gpsStatus, setGpsStatus] = useState<'idle' | 'capturing' | 'ready' | 'error'>('idle');
 
+    // Data Fix Modal
+    const [isFixDataOpen, setFixDataOpen] = useState(false);
+    const [fixRoute, setFixRoute] = useState('');
+    const [fixLocation, setFixLocation] = useState('');
+    const [isFixingLocation, setIsFixingLocation] = useState(false);
+
     // Zoom state - persisted to localStorage
     const [zoomLevel, setZoomLevel] = useState(() => {
         const saved = localStorage.getItem('createorder_zoom');
@@ -510,6 +516,53 @@ export const CreateOrder: React.FC = () => {
         }
     };
 
+    const handleGetFixLocation = () => {
+        if (!navigator.geolocation) {
+            toast.error("Geolocation not supported");
+            return;
+        }
+        setIsFixingLocation(true);
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                setFixLocation(`${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`);
+                setIsFixingLocation(false);
+                toast.success("Location captured");
+            },
+            (err) => {
+                setIsFixingLocation(false);
+                toast.error("Failed to capture location");
+            },
+            { enableHighAccuracy: true, timeout: 10000 }
+        );
+    };
+
+    const handleFixDataSave = async () => {
+        if (!selectedCustomer) return;
+        if (!fixRoute.trim()) {
+            toast.error("Route name is required");
+            return;
+        }
+        if (!fixLocation.trim()) {
+            toast.error("Location is required");
+            return;
+        }
+
+        try {
+            await CustomerService.update(selectedCustomer, {
+                routeName: fixRoute,
+                locationText: fixLocation
+            });
+
+            // Update local state
+            setCustomers(prev => prev.map(c => c.id === selectedCustomer ? { ...c, routeName: fixRoute, locationText: fixLocation } : c));
+            setFixDataOpen(false);
+            toast.success("Customer details updated. Please place order now.");
+        } catch (e: any) {
+            console.error(e);
+            toast.error("Failed to update customer");
+        }
+    };
+
     // ============================================================
     // GAPLESS INVOICE ID GENERATION (Server-Side)
     // Uses Postgres pessimistic locking - no retries, no gaps, no races
@@ -626,6 +679,33 @@ export const CreateOrder: React.FC = () => {
                 toast.error("Please select a customer before placing order");
                 setIsCartOpen(true); // Keep cart open so user can see items
                 return;
+            }
+
+            // MANDATORY DATA VALIDATION
+            const selectedCustObj = customers.find(c => c.id === selectedCustomer);
+            if (selectedCustObj) {
+                const missingRoute = !selectedCustObj.routeName || selectedCustObj.routeName.trim() === '';
+                // Check if locationText exists OR specific lat/long fields are set
+                const missingLoc = (!selectedCustObj.locationText || selectedCustObj.locationText.trim() === '') &&
+                    (!selectedCustObj.latitude || !selectedCustObj.longitude);
+
+                if (missingRoute || missingLoc) {
+                    const canOverride = user?.allow_override_customer_validation;
+
+                    if (canOverride) {
+                        if (!window.confirm("⚠️ Customer Data Missing (Route/GPS).\n\nAs an Admin/Authorized User, do you want to proceed anyway?")) {
+                            return;
+                        }
+                        // Proceed if they click OK
+                    } else {
+                        toast.error("Mandatory: Customer Route and GPS Location required.", { duration: 5000 });
+                        // Pre-fill and open modal
+                        setFixRoute(selectedCustObj.routeName || '');
+                        setFixLocation(selectedCustObj.locationText || '');
+                        setFixDataOpen(true);
+                        return;
+                    }
+                }
             }
 
             if (cart.length === 0) {
@@ -1327,6 +1407,50 @@ export const CreateOrder: React.FC = () => {
                         </button>
                     </div>
                 </form>
+            </Modal>
+
+            {/* Missing Data Fix Modal */}
+            <Modal isOpen={isFixDataOpen} onClose={() => setFixDataOpen(false)} title="Update Required Details">
+                <div className="space-y-4">
+                    <div className="bg-red-50 p-3 rounded border border-red-200 text-sm text-red-800">
+                        <strong>Action Required:</strong> Please update the Route and GPS Location for this customer to proceed with the order.
+                    </div>
+
+                    <Input
+                        label="Route Name"
+                        value={fixRoute}
+                        onChange={e => setFixRoute(e.target.value)}
+                        placeholder="e.g. Market Road"
+                        required
+                    />
+
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-1">GPS Location</label>
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                value={fixLocation}
+                                readOnly
+                                className="flex-1 rounded-lg border-gray-300 bg-gray-50"
+                                placeholder="No location set"
+                            />
+                            <button
+                                type="button"
+                                onClick={handleGetFixLocation}
+                                disabled={isFixingLocation}
+                                className="px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 font-medium flex items-center gap-2"
+                            >
+                                <MapPin className={`h-4 w-4 ${isFixingLocation ? 'animate-pulse' : ''}`} />
+                                {isFixingLocation ? '...' : 'Capture'}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="pt-4 flex justify-end gap-3">
+                        <Button variant="outline" onClick={() => setFixDataOpen(false)}>Cancel</Button>
+                        <Button onClick={handleFixDataSave}>Update & Continue</Button>
+                    </div>
+                </div>
             </Modal>
         </>
     );

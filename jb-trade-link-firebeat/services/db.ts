@@ -597,6 +597,15 @@ export const TripService = {
     if (error) throw error;
     return data as DispatchTrip[];
   },
+  getByDateRange: async (startDate: string, endDate: string) => {
+    const { data, error } = await supabase
+      .from(COLS.TRIPS)
+      .select('*')
+      .gte('deliveryDate', startDate)
+      .lte('deliveryDate', endDate);
+    if (error) throw error;
+    return data as DispatchTrip[];
+  },
 
   assignOrders: async (tripId: string, orderIds: string[], currentTripData: DispatchTrip, ordersToAdd: Order[]) => {
     // 1. Prepare Trip Update

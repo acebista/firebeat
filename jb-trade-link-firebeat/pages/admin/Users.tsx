@@ -33,6 +33,7 @@ export const UserManagement: React.FC = () => {
     isActive: true,
     comp_plan_type: 'commission' as 'fixed' | 'commission',
     base_salary: null as number | null,
+    allow_override_customer_validation: false,
   });
 
   const [sendingResetEmail, setSendingResetEmail] = useState(false);
@@ -74,6 +75,7 @@ export const UserManagement: React.FC = () => {
       isActive: user.isActive,
       comp_plan_type: user.comp_plan_type || 'commission',
       base_salary: user.base_salary || null,
+      allow_override_customer_validation: user.allow_override_customer_validation || false,
     });
     setValidationErrors({});
     setModalOpen(true);
@@ -89,6 +91,7 @@ export const UserManagement: React.FC = () => {
       isActive: true,
       comp_plan_type: 'commission',
       base_salary: null,
+      allow_override_customer_validation: false,
     });
     setValidationErrors({});
     setModalOpen(true);
@@ -481,6 +484,19 @@ export const UserManagement: React.FC = () => {
               className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
             />
             <label htmlFor="activeUser" className="text-sm text-gray-700 select-none">User is active</label>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="allowOverride"
+              checked={formData.allow_override_customer_validation}
+              onChange={e => setFormData({ ...formData, allow_override_customer_validation: e.target.checked })}
+              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+            />
+            <label htmlFor="allowOverride" className="text-sm text-gray-700 select-none">
+              Allow Override: Customer data validation (GPS/Route)
+            </label>
           </div>
 
           <div className="flex justify-end gap-3 mt-6">

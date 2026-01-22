@@ -104,6 +104,7 @@ export const useUserStore = create<UserState>()(
             name: state.user.name,
             role: state.user.role,
             isActive: state.user.isActive,
+            allow_override_customer_validation: state.user.allow_override_customer_validation,
           } : null,
         }),
         version: 4,
