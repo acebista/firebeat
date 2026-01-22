@@ -246,7 +246,9 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
 
   const qrUrl = customerLocation ? getQRUrl(customerLocation) : '';
 
-  const subtotal = order.items?.reduce((sum, item) => {
+  const orderItems = Array.isArray(order.items) ? order.items : (typeof order.items === 'string' ? JSON.parse(order.items) : []);
+
+  const subtotal = orderItems?.reduce((sum: number, item: any) => {
     const total = Number(item.total || item.amount) || 0;
     return sum + total;
   }, 0) || 0;
@@ -265,44 +267,51 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
   const challansHtml = Array.from({ length: copiesCount }).map((_, i) => {
     const label = copiesCount > 1 ? (i === 0 ? 'Original Copy' : 'Duplicate Copy') : 'Customer Copy';
     return `
-        <div class="container">
-          ${qrUrl ? `
-            <div class="qr-container">
-              <img src="${qrUrl}" alt="Location QR Code" style="width: 120px; height: 120px;" />
-              <span class="qr-label">Customer Location</span>
+        <div class="challan-wrapper">
+          <div class="container">
+            ${qrUrl ? `
+              <div class="qr-container">
+                <img src="${qrUrl}" alt="Location QR Code" style="width: 120px; height: 120px;" />
+                <span class="qr-label">Customer Location</span>
+              </div>
+            ` : ''}
+
+            <div class="header">
+              <h1>J.B Trade Link Pvt. Ltd.</h1>
+              <h2>Delivery Challan</h2>
+              <p>Phone: 9802379658</p>
+              <p style="font-weight: bold;">${label}</p>
             </div>
-          ` : ''}
 
-          <div class="header">
-            <h1>J.B Trade Link Pvt. Ltd.</h1>
-            <h2>Delivery Challan</h2>
-            <p>Phone: 9802379658</p>
-            <p style="font-weight: bold;">${label}</p>
-          </div>
+            <div class="details">
+              <div><strong>Invoice No:</strong> ${order.id}</div>
+              <div style="display: flex; gap: 20px;">
+                <div><strong>Salesman:</strong> ${order.salespersonName}</div>
+                <div><strong>Phone:</strong> ${order.salespersonPhone || 'N/A'}</div>
+              </div>
+              <div style="display: flex; gap: 20px;">
+                <div><strong>Customer Name:</strong> ${order.customerName}</div>
+                <div><strong>Phone:</strong> ${order.customerPhone || 'N/A'}</div>
+              </div>
+              <div><strong>PAN Number:</strong> ${order.customerPAN || 'N/A'}</div>
+              <div><strong>Payment Mode:</strong> ${(order as any).paymentMethod || order.paymentMode || 'Cash'}</div>
+              <div style="margin-top: 10px;"><strong>Products Sold:</strong></div>
+            </div>
 
-          <div class="details">
-            <div><strong>Invoice No:</strong> ${order.id}</div>
-            <div><strong>Salesman:</strong> ${order.salespersonName} &nbsp;&nbsp;&nbsp; <strong>Phone:</strong> ${order.salespersonPhone || 'N/A'}</div>
-            <div><strong>Customer Name:</strong> ${order.customerName} &nbsp;&nbsp;&nbsp; <strong>Phone:</strong> ${order.customerPhone || 'N/A'}</div>
-            <div><strong>PAN Number:</strong> ${order.customerPAN || 'N/A'}</div>
-            <div><strong>Payment Mode:</strong> ${(order as any).paymentMethod || order.paymentMode || 'Cash'}</div>
-            <div><strong>Products Sold:</strong></div>
-          </div>
-
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Product</th>
-                <th>Qty</th>
-                <th>Rate</th>
-                <th>SubTotal</th>
-                <th>Disc</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${order.items?.map((item, index) => {
+            <table>
+              <thead>
+                <tr>
+                  <th class="col-hash">#</th>
+                  <th class="col-product">Product</th>
+                  <th class="col-qty">Qty</th>
+                  <th class="col-rate">Rate</th>
+                  <th class="col-subtotal">SubTotal</th>
+                  <th class="col-disc">Disc</th>
+                  <th class="col-total">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${(orderItems || []).map((item: any, index: number) => {
       const qty = Number(item.qty || item.quantity) || 0;
       const netRate = Number(item.rate || item.price) || 0;
       const baseRate = Number(item.baseRate) || netRate;
@@ -313,29 +322,30 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
 
       const productName = item.productName || item.tempProductName || 'undefined';
       return `
-                    <tr>
-                      <td style="text-align: center;">${index + 1}</td>
-                      <td>${productName}</td>
-                      <td style="text-align: center;">${qty}</td>
-                      <td style="text-align: right;">${baseRate.toFixed(2)}</td>
-                      <td style="text-align: right;">${subtotalAtBase.toFixed(2)}</td>
-                      <td style="text-align: right;">${itemDiscountAmount.toFixed(2)}</td>
-                      <td style="text-align: right; font-weight: bold;">${finalTotal.toFixed(2)}</td>
-                    </tr>
-                  `;
+                      <tr>
+                        <td class="col-hash">${index + 1}</td>
+                        <td class="col-product">${productName}</td>
+                        <td class="col-qty">${qty}</td>
+                        <td class="col-rate">${baseRate.toFixed(2)}</td>
+                        <td class="col-subtotal">${subtotalAtBase.toFixed(2)}</td>
+                        <td class="col-disc">${itemDiscountAmount.toFixed(2)}</td>
+                        <td class="col-total">${finalTotal.toFixed(2)}</td>
+                      </tr>
+                    `;
     }).join('')}
-            </tbody>
-          </table>
+              </tbody>
+            </table>
 
-          <div class="totals">
-            <div><strong>Sub Total: Rs. ${subtotal.toFixed(2)}</strong></div>
-            ${discountAmount > 0 ? `<div><strong>Discount (${discountPct}%): Rs. ${discountAmount.toFixed(2)}</strong></div>` : ''}
-            <div class="grand-total">Grand Total: Rs. ${grandTotal.toFixed(2)}</div>
-          </div>
+            <div class="totals">
+              <div><strong>Sub Total: Rs. ${subtotal.toFixed(2)}</strong></div>
+              ${discountAmount > 0 ? `<div><strong>Discount (${discountPct}%): Rs. ${discountAmount.toFixed(2)}</strong></div>` : ''}
+              <div class="grand-total">Grand Total: Rs. ${grandTotal.toFixed(2)}</div>
+            </div>
 
-          <div class="signatures">
-            <div>For J.B. Trade Link: _______________________</div>
-            <div>Customer Signature: _______________________</div>
+            <div class="signatures">
+              <div>For J.B. Trade Link: _______________________</div>
+              <div>Customer Signature: _______________________</div>
+            </div>
           </div>
         </div>
     `;
@@ -346,59 +356,72 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
       <head>
         <title>Delivery Challan - ${order.id}</title>
         <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
           @media print {
-            @page { 
+            @page {
               size: ${orientation === 'portrait' ? 'A4 portrait' : 'A4 landscape'};
               margin: 0;
             }
             body { margin: 0; padding: 0; }
+            .challan-wrapper { page-break-after: always; page-break-inside: avoid; }
+            .challan-wrapper:last-child { page-break-after: auto; }
           }
           body { 
             font-family: Arial, sans-serif; 
-            font-size: 12pt;
-            margin: 0;
-            padding: 0;
+            font-size: 11pt;
+            background: white;
+          }
+          .challan-wrapper {
+            width: ${pageSize.width};
+            min-height: ${pageSize.height};
+            background: white;
+            padding: 10mm; /* Outer buffer for printer margins */
           }
           .container {
-            width: ${pageSize.width};
-            height: ${pageSize.height};
-            padding: 15mm;
+            width: 100%;
+            height: 100%;
+            min-height: calc(${pageSize.height} - 20mm);
+            padding: 10mm;
             border: 3px solid black;
-            box-sizing: border-box;
             position: relative;
-            page-break-after: always;
+            display: flex;
+            flex-direction: column;
           }
-          .header { text-align: center; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 2px solid black; }
-          .header h1 { margin: 0; font-size: 18pt; font-weight: bold; }
+          .header { text-align: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid black; }
+          .header h1 { margin: 0; font-size: 20pt; font-weight: bold; }
           .header h2 { margin: 5px 0; font-size: 14pt; font-weight: normal; }
           .header p { margin: 5px 0; font-size: 10pt; }
           .qr-container { 
             position: absolute; 
-            top: 15mm; 
-            right: 15mm; 
+            top: 10mm; 
+            right: 10mm; 
             display: flex;
             flex-direction: column;
             align-items: center;
             gap: 4px;
           }
-          .qr-container img { border: 1px solid #ccc; }
           .qr-label { font-size: 8pt; text-align: center; }
-          .details { margin-bottom: 15px; font-size: 11pt; }
-          .details div { margin-bottom: 5px; }
-          table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 10pt; }
-          th { border: 2px solid black; padding: 8px; background-color: #f0f0f0; text-align: left; }
-          td { border: 1px solid black; padding: 6px; }
-          th:nth-child(1) { width: 40px; text-align: center; }
-          th:nth-child(3) { width: 80px; text-align: center; }
-          th:nth-child(4) { width: 80px; text-align: right; }
-          th:nth-child(5) { width: 100px; text-align: right; }
-          th:nth-child(6) { width: 80px; text-align: right; }
-          th:nth-child(7) { width: 100px; text-align: right; }
-          .totals { margin-bottom: 20px; font-size: 11pt; }
+          .details { margin-bottom: 20px; font-size: 11pt; }
+          .details div { margin-bottom: 6px; }
+          
+          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 10pt; table-layout: auto; }
+          th, td { border: 1px solid black; padding: 8px 6px; line-height: 1.2; vertical-align: top; }
+          th { border-width: 2px; background-color: #f2f2f2; font-weight: bold; text-transform: uppercase; font-size: 9pt; }
+          
+          /* Smart Column Distribution */
+          .col-hash { width: 1%; white-space: nowrap; text-align: center; }
+          .col-product { width: auto; text-align: left; }
+          .col-qty { width: 1%; white-space: nowrap; text-align: center; }
+          .col-rate { width: 1%; white-space: nowrap; text-align: right; }
+          .col-subtotal { width: 1%; white-space: nowrap; text-align: right; }
+          .col-disc { width: 1%; white-space: nowrap; text-align: right; }
+          .col-total { width: 1%; white-space: nowrap; text-align: right; font-weight: bold; }
+          
+          .totals { margin-top: auto; margin-bottom: 30px; font-size: 11pt; }
           .totals div { margin-bottom: 8px; }
-          .grand-total { font-size: 14pt; font-weight: bold; margin-top: 10px; }
-          .signatures { margin-top: 30px; font-size: 11pt; }
-          .signatures div { margin-bottom: 40px; }
+          .grand-total { font-size: 16pt; font-weight: bold; margin-top: 10px; border-top: 1px solid #ddd; padding-top: 10px; }
+          .signatures { display: flex; justify-content: space-between; margin-top: 20px; font-size: 11pt; padding-bottom: 20px; }
+          .signatures div { border-top: 1px solid black; padding-top: 10px; width: 45%; }
         </style>
       </head>
       <body>
@@ -413,7 +436,7 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
   setTimeout(() => {
     printWindow.focus();
     printWindow.print();
-  }, 500);
+  }, 700);
 };
 
 // Batch print function for multiple challans with orientation support
@@ -450,7 +473,9 @@ export const printChallans = (
       }
     }
 
-    const subtotal = order.items?.reduce((sum, item) => {
+    const orderItems = Array.isArray(order.items) ? order.items : (typeof order.items === 'string' ? JSON.parse(order.items) : []);
+
+    const subtotal = orderItems?.reduce((sum: number, item: any) => {
       const total = Number(item.total || item.amount) || 0;
       return sum + total;
     }, 0) || 0;
@@ -479,27 +504,33 @@ export const printChallans = (
 
               <div class="details">
                 <div><strong>Invoice No:</strong> ${order.id}</div>
-                <div><strong>Salesman:</strong> ${order.salespersonName} &nbsp;&nbsp;&nbsp; <strong>Phone:</strong> ${order.salespersonPhone || 'N/A'}</div>
-                <div><strong>Customer Name:</strong> ${order.customerName} &nbsp;&nbsp;&nbsp; <strong>Phone:</strong> ${order.customerPhone || 'N/A'}</div>
+                <div style="display: flex; gap: 20px;">
+                  <div><strong>Salesman:</strong> ${order.salespersonName}</div>
+                  <div><strong>Phone:</strong> ${order.salespersonPhone || 'N/A'}</div>
+                </div>
+                <div style="display: flex; gap: 20px;">
+                  <div><strong>Customer Name:</strong> ${order.customerName}</div>
+                  <div><strong>Phone:</strong> ${order.customerPhone || 'N/A'}</div>
+                </div>
                 <div><strong>PAN Number:</strong> ${order.customerPAN || 'N/A'}</div>
                 <div><strong>Payment Mode:</strong> ${(order as any).paymentMethod || order.paymentMode || 'Cash'}</div>
-                <div><strong>Products Sold:</strong></div>
+                <div style="margin-top: 10px;"><strong>Products Sold:</strong></div>
               </div>
 
               <table>
                 <thead>
                   <tr>
-                    <th>#</th>
-                    <th>Product</th>
-                    <th>Qty</th>
-                    <th>Rate</th>
-                    <th>SubTotal</th>
-                    <th>Disc</th>
-                    <th>Total</th>
+                    <th class="col-hash">#</th>
+                    <th class="col-product">Product</th>
+                    <th class="col-qty">Qty</th>
+                    <th class="col-rate">Rate</th>
+                    <th class="col-subtotal">SubTotal</th>
+                    <th class="col-disc">Disc</th>
+                    <th class="col-total">Total</th>
                   </tr>
                 </thead>
                 <tbody>
-                  ${order.items?.map((item, index) => {
+                  ${(orderItems || []).map((item: any, index: number) => {
         const qty = Number(item.qty || item.quantity) || 0;
         const netRate = Number(item.rate || item.price) || 0;
         const baseRate = Number(item.baseRate) || netRate;
@@ -511,13 +542,13 @@ export const printChallans = (
         const productName = item.productName || item.tempProductName || 'undefined';
         return `
                         <tr>
-                          <td style="text-align: center;">${index + 1}</td>
-                          <td>${productName}</td>
-                          <td style="text-align: center;">${qty}</td>
-                          <td style="text-align: right;">${baseRate.toFixed(2)}</td>
-                          <td style="text-align: right;">${subtotalAtBase.toFixed(2)}</td>
-                          <td style="text-align: right;">${itemDiscountAmount.toFixed(2)}</td>
-                          <td style="text-align: right; font-weight: bold;">${finalTotal.toFixed(2)}</td>
+                          <td class="col-hash">${index + 1}</td>
+                          <td class="col-product">${productName}</td>
+                          <td class="col-qty">${qty}</td>
+                          <td class="col-rate">${baseRate.toFixed(2)}</td>
+                          <td class="col-subtotal">${subtotalAtBase.toFixed(2)}</td>
+                          <td class="col-disc">${itemDiscountAmount.toFixed(2)}</td>
+                          <td class="col-total">${finalTotal.toFixed(2)}</td>
                         </tr>
                       `;
       }).join('')}
@@ -545,21 +576,14 @@ export const printChallans = (
       <head>
         <title>Delivery Challans - Batch Print</title>
         <style>
-          * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-          }
+          * { margin: 0; padding: 0; box-sizing: border-box; }
           
           @media print {
             @page { 
               size: ${orientation === 'portrait' ? 'A4 portrait' : 'A4 landscape'};
               margin: 0;
             }
-            body { 
-              margin: 0;
-              padding: 0;
-            }
+            body { margin: 0; padding: 0; }
             .challan-page {
               page-break-after: always;
               page-break-inside: avoid;
@@ -570,79 +594,62 @@ export const printChallans = (
           }
           
           @media screen {
-            body {
-              background: #f0f0f0;
-              padding: 20px;
-            }
-            .challan-page {
-              margin-bottom: 20px;
-              box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            }
+            body { background: #f0f0f0; padding: 20px; }
+            .challan-page { margin-bottom: 20px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
           }
           
-          body {
-            font-family: Arial, sans-serif;
-            font-size: 12pt;
-          }
-          
-          .challan-page {
-            background: white;
-          }
-          
+          body { font-family: Arial, sans-serif; font-size: 11pt; background: white; }
+          .challan-page { width: ${pageSize.width}; min-height: ${pageSize.height}; background: white; padding: 10mm; }
           .container {
-            width: ${pageSize.width};
-            height: ${pageSize.height};
-            padding: 15mm;
+            width: 100%;
+            height: 100%;
+            min-height: calc(${pageSize.height} - 20mm);
+            padding: 10mm;
             border: 3px solid black;
             position: relative;
+            display: flex;
+            flex-direction: column;
           }
           
-          .header { 
-            text-align: center; 
-            margin-bottom: 15px; 
-            padding-bottom: 10px; 
-            border-bottom: 2px solid black; 
-          }
-          .header h1 { margin: 0; font-size: 18pt; font-weight: bold; }
+          .header { text-align: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid black; }
+          .header h1 { margin: 0; font-size: 20pt; font-weight: bold; }
           .header h2 { margin: 5px 0; font-size: 14pt; font-weight: normal; }
           .header p { margin: 5px 0; font-size: 10pt; }
           
           .qr-container { 
             position: absolute; 
-            top: 15mm; 
-            right: 15mm; 
+            top: 10mm; 
+            right: 10mm; 
             display: flex;
             flex-direction: column;
             align-items: center;
             gap: 4px;
           }
-          .qr-container img { 
-            width: 120px; 
-            height: 120px; 
-            border: 1px solid #ccc; 
-          }
+          .qr-container img { width: 120px; height: 120px; border: 1px solid #ccc; }
           .qr-label { font-size: 8pt; text-align: center; }
           
-          .details { margin-bottom: 15px; font-size: 11pt; }
-          .details div { margin-bottom: 5px; }
+          .details { margin-bottom: 20px; font-size: 11pt; }
+          .details div { margin-bottom: 6px; }
           
-          table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 10pt; }
-          th { border: 2px solid black; padding: 8px; background-color: #f0f0f0; text-align: left; }
-          td { border: 1px solid black; padding: 6px; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 10pt; table-layout: auto; }
+          th, td { border: 1px solid black; padding: 8px 6px; line-height: 1.2; vertical-align: top; }
+          th { border-width: 2px; background-color: #f2f2f2; font-weight: bold; text-transform: uppercase; font-size: 9pt; }
           
-          th:nth-child(1) { width: 40px; text-align: center; }
-          th:nth-child(3) { width: 80px; text-align: center; }
-          th:nth-child(4) { width: 80px; text-align: right; }
-          th:nth-child(5) { width: 100px; text-align: right; }
-          th:nth-child(6) { width: 80px; text-align: right; }
-          th:nth-child(7) { width: 100px; text-align: right; }
+          /* Smart Column Distribution */
+          .col-hash { width: 1%; white-space: nowrap; text-align: center; }
+          .col-product { width: auto; text-align: left; }
+          .col-qty { width: 1%; white-space: nowrap; text-align: center; }
+          .col-rate { width: 1%; white-space: nowrap; text-align: right; }
+          .col-subtotal { width: 1%; white-space: nowrap; text-align: right; }
+          .col-disc { width: 1%; white-space: nowrap; text-align: right; }
+          .col-total { width: 1%; white-space: nowrap; text-align: right; font-weight: bold; }
           
-          .totals { margin-bottom: 20px; font-size: 11pt; }
+          .totals { margin-top: auto; margin-bottom: 30px; font-size: 11pt; }
           .totals div { margin-bottom: 8px; }
-          .grand-total { font-size: 14pt; font-weight: bold; margin-top: 10px; }
+          .grand-total { font-size: 16pt; font-weight: bold; margin-top: 10px; border-top: 1px solid #ddd; padding-top: 10px; }
           
-          .signatures { margin-top: 30px; font-size: 11pt; }
-          .signatures div { margin-bottom: 40px; }
+          .signatures { display: flex; justify-content: space-between; margin-top: 20px; font-size: 11pt; padding-bottom: 20px; }
+          .signatures div { border-top: 1px solid black; padding-top: 10px; width: 45%; }
         </style>
       </head>
       <body>
