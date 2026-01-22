@@ -199,7 +199,7 @@ export const SalesReport: React.FC<SalesReportProps> = ({ data, rescheduledData 
                       <tr key={row.id}>
                         <td style={{ border: '1px solid #4b5563', padding: '2px', textAlign: 'center' }}>{idx + 1}</td>
                         <td style={{ border: '1px solid #4b5563', padding: '2px', textAlign: 'center' }}>{spFirstName}</td>
-                        <td style={{ border: '1px solid #4b5563', padding: '2px', textAlign: 'center', fontFamily: 'monospace' }}>{row.invoiceNo.slice(0, 8)}</td>
+                        <td style={{ border: '1px solid #4b5563', padding: '2px', textAlign: 'center', fontFamily: 'monospace' }}>{row.invoiceNo}</td>
                         <td style={{ border: '1px solid #4b5563', padding: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '150px' }}>{row.customerName}</td>
                         <td style={{ border: '1px solid #4b5563', padding: '2px', textAlign: 'center' }}>{row.paymentMode === 'Cash' ? 'Cash' : row.paymentMode === 'Credit' ? 'Cr' : row.paymentMode?.slice(0, 4)}</td>
                         <td style={{ border: '1px solid #4b5563', padding: '2px', textAlign: 'right' }}>{Math.round(row.subTotal)}</td>

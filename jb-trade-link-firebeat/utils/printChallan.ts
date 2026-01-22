@@ -123,13 +123,17 @@ export const printChallanV2 = (order: Order, products: Product[], customer?: Cus
             </thead>
             <tbody>
               ${(orderItems || []).map((item: any, idx: number) => {
-      const qty = item.qty || item.quantity || 0;
-      const netRate = item.rate || item.price || 0;
-      const baseRate = item.baseRate || netRate;
+      const qty = Number(item.qty || item.quantity) || 0;
+      const netRate = Number(item.rate || item.price) || 0;
+      // Only use baseRate if it's explicitly set AND different from netRate
+      const hasExplicitBaseRate = item.baseRate !== undefined && item.baseRate !== null && Number(item.baseRate) !== netRate;
+      const baseRate = hasExplicitBaseRate ? Number(item.baseRate) : netRate;
 
       const subtotalAtBase = baseRate * qty;
-      const finalTotal = item.total || item.amount || (qty * netRate);
-      const itemDiscountAmount = Math.max(0, subtotalAtBase - finalTotal);
+      const finalTotal = Number(item.total || item.amount) || (qty * netRate);
+      // Only show discount if it's meaningful (> Rs. 1) to avoid floating-point noise
+      const rawDiscount = subtotalAtBase - finalTotal;
+      const itemDiscountAmount = rawDiscount > 1 ? rawDiscount : 0;
 
       return `
                   <tr>

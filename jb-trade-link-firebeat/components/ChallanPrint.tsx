@@ -171,11 +171,15 @@ export const ChallanPrint: React.FC<ChallanPrintProps> = ({
             // Handle both database field formats
             const qty = Number(item.qty || item.quantity) || 0;
             const netRate = Number(item.rate || item.price) || 0;
-            const baseRate = Number(item.baseRate) || netRate;
+            // Only use baseRate if it's explicitly set AND different from netRate
+            const hasExplicitBaseRate = item.baseRate !== undefined && item.baseRate !== null && Number(item.baseRate) !== netRate;
+            const baseRate = hasExplicitBaseRate ? Number(item.baseRate) : netRate;
 
             const subtotalAtBase = baseRate * qty;
             const finalTotal = Number(item.total || item.amount) || (qty * netRate);
-            const itemDiscountAmount = Math.max(0, subtotalAtBase - finalTotal);
+            // Only show discount if it's meaningful (> Rs. 1) to avoid floating-point noise
+            const rawDiscount = subtotalAtBase - finalTotal;
+            const itemDiscountAmount = rawDiscount > 1 ? rawDiscount : 0;
 
             const productName = item.productName || item.tempProductName || 'undefined';
 
@@ -314,11 +318,15 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
                 ${(orderItems || []).map((item: any, index: number) => {
       const qty = Number(item.qty || item.quantity) || 0;
       const netRate = Number(item.rate || item.price) || 0;
-      const baseRate = Number(item.baseRate) || netRate;
+      // Only use baseRate if it's explicitly set AND different from netRate
+      const hasExplicitBaseRate = item.baseRate !== undefined && item.baseRate !== null && Number(item.baseRate) !== netRate;
+      const baseRate = hasExplicitBaseRate ? Number(item.baseRate) : netRate;
 
       const subtotalAtBase = baseRate * qty;
       const finalTotal = Number(item.total || item.amount) || (qty * netRate);
-      const itemDiscountAmount = Math.max(0, subtotalAtBase - finalTotal);
+      // Only show discount if it's meaningful (> Rs. 1) to avoid floating-point noise
+      const rawDiscount = subtotalAtBase - finalTotal;
+      const itemDiscountAmount = rawDiscount > 1 ? rawDiscount : 0;
 
       const productName = item.productName || item.tempProductName || 'undefined';
       return `
@@ -533,11 +541,15 @@ export const printChallans = (
                   ${(orderItems || []).map((item: any, index: number) => {
         const qty = Number(item.qty || item.quantity) || 0;
         const netRate = Number(item.rate || item.price) || 0;
-        const baseRate = Number(item.baseRate) || netRate;
+        // Only use baseRate if it's explicitly set AND different from netRate
+        const hasExplicitBaseRate = item.baseRate !== undefined && item.baseRate !== null && Number(item.baseRate) !== netRate;
+        const baseRate = hasExplicitBaseRate ? Number(item.baseRate) : netRate;
 
         const subtotalAtBase = baseRate * qty;
         const finalTotal = Number(item.total || item.amount) || (qty * netRate);
-        const itemDiscountAmount = Math.max(0, subtotalAtBase - finalTotal);
+        // Only show discount if it's meaningful (> Rs. 1) to avoid floating-point noise
+        const rawDiscount = subtotalAtBase - finalTotal;
+        const itemDiscountAmount = rawDiscount > 1 ? rawDiscount : 0;
 
         const productName = item.productName || item.tempProductName || 'undefined';
         return `
