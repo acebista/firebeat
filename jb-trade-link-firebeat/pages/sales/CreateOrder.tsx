@@ -60,12 +60,14 @@ export const CreateOrder: React.FC = () => {
     const [permissionStatus, setPermissionStatus] = useState<'unknown' | 'granted' | 'denied' | 'prompt'>('unknown');
     const [preCaughtGps, setPreCaughtGps] = useState<string | null>(null);
     const [gpsStatus, setGpsStatus] = useState<'idle' | 'capturing' | 'ready' | 'error'>('idle');
+    const [newCustomerLocationPermissionState, setNewCustomerLocationPermissionState] = useState<'idle' | 'prompting' | 'granted' | 'denied'>('idle');
 
     // Data Fix Modal
     const [isFixDataOpen, setFixDataOpen] = useState(false);
     const [fixRoute, setFixRoute] = useState('');
     const [fixLocation, setFixLocation] = useState('');
     const [isFixingLocation, setIsFixingLocation] = useState(false);
+    const [fixLocationPermissionState, setFixLocationPermissionState] = useState<'checking' | 'prompting' | 'granted' | 'denied' | 'idle'>('idle');
 
     // Zoom state - persisted to localStorage
     const [zoomLevel, setZoomLevel] = useState(() => {
@@ -441,28 +443,51 @@ export const CreateOrder: React.FC = () => {
     const handleGetLocation = () => {
         if (!navigator.geolocation) {
             toast.error("Geolocation not supported by this browser");
+            setNewCustomerLocationPermissionState('denied');
             return;
         }
         setIsGettingLocation(true);
-        const toastId = toast.loading("Requesting GPS permission...");
+        setNewCustomerLocationPermissionState('prompting');
+        const toastId = toast.loading("📍 Requesting GPS permission...");
+
         navigator.geolocation.getCurrentPosition(
             (position) => {
                 const { latitude, longitude } = position.coords;
                 setNewCustomerLocation(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
                 setIsGettingLocation(false);
-                toast.success("Location locked!", { id: toastId });
+                setNewCustomerLocationPermissionState('granted');
+                toast.success("✅ Location captured!", { id: toastId });
             },
             (err) => {
-                let msg = "Unable to get location";
-                if (err.code === 1) msg = "Location Access Denied. Please enable GPS in settings.";
-                else if (err.code === 3) msg = "GPS Timeout. Please try again outside.";
-
-                toast.error(msg, { id: toastId });
                 setIsGettingLocation(false);
+                if (err.code === 1) {
+                    // Permission denied
+                    setNewCustomerLocationPermissionState('denied');
+                    toast.error(
+                        <div>
+                            <p className="font-bold">📍 GPS Access Denied</p>
+                            <p className="text-sm">Please enable location in browser settings.</p>
+                        </div>,
+                        { id: toastId, duration: 6000 }
+                    );
+                } else if (err.code === 3) {
+                    setNewCustomerLocationPermissionState('idle');
+                    toast.error("GPS Timeout. Please try again outside.", { id: toastId });
+                } else {
+                    setNewCustomerLocationPermissionState('idle');
+                    toast.error("Unable to get location. Try again.", { id: toastId });
+                }
             },
-            { timeout: 10000, enableHighAccuracy: true }
+            { timeout: 15000, enableHighAccuracy: true, maximumAge: 0 }
         );
     };
+
+    // Reset Add Customer modal states when closed
+    useEffect(() => {
+        if (!isAddCustomerOpen) {
+            setNewCustomerLocationPermissionState('idle');
+        }
+    }, [isAddCustomerOpen]);
 
     const handleAddCustomer = async () => {
         try {
@@ -518,23 +543,66 @@ export const CreateOrder: React.FC = () => {
 
     const handleGetFixLocation = () => {
         if (!navigator.geolocation) {
-            toast.error("Geolocation not supported");
+            toast.error("Geolocation not supported on this device");
+            setFixLocationPermissionState('denied');
             return;
         }
         setIsFixingLocation(true);
+        setFixLocationPermissionState('prompting');
+
+        // Show loading toast
+        const toastId = toast.loading("📍 Requesting GPS access...");
+
         navigator.geolocation.getCurrentPosition(
             (pos) => {
                 setFixLocation(`${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`);
                 setIsFixingLocation(false);
-                toast.success("Location captured");
+                setFixLocationPermissionState('granted');
+                toast.success("✅ Location captured successfully!", { id: toastId });
             },
             (err) => {
                 setIsFixingLocation(false);
-                toast.error("Failed to capture location");
+                if (err.code === 1) {
+                    // Permission denied
+                    setFixLocationPermissionState('denied');
+                    toast.error(
+                        <div>
+                            <p className="font-bold">📍 GPS Access Denied</p>
+                            <p className="text-sm">Please enable location in your browser settings and try again.</p>
+                        </div>,
+                        { id: toastId, duration: 6000 }
+                    );
+                } else if (err.code === 2) {
+                    // Position unavailable
+                    setFixLocationPermissionState('idle');
+                    toast.error("GPS signal unavailable. Try moving outdoors.", { id: toastId });
+                } else if (err.code === 3) {
+                    // Timeout
+                    setFixLocationPermissionState('idle');
+                    toast.error("GPS timeout. Please try again.", { id: toastId });
+                } else {
+                    setFixLocationPermissionState('idle');
+                    toast.error("Failed to capture location. Try again.", { id: toastId });
+                }
             },
-            { enableHighAccuracy: true, timeout: 10000 }
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
         );
     };
+
+    // Auto-trigger GPS prompt when Fix Data Modal opens and location is empty
+    useEffect(() => {
+        if (isFixDataOpen && !fixLocation.trim()) {
+            // Small delay to let the modal render first
+            const timer = setTimeout(() => {
+                handleGetFixLocation();
+            }, 500);
+            return () => clearTimeout(timer);
+        }
+        // Reset permission state when modal closes
+        if (!isFixDataOpen) {
+            setFixLocationPermissionState('idle');
+        }
+    }, [isFixDataOpen]);
 
     const handleFixDataSave = async () => {
         if (!selectedCustomer) return;
@@ -1372,23 +1440,83 @@ export const CreateOrder: React.FC = () => {
                     <div>
                         <label className="block text-sm font-bold text-indigo-900 mb-0.5">Shop Location (Recommended)</label>
                         <p className="text-[10px] text-gray-500 mb-2">Help drivers find this shop by saving current GPS</p>
-                        <div className="flex gap-2">
-                            <input
-                                type="text"
-                                className="flex-1 rounded-lg border border-gray-300 px-3 py-3 text-base text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
-                                value={newCustomerLocation}
-                                readOnly
-                                placeholder="Tap to capture GPS"
-                            />
-                            <button
-                                type="button"
-                                onClick={handleGetLocation}
-                                disabled={isGettingLocation}
-                                className="shrink-0 px-4 py-3 rounded-lg border-2 border-gray-300 hover:border-indigo-500 hover:bg-indigo-50 transition-colors active:scale-95"
-                            >
-                                <Navigation className={`h-5 w-5 ${isGettingLocation ? 'animate-pulse text-indigo-600' : 'text-gray-600'}`} />
-                            </button>
-                        </div>
+
+                        {/* GPS Permission Prompting State */}
+                        {newCustomerLocationPermissionState === 'prompting' && !newCustomerLocation && (
+                            <div className="mb-2 p-3 bg-blue-50 border-2 border-blue-200 rounded-xl animate-pulse">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                                        <Navigation className="h-5 w-5 text-blue-600 animate-bounce" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="font-bold text-blue-800 text-sm">📍 Allow Location Access</p>
+                                        <p className="text-xs text-blue-600">Tap "Allow" in the popup to capture location</p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* GPS Permission Denied State */}
+                        {newCustomerLocationPermissionState === 'denied' && !newCustomerLocation && (
+                            <div className="mb-2 p-3 bg-red-50 border-2 border-red-200 rounded-xl">
+                                <div className="flex items-start gap-2">
+                                    <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center shrink-0">
+                                        <Navigation className="h-4 w-4 text-red-600" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="font-bold text-red-800 text-sm">⚠️ GPS Blocked</p>
+                                        <p className="text-xs text-red-600">Enable location in browser settings, then try again</p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={handleGetLocation}
+                                    className="mt-2 w-full py-1.5 bg-red-100 text-red-700 rounded-lg text-sm font-medium hover:bg-red-200"
+                                >
+                                    Retry GPS
+                                </button>
+                            </div>
+                        )}
+
+                        {/* GPS Captured Success State */}
+                        {newCustomerLocation && (
+                            <div className="mb-2 p-2 bg-green-50 border-2 border-green-200 rounded-xl">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                                        <Navigation className="h-4 w-4 text-green-600" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="font-bold text-green-800 text-sm">✅ Location Saved</p>
+                                        <p className="text-xs text-green-600 font-mono">{newCustomerLocation}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Normal input with capture button */}
+                        {newCustomerLocationPermissionState !== 'prompting' && newCustomerLocationPermissionState !== 'denied' && (
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    className={`flex-1 rounded-lg border px-3 py-3 text-base text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 ${newCustomerLocation ? 'border-green-300 bg-green-50' : 'border-gray-300'}`}
+                                    value={newCustomerLocation}
+                                    readOnly
+                                    placeholder="Tap button to get GPS →"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={handleGetLocation}
+                                    disabled={isGettingLocation}
+                                    className={`shrink-0 px-4 py-3 rounded-lg transition-all active:scale-95 flex items-center gap-2 ${newCustomerLocation
+                                            ? 'bg-green-100 text-green-700 border-2 border-green-300 hover:bg-green-200'
+                                            : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-200'
+                                        }`}
+                                >
+                                    <Navigation className={`h-5 w-5 ${isGettingLocation ? 'animate-pulse' : ''}`} />
+                                    {!newCustomerLocation && <span className="text-sm font-medium">GPS</span>}
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex gap-3 pt-4">
@@ -1426,24 +1554,88 @@ export const CreateOrder: React.FC = () => {
 
                     <div>
                         <label className="block text-sm font-bold text-gray-700 mb-1">GPS Location</label>
-                        <div className="flex gap-2">
-                            <input
-                                type="text"
-                                value={fixLocation}
-                                readOnly
-                                className="flex-1 rounded-lg border-gray-300 bg-gray-50"
-                                placeholder="No location set"
-                            />
-                            <button
-                                type="button"
-                                onClick={handleGetFixLocation}
-                                disabled={isFixingLocation}
-                                className="px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 font-medium flex items-center gap-2"
-                            >
-                                <MapPin className={`h-4 w-4 ${isFixingLocation ? 'animate-pulse' : ''}`} />
-                                {isFixingLocation ? '...' : 'Capture'}
-                            </button>
-                        </div>
+
+                        {/* GPS Permission Prompting State */}
+                        {fixLocationPermissionState === 'prompting' && !fixLocation && (
+                            <div className="mb-3 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl animate-pulse">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                                        <MapPin className="h-6 w-6 text-blue-600 animate-bounce" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="font-bold text-blue-800">📍 Allow Location Access</p>
+                                        <p className="text-sm text-blue-600">A popup will appear asking for GPS permission. Please tap "Allow" to capture shop location.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* GPS Permission Denied State */}
+                        {fixLocationPermissionState === 'denied' && !fixLocation && (
+                            <div className="mb-3 p-4 bg-red-50 border-2 border-red-200 rounded-xl">
+                                <div className="flex items-start gap-3">
+                                    <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center shrink-0">
+                                        <MapPin className="h-6 w-6 text-red-600" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="font-bold text-red-800">⚠️ GPS Access Blocked</p>
+                                        <p className="text-sm text-red-600 mb-2">Location permission was denied. To enable:</p>
+                                        <ol className="text-xs text-red-700 space-y-1 list-decimal list-inside">
+                                            <li>Tap the <span className="font-mono bg-red-100 px-1 rounded">🔒 lock icon</span> in your browser's address bar</li>
+                                            <li>Find <strong>"Location"</strong> and change to <strong>"Allow"</strong></li>
+                                            <li>Refresh this page and try again</li>
+                                        </ol>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={handleGetFixLocation}
+                                    className="mt-3 w-full py-2 bg-red-100 text-red-700 rounded-lg font-medium hover:bg-red-200 transition-colors"
+                                >
+                                    Try Again
+                                </button>
+                            </div>
+                        )}
+
+                        {/* GPS Captured Success State */}
+                        {fixLocation && (
+                            <div className="mb-3 p-3 bg-green-50 border-2 border-green-200 rounded-xl">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                                        <MapPin className="h-5 w-5 text-green-600" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="font-bold text-green-800">✅ Location Captured</p>
+                                        <p className="text-sm text-green-600 font-mono">{fixLocation}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Normal input with capture button (shown when idle or needs retry) */}
+                        {fixLocationPermissionState !== 'prompting' && fixLocationPermissionState !== 'denied' && (
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={fixLocation}
+                                    readOnly
+                                    className={`flex-1 rounded-lg border px-3 py-2 ${fixLocation ? 'border-green-300 bg-green-50' : 'border-gray-300 bg-gray-50'}`}
+                                    placeholder="Tap button to capture location →"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={handleGetFixLocation}
+                                    disabled={isFixingLocation}
+                                    className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-all active:scale-95 ${fixLocation
+                                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                                        : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-200'
+                                        }`}
+                                >
+                                    <MapPin className={`h-4 w-4 ${isFixingLocation ? 'animate-pulse' : ''}`} />
+                                    {isFixingLocation ? 'Getting...' : fixLocation ? 'Recapture' : '📍 Get GPS'}
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     <div className="pt-4 flex justify-end gap-3">
