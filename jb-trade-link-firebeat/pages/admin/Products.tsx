@@ -304,9 +304,30 @@ export const ProductManagement: React.FC = () => {
       setProducts(prev => prev.filter(p => !selectedProductIds.has(p.id)));
       setSelectedProductIds(new Set());
       toast.success(`${ids.length} products deleted`);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      toast.error("Failed to delete some items.");
+      let msg = "Failed to delete some products.";
+      if (e?.message?.includes('foreign key constraint')) {
+        msg = "Some products cannot be deleted because they have transaction history (orders, stock, etc.). Deactivate them instead.";
+      }
+      toast.error(msg, { duration: 6000 });
+    }
+  };
+
+  const handleDelete = async (product: Product) => {
+    if (!window.confirm(`Are you sure you want to DELETE "${product.name}"? This cannot be undone.`)) return;
+
+    try {
+      await ProductService.delete(product.id);
+      setProducts(prev => prev.filter(p => p.id !== product.id));
+      toast.success('Product deleted successfully');
+    } catch (e: any) {
+      console.error(e);
+      let msg = "Failed to delete product.";
+      if (e?.message?.includes('foreign key constraint')) {
+        msg = "Cannot delete: This product has transaction history (orders, stock, etc.). Deactivate it instead.";
+      }
+      toast.error(msg, { duration: 6000 });
     }
   };
 
@@ -540,6 +561,9 @@ export const ProductManagement: React.FC = () => {
                       </button>
                       <button onClick={() => handleEdit(product)} className="text-indigo-600 hover:text-indigo-900 p-1">
                         <Edit2 className="h-4 w-4" />
+                      </button>
+                      <button onClick={() => handleDelete(product)} className="text-red-400 hover:text-red-700 p-1" title="Delete Product">
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </td>
                   </tr>
