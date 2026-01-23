@@ -435,11 +435,35 @@ export const OrderService = {
     return enriched[0];
   },
   update: async (id: string, data: Partial<Order>) => {
+    // SECURITY: Prevent editing sensitive fields (Stock/Amount) if trip is loaded
+    // We allow status updates and payments as those happen during delivery
+    const sensitiveFields = ['items', 'totalAmount', 'qty', 'products'];
+    const isSensitiveUpdate = Object.keys(data).some(k => sensitiveFields.includes(k));
+
+    if (isSensitiveUpdate) {
+      const { data: currentOrder } = await supabase.from(COLS.ORDERS).select('assignedTripId').eq('id', id).single();
+      if (currentOrder?.assignedTripId) {
+        const { count } = await supabase.from('trip_loads').select('*', { count: 'exact', head: true }).eq('trip_id', currentOrder.assignedTripId);
+        if (count && count > 0) {
+          throw new Error("Cannot edit order content: Truck is already loaded. Please remove order from trip first.");
+        }
+      }
+    }
+
     const { error } = await supabase.from(COLS.ORDERS).update(data).eq('id', id);
     if (error) throw error;
   },
   // New method to update the JSON `items` column for a specific order
   updateOrderItems: async (orderId: string, items: any) => {
+    // SECURITY: Prevent editing items if trip is loaded
+    const { data: currentOrder } = await supabase.from(COLS.ORDERS).select('assignedTripId').eq('id', orderId).single();
+    if (currentOrder?.assignedTripId) {
+      const { count } = await supabase.from('trip_loads').select('*', { count: 'exact', head: true }).eq('trip_id', currentOrder.assignedTripId);
+      if (count && count > 0) {
+        throw new Error("Cannot edit items: Truck is already loaded. Please remove order from trip first.");
+      }
+    }
+
     const { error } = await supabase
       .from(COLS.ORDERS)
       .update({ items })
@@ -649,6 +673,51 @@ export const TripService = {
     // 2. Order Update
     const { error } = await supabase.from(COLS.ORDERS).update({ status: 'approved', assignedTripId: null }).eq('id', orderId);
     if (error) throw error;
+
+    // 3. STOCK ADJUSTMENT: Check if trip was already loaded. If so, reduce phantom load.
+    // This prevents "Missing Stock" variances when orders are removed after loading.
+    const { count } = await supabase
+      .from('trip_loads')
+      .select('*', { count: 'exact', head: true })
+      .eq('trip_id', tripId);
+
+    if (count && count > 0) {
+      console.log(`[TripService] Trip ${tripId} is loaded. Adjusting stock for removed order ${orderId}...`);
+
+      let items = orderData.items;
+      if (typeof items === 'string') {
+        try { items = JSON.parse(items); } catch (e) { items = []; }
+      }
+
+      if (Array.isArray(items)) {
+        for (const item of items) {
+          const productId = (item as any).productId || (item as any).product_id;
+          const qty = Number((item as any).qty || (item as any).quantity) || 0;
+
+          if (productId && qty > 0) {
+            // Decrement specific product load
+            // We can't use simple .decrement() rpc easily without setup, so we fetch-update
+            const { data: currentLoad } = await supabase
+              .from('trip_loads')
+              .select('qty_loaded')
+              .eq('trip_id', tripId)
+              .eq('product_id', productId)
+              .single();
+
+            if (currentLoad) {
+              const newQty = Math.max(0, currentLoad.qty_loaded - qty);
+              // If 0, we could delete, but keeping 0 is safer for logs. 
+              // Actually, let's keep 0 to show it was there.
+              await supabase
+                .from('trip_loads')
+                .update({ qty_loaded: newQty })
+                .eq('trip_id', tripId)
+                .eq('product_id', productId);
+            }
+          }
+        }
+      }
+    }
   },
 
   removeOrders: async (tripId: string, orderIdsToRemove: string[], currentTripData: DispatchTrip, ordersDataToRemove: Order[]) => {
@@ -669,6 +738,56 @@ export const TripService = {
     // 2. Order Update
     const { error } = await supabase.from(COLS.ORDERS).update({ status: 'approved', assignedTripId: null }).in('id', orderIdsToRemove);
     if (error) throw error;
+
+    // 3. STOCK ADJUSTMENT: Check if trip was already loaded.
+    const { count } = await supabase
+      .from('trip_loads')
+      .select('*', { count: 'exact', head: true })
+      .eq('trip_id', tripId);
+
+    if (count && count > 0) {
+      console.log(`[TripService] Trip ${tripId} is loaded. Adjusting stock for ${orderIdsToRemove.length} removed orders...`);
+
+      // Aggregate all items to remove
+      const productQtyToRemove = new Map<string, number>();
+
+      for (const order of ordersDataToRemove) {
+        let items = order.items;
+        if (typeof items === 'string') {
+          try { items = JSON.parse(items); } catch (e) { items = []; }
+        }
+
+        if (Array.isArray(items)) {
+          for (const item of items) {
+            const productId = (item as any).productId || (item as any).product_id;
+            const qty = Number((item as any).qty || (item as any).quantity) || 0;
+            if (productId && qty > 0) {
+              const current = productQtyToRemove.get(productId) || 0;
+              productQtyToRemove.set(productId, current + qty);
+            }
+          }
+        }
+      }
+
+      // Apply updates
+      for (const [productId, qtyToRemove] of productQtyToRemove.entries()) {
+        const { data: currentLoad } = await supabase
+          .from('trip_loads')
+          .select('qty_loaded')
+          .eq('trip_id', tripId)
+          .eq('product_id', productId)
+          .single();
+
+        if (currentLoad) {
+          const newQty = Math.max(0, currentLoad.qty_loaded - qtyToRemove);
+          await supabase
+            .from('trip_loads')
+            .update({ qty_loaded: newQty })
+            .eq('trip_id', tripId)
+            .eq('product_id', productId);
+        }
+      }
+    }
   }
 };
 

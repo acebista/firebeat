@@ -271,13 +271,12 @@ export const generateVatBills = (rows: DeliveryReportRow[], forcedIndividualIds:
         const aggregated = aggregateItems(items);
         const { invoiceTaxable, invoiceVat, invoiceGross } = computeInvoiceTotals(aggregated);
 
-        // The target for this VAT bill is the collected amount
-        // Shortfalls (small rounding amounts customer doesn't pay) are absorbed into discount
-        const moneyCollected = row.collectedAmount > 0 ? row.collectedAmount : row.netAmount;
+        // The target for this VAT bill is the Net Sale Value (Cash + Credit)
+        // We always bill for the full value of goods delivered
+        const moneyCollected = row.netAmount;
 
-        // Discount = (Gross item value) - (What we actually collected)
-        // This includes: 1) Regular trade discounts, 2) Shortfalls (e.g., ₹622 → ₹620)
-        // The VAT bill total will equal moneyCollected
+        // Discount = (Gross item value) - (Net Sale Value)
+        // This captures the exact trade discount applied to the order
         const invoiceDiscount = Math.max(0, invoiceGross - moneyCollected);
 
         entries.push({

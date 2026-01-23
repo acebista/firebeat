@@ -38,6 +38,7 @@ export interface PackingProgress {
   order_id: string;
   item_id: string;
   is_done: boolean;
+  is_oos?: boolean;  // Out of Stock - item not loaded
   updated_at?: string;
   updated_by?: string;
 }
@@ -139,7 +140,7 @@ export async function getPackingProgress(tripId: string): Promise<PackingProgres
   try {
     const { data, error } = await supabase
       .from('packing_progress')
-      .select('id, trip_id, order_id, item_id, is_done, updated_at, updated_by')
+      .select('id, trip_id, order_id, item_id, is_done, is_oos, updated_at, updated_by')
       .eq('trip_id', tripId);
 
     if (error) throw error;
@@ -152,12 +153,14 @@ export async function getPackingProgress(tripId: string): Promise<PackingProgres
 
 /**
  * Upsert packing progress for an item
+ * @param isOos - If true, item is marked as Out of Stock (not loaded)
  */
 export async function upsertPackingProgress(
   tripId: string,
   orderId: string,
   itemId: string,
-  isDone: boolean
+  isDone: boolean,
+  isOos: boolean = false
 ): Promise<PackingProgress> {
   try {
     const { data: { user }, error: userError } = await supabase.auth.getUser();
@@ -173,6 +176,7 @@ export async function upsertPackingProgress(
           order_id: orderId,
           item_id: itemId,
           is_done: isDone,
+          is_oos: isOos,
           updated_at: new Date().toISOString(),
           updated_by: user.id,
         },

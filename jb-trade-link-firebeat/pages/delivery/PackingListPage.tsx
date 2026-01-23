@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Circle, Search, Printer, Package, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Circle, Search, Printer, Package, ChevronDown, ChevronUp, XCircle } from 'lucide-react';
 import {
   getTripWithOrders,
   getPackingProgress,
@@ -19,6 +19,7 @@ export function PackingListPage() {
   const [trip, setTrip] = useState<TripWithOrders | null>(null);
   const [allItems, setAllItems] = useState<PackingItem[]>([]);
   const [progressMap, setProgressMap] = useState<Map<string, boolean>>(new Map());
+  const [oosMap, setOosMap] = useState<Map<string, boolean>>(new Map());  // Track OOS items
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,9 +49,13 @@ export function PackingListPage() {
         tripData.orders.forEach(order => items.push(...order.items));
         setAllItems(items);
 
-        // Progress map
+        // Progress map for loaded items
         const pMap = new Map(progress.map(p => [p.item_id, p.is_done]));
         setProgressMap(pMap);
+
+        // OOS map for out of stock items
+        const oMap = new Map(progress.map(p => [p.item_id, p.is_oos || false]));
+        setOosMap(oMap);
 
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load');
@@ -64,10 +69,11 @@ export function PackingListPage() {
   // Aggregate Data (Dispatch Style)
   const aggregatedRows = useMemo(() => {
     const productLookup = new Map(products.map(p => [p.id, p]));
-    const rowMap = new Map<string, DispatchRow & { itemIds: string[], isFullyLoaded: boolean }>();
+    const rowMap = new Map<string, DispatchRow & { itemIds: string[], isFullyLoaded: boolean, isOos: boolean, isHandled: boolean }>();
 
-    // Helper to check if item is done
+    // Helper to check if item is done or OOS
     const isItemDone = (itemId: string) => progressMap.get(itemId) || false;
+    const isItemOos = (itemId: string) => oosMap.get(itemId) || false;
 
     // Group items by Product ID
     allItems.forEach(item => {
@@ -91,7 +97,9 @@ export function PackingListPage() {
           pieces: 0,
           totalAmount: 0,
           itemIds: [],
-          isFullyLoaded: true // starts true, becomes false if any item is not done
+          isFullyLoaded: true, // starts true, becomes false if any item is not done
+          isOos: false,        // starts false, becomes true if all items are OOS
+          isHandled: true      // starts true, becomes false if any item is unhandled
         });
       }
 
@@ -99,8 +107,18 @@ export function PackingListPage() {
       row.totalQty += qty;
       row.totalAmount += total;
       row.itemIds.push(item.id);
-      if (!isItemDone(item.id)) {
+
+      const done = isItemDone(item.id);
+      const oos = isItemOos(item.id);
+
+      if (!done && !oos) {
+        row.isHandled = false;  // Item is unhandled if neither done nor oos
+      }
+      if (!done) {
         row.isFullyLoaded = false;
+      }
+      if (oos) {
+        row.isOos = true; // At least one item is OOS
       }
     });
 
@@ -136,45 +154,76 @@ export function PackingListPage() {
       }
 
       return { ...row, cartons, packets, pieces };
-    }).filter(Boolean) as (DispatchRow & { itemIds: string[], isFullyLoaded: boolean })[];
+    }).filter(Boolean) as (DispatchRow & { itemIds: string[], isFullyLoaded: boolean, isOos: boolean, isHandled: boolean })[];
 
     // Sort by Company then Product
     return rows.sort((a, b) =>
       a.companyName.localeCompare(b.companyName) || a.productName.localeCompare(b.productName)
     );
 
-  }, [allItems, products, progressMap, search]);
+  }, [allItems, products, progressMap, oosMap, search]);
 
   const totalTripValue = aggregatedRows.reduce((sum, r) => sum + r.totalAmount, 0);
 
-  // Mark all items for a specific product as Loaded/Unloaded
-  const handleToggleProduct = async (row: typeof aggregatedRows[0]) => {
+  // Mark all items for a specific product as Loaded
+  const handleToggleProduct = async (row: typeof aggregatedRows[0], e?: React.MouseEvent) => {
     if (!tripId) return;
+    e?.stopPropagation();
 
-    // Toggle Logic: If not fully loaded, mark ALL as true. If fully loaded, mark ALL as false.
-    const targetState = !row.isFullyLoaded;
+    // Toggle Logic: If not fully loaded, mark ALL as loaded. If fully loaded, clear state.
+    const targetDone = !row.isFullyLoaded;
 
     // Optimistic Update
     const newMap = new Map(progressMap);
-    row.itemIds.forEach(id => newMap.set(id, targetState));
+    const newOosMap = new Map(oosMap);
+    row.itemIds.forEach(id => {
+      newMap.set(id, targetDone);
+      newOosMap.set(id, false);  // Clear OOS when marking as loaded
+    });
     setProgressMap(newMap);
+    setOosMap(newOosMap);
 
     try {
       setSaving(true);
-      // Find items that actually need updating to save bandwidth? 
-      // Or just update all to be safe. We'll update only changed ones for efficiency locally, but server needs specific calls.
-      // Parallel requests might be heavy if chunks are large.
-
       const promises = row.itemIds.map(itemId => {
-        // Only update if changed (optional optimization, but good for reducing calls)
-        /* if (progressMap.get(itemId) === targetState) return Promise.resolve(); */
-        return upsertPackingProgress(tripId, allItems.find(i => i.id === itemId)?.order_id!, itemId, targetState);
+        return upsertPackingProgress(tripId, allItems.find(i => i.id === itemId)?.order_id!, itemId, targetDone, false);
       });
-
       await Promise.all(promises);
     } catch (err) {
       console.error(err);
-      // Revert on error could be complex, just refetch?
+      alert("Failed to save progress. Resyncing...");
+      window.location.reload();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Mark all items for a specific product as Out of Stock (Not Loaded)
+  const handleMarkOos = async (row: typeof aggregatedRows[0], e: React.MouseEvent) => {
+    if (!tripId) return;
+    e.stopPropagation();
+
+    // Toggle OOS state
+    const targetOos = !row.isOos;
+
+    // Optimistic Update
+    const newMap = new Map(progressMap);
+    const newOosMap = new Map(oosMap);
+    row.itemIds.forEach(id => {
+      newMap.set(id, true);      // Mark as "handled" (is_done = true)
+      newOosMap.set(id, targetOos);  // Set OOS state
+    });
+    setProgressMap(newMap);
+    setOosMap(newOosMap);
+
+    try {
+      setSaving(true);
+      const promises = row.itemIds.map(itemId => {
+        return upsertPackingProgress(tripId, allItems.find(i => i.id === itemId)?.order_id!, itemId, true, targetOos);
+      });
+      await Promise.all(promises);
+    } catch (err) {
+      console.error(err);
       alert("Failed to save progress. Resyncing...");
       window.location.reload();
     } finally {
@@ -239,31 +288,40 @@ export function PackingListPage() {
           aggregatedRows.map(row => (
             <div
               key={row.productId}
-              onClick={() => handleToggleProduct(row)}
-              className={`bg-white rounded-xl shadow-sm border transition-all duration-200 cursor-pointer active:scale-[0.98] ${row.isFullyLoaded
-                ? 'border-green-300 bg-green-50/50 shadow-green-100'
-                : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
+              className={`bg-white rounded-xl shadow-sm border transition-all duration-200 ${row.isOos
+                  ? 'border-red-300 bg-red-50/50 shadow-red-100'
+                  : row.isFullyLoaded
+                    ? 'border-green-300 bg-green-50/50 shadow-green-100'
+                    : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
                 } ${saving ? 'opacity-60 pointer-events-none' : ''}`}
             >
               {/* Card Header / Main Row */}
               <div className="p-4 flex items-start gap-4">
-                {/* Large, Prominent Checkbox with Extended Hit Area */}
-                <div className="flex-shrink-0 relative">
-                  {/* Extended tap target (invisible but clickable) */}
-                  <div className="absolute -inset-3" />
-
-                  <div
-                    className={`relative w-16 h-16 rounded-full border-[3px] flex items-center justify-center transition-all duration-300 ${row.isFullyLoaded
-                      ? 'bg-gradient-to-br from-green-500 to-green-600 border-green-600 text-white shadow-lg shadow-green-200 scale-105'
-                      : 'border-gray-300 text-gray-300 bg-white hover:border-green-400 hover:bg-green-50 hover:scale-105'
+                {/* Status Icon - Two buttons: Loaded (green) and Not Loaded (red) */}
+                <div className="flex-shrink-0 flex flex-col gap-2">
+                  {/* Loaded Button */}
+                  <button
+                    onClick={(e) => handleToggleProduct(row, e)}
+                    className={`relative w-14 h-14 rounded-full border-[3px] flex items-center justify-center transition-all duration-300 ${row.isFullyLoaded && !row.isOos
+                        ? 'bg-gradient-to-br from-green-500 to-green-600 border-green-600 text-white shadow-lg shadow-green-200 scale-105'
+                        : 'border-gray-300 text-gray-300 bg-white hover:border-green-400 hover:bg-green-50 hover:scale-105'
                       } ${saving ? 'animate-pulse' : ''}`}
+                    title="Mark as Loaded"
                   >
-                    {row.isFullyLoaded ? (
-                      <CheckCircle2 className="w-10 h-10" fill="currentColor" strokeWidth={0} />
-                    ) : (
-                      <Circle className="w-10 h-10" strokeWidth={2.5} />
-                    )}
-                  </div>
+                    <CheckCircle2 className="w-8 h-8" fill={row.isFullyLoaded && !row.isOos ? "currentColor" : "none"} strokeWidth={row.isFullyLoaded && !row.isOos ? 0 : 2} />
+                  </button>
+
+                  {/* Not Loaded / OOS Button */}
+                  <button
+                    onClick={(e) => handleMarkOos(row, e)}
+                    className={`relative w-14 h-14 rounded-full border-[3px] flex items-center justify-center transition-all duration-300 ${row.isOos
+                        ? 'bg-gradient-to-br from-red-500 to-red-600 border-red-600 text-white shadow-lg shadow-red-200 scale-105'
+                        : 'border-gray-300 text-gray-300 bg-white hover:border-red-400 hover:bg-red-50 hover:scale-105'
+                      } ${saving ? 'animate-pulse' : ''}`}
+                    title="Mark as Not Loaded (Out of Stock)"
+                  >
+                    <XCircle className="w-8 h-8" fill={row.isOos ? "currentColor" : "none"} strokeWidth={row.isOos ? 0 : 2} />
+                  </button>
                 </div>
 
                 <div className="flex-1 min-w-0">

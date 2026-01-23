@@ -213,6 +213,10 @@ export const EditOrder: React.FC = () => {
     };
 
     const addToCart = (product: Product) => {
+        if (product.isActive === false) {
+            toast.error("This product is inactive and cannot be added to cart.");
+            return;
+        }
         if (cartLockedCompanyId && product.companyId !== cartLockedCompanyId) {
             toast.error(`Policy Restriction: This invoice is for ${products.find(p => p.companyId === cartLockedCompanyId)?.companyName}. You cannot add items from other companies.`);
             return;
@@ -268,6 +272,13 @@ export const EditOrder: React.FC = () => {
 
         const product = products.find(p => p.id === productId);
         if (!product) return;
+
+        // Block quantity increase for inactive products
+        const existingItem = cart.find(i => i.productId === productId);
+        if (product.isActive === false && existingItem && newQty > existingItem.qty) {
+            toast.error("This product is inactive and cannot be ordered further.");
+            return;
+        }
 
         const pricing = calculateItemPricing(product, newQty);
 
@@ -458,7 +469,11 @@ export const EditOrder: React.FC = () => {
         const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             p.category?.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesCompany = selectedCompany ? p.companyId === selectedCompany : true;
-        return matchesSearch && matchesCompany;
+
+        // Exclude inactive products
+        const isActive = p.isActive !== false;
+
+        return matchesSearch && matchesCompany && isActive;
     });
 
     const subtotalAmount = cart.reduce((acc, item) => acc + item.total, 0);

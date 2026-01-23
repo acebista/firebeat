@@ -348,6 +348,10 @@ export const CreateOrder: React.FC = () => {
     };
 
     const addToCart = (product: Product) => {
+        if (product.isActive === false) {
+            toast.error("This product is inactive and cannot be added to cart.");
+            return;
+        }
         if (cartLockedCompanyId && product.companyId !== cartLockedCompanyId) {
             toast.error(`Policy: This order is for ${products.find(p => p.companyId === cartLockedCompanyId)?.companyName}.`);
             return;
@@ -409,6 +413,13 @@ export const CreateOrder: React.FC = () => {
 
         const product = products.find(p => p.id === productId);
         if (!product) return;
+
+        // Block quantity increase for inactive products
+        const existingItem = cart.find(i => i.productId === productId);
+        if (product.isActive === false && existingItem && newQty > existingItem.qty) {
+            toast.error("This product is inactive and cannot be ordered further.");
+            return;
+        }
 
         const pricing = calculateItemPricing(product, newQty);
 
@@ -891,7 +902,7 @@ export const CreateOrder: React.FC = () => {
 
         order.items.forEach(item => {
             const product = products.find(p => p.id === item.productId);
-            if (!product) return;
+            if (!product || product.isActive === false) return;
 
             // Handle legacy field names (quantity vs qty)
             const itemQty = item.qty || item.quantity || 0;
@@ -931,9 +942,14 @@ export const CreateOrder: React.FC = () => {
         const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             p.category?.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesCompany = selectedCompany ? p.companyId === selectedCompany : true;
+
+        // Exclude inactive products
+        const isActive = p.isActive !== false;
+
         // PHASE 1: Add hide out of stock filter
         const matchesStock = hideOutOfStock ? !p.stockOut : true;
-        return matchesSearch && matchesCompany && matchesStock;
+
+        return matchesSearch && matchesCompany && matchesStock && isActive;
     });
 
     const subtotalAmount = cart.reduce((acc, item) => acc + item.total, 0);
@@ -1508,8 +1524,8 @@ export const CreateOrder: React.FC = () => {
                                     onClick={handleGetLocation}
                                     disabled={isGettingLocation}
                                     className={`shrink-0 px-4 py-3 rounded-lg transition-all active:scale-95 flex items-center gap-2 ${newCustomerLocation
-                                            ? 'bg-green-100 text-green-700 border-2 border-green-300 hover:bg-green-200'
-                                            : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-200'
+                                        ? 'bg-green-100 text-green-700 border-2 border-green-300 hover:bg-green-200'
+                                        : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-200'
                                         }`}
                                 >
                                     <Navigation className={`h-5 w-5 ${isGettingLocation ? 'animate-pulse' : ''}`} />

@@ -430,8 +430,8 @@ export const TripStockService = {
                 product_name: productNameMap.get(productId) || 'Unknown',
                 qty_loaded: loaded,
                 qty_gross_delivered: grossDelivered,
-                qty_truck_returned: truckReturnedGood, // Only good items
-                qty_truck_damaged: truckDamaged,      // Only damaged items
+                qty_truck_returned: unload.unsold,   // Actual physical unsold count (from driver)
+                qty_truck_damaged: unload.damaged,   // Actual physical damaged count (from driver)
                 qty_net_delivered: netDelivered,
                 qty_returned: returnedPickup,
                 qty_damaged: damagedPickup,
@@ -591,15 +591,36 @@ export const TripStockService = {
     /**
      * Auto-generate loads from order items
      * Aggregates all items from assigned orders
+     * RESPECTS PACKING PROGRESS: Only includes items marked as loaded by delivery user
      */
     generateLoadsFromOrders: async (tripId: string): Promise<LoadTruckInput> => {
         // Get all orders assigned to this trip
         const { data: orders, error } = await supabase
             .from('orders')
-            .select('items')
+            .select('id, items')
             .eq('assignedTripId', tripId);
 
         if (error) throw error;
+
+        // Fetch packing progress to see which items are marked as loaded
+        const { data: packingProgress } = await supabase
+            .from('packing_progress')
+            .select('item_id, is_done, is_oos')
+            .eq('trip_id', tripId);
+
+        // Create a set of item IDs that are marked as loaded (is_done=true AND is_oos=false)
+        const loadedItemIds = new Set<string>();
+        const oosItemIds = new Set<string>();
+        (packingProgress || []).forEach(p => {
+            if (p.is_oos) {
+                oosItemIds.add(p.item_id);
+            } else if (p.is_done) {
+                loadedItemIds.add(p.item_id);
+            }
+        });
+
+        // If no packing progress exists, default to loading ALL items (backwards compatibility)
+        const hasPackingProgress = packingProgress && packingProgress.length > 0;
 
         const productQtyMap = new Map<string, number>();
 
@@ -615,9 +636,23 @@ export const TripStockService = {
 
             if (!Array.isArray(items)) continue;
 
-            for (const item of items) {
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                const itemId = `${order.id}-${i}`; // Matches packing_progress item_id format
                 const productId = item.productId || item.product_id;
                 const qty = Number(item.qty || item.quantity) || 0;
+
+                // Skip if item is explicitly marked as OOS
+                if (oosItemIds.has(itemId)) {
+                    console.log(`[TripStock] Skipping item ${itemId} (${productId}) - Marked as OOS`);
+                    continue;
+                }
+
+                // Skip if packing progress exists but this item is NOT marked as loaded
+                if (hasPackingProgress && !loadedItemIds.has(itemId)) {
+                    console.log(`[TripStock] Skipping item ${itemId} (${productId}) - Not loaded`);
+                    continue;
+                }
 
                 if (productId && qty > 0) {
                     const current = productQtyMap.get(productId) || 0;

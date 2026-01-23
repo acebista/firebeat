@@ -12,7 +12,7 @@ interface DispatchReportProps {
 
 export const DispatchReport: React.FC<DispatchReportProps> = ({ data, rescheduledData = [], salespeople = [] }) => {
   const handlePrint = () => {
-    printContent('Dispatch / Packing List', 'dispatch-report-table');
+    printContent('Dispatch / Packing List', 'dispatch-report-print-area');
   };
 
   const renderTable = (rows: DispatchRow[], isRescheduled = false) => (
@@ -78,44 +78,46 @@ export const DispatchReport: React.FC<DispatchReportProps> = ({ data, reschedule
         </Button>
       </div>
 
-      {/* Salespeople Summary */}
-      {salespeople.length > 0 && (
-        <Card className="p-4 bg-purple-50 border border-purple-200">
-          <div className="flex items-center gap-2 mb-2">
-            <Users className="h-5 w-5 text-purple-600" />
-            <span className="font-medium text-purple-800">Salespeople ({salespeople.length})</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {salespeople.map(name => (
-              <span key={name} className="inline-block bg-white text-purple-700 text-sm font-medium px-3 py-1 rounded-full border border-purple-300">
-                {name}
-              </span>
-            ))}
-          </div>
-        </Card>
-      )}
+      <div id="dispatch-report-print-area" className="space-y-4">
+        {/* Salespeople Summary */}
+        {salespeople.length > 0 && (
+          <Card className="p-4 bg-purple-50 border border-purple-200">
+            <div className="flex items-center gap-2 mb-2">
+              <Users className="h-5 w-5 text-purple-600" />
+              <span className="font-medium text-purple-800">Salespeople ({salespeople.length})</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {salespeople.map(name => (
+                <span key={name} className="inline-block bg-white text-purple-700 text-sm font-medium px-3 py-1 rounded-full border border-purple-300">
+                  {name}
+                </span>
+              ))}
+            </div>
+          </Card>
+        )}
 
-      <Card className="overflow-hidden">
-        <div className="overflow-x-auto" id="dispatch-report-table">
-          {renderTable(data)}
-        </div>
-      </Card>
-
-      {/* Rescheduled Orders Section */}
-      {rescheduledData.length > 0 && (
-        <Card className="overflow-hidden mt-6 border-2 border-amber-300">
-          <div className="bg-amber-50 px-4 py-3 border-b border-amber-200 flex items-center gap-2">
-            <CalendarClock className="h-5 w-5 text-amber-600" />
-            <h4 className="font-bold text-amber-800">📅 Rescheduled Orders Dispatch ({rescheduledData.length} items)</h4>
-            <span className="ml-auto text-amber-700 font-semibold">
-              ₹{rescheduledData.reduce((s, r) => s + r.totalAmount, 0).toLocaleString()}
-            </span>
-          </div>
+        <Card className="overflow-hidden">
           <div className="overflow-x-auto">
-            {renderTable(rescheduledData, true)}
+            {renderTable(data)}
           </div>
         </Card>
-      )}
+
+        {/* Rescheduled Orders Section */}
+        {rescheduledData.length > 0 && (
+          <Card className="overflow-hidden mt-6 border-2 border-amber-300">
+            <div className="bg-amber-50 px-4 py-3 border-b border-amber-200 flex items-center gap-2">
+              <CalendarClock className="h-5 w-5 text-amber-600" />
+              <h4 className="font-bold text-amber-800">📅 Rescheduled Orders Dispatch ({rescheduledData.length} items)</h4>
+              <span className="ml-auto text-amber-700 font-semibold">
+                ₹{rescheduledData.reduce((s, r) => s + r.totalAmount, 0).toLocaleString()}
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              {renderTable(rescheduledData, true)}
+            </div>
+          </Card>
+        )}
+      </div>
     </div>
   );
 };
