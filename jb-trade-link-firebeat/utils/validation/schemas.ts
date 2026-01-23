@@ -54,7 +54,7 @@ export const productSchema = z.object({
     additionalSecondaryDiscountPct: z.number().min(0).default(0),
     additionalQualifyingQty: z.number().int().min(0).default(0),
     companyName: z.string().optional(),
-    category: z.string().optional(),
+    category: z.string().nullable().optional().transform(val => val ?? undefined),
     metadata: z.unknown().optional(),
     commission_rate: z.number().min(0).max(100).optional().nullable(),
 });
