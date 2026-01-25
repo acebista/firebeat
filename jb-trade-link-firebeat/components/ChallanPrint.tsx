@@ -69,20 +69,21 @@ export const ChallanPrint: React.FC<ChallanPrintProps> = ({
   // Using slightly smaller height (200mm) to ensure containment within physical A5 page
   const pageStyle = currentOrientation === 'portrait' ? {
     width: '148mm',
-    height: '200mm', // Fixed height instead of minHeight to prevent overflow
+    height: '210mm',
   } : {
     width: '210mm',
-    height: '138mm',
+    height: '148mm',
   };
 
   const containerStyle = {
     ...pageStyle,
-    padding: '8mm', // Reduced padding for A5
+    padding: '10mm', // Increased padding for hardware safety
     fontFamily: 'Arial, sans-serif',
-    fontSize: '9pt', // Scaled down globally
+    fontSize: '9pt',
     backgroundColor: 'white',
     position: 'relative' as const,
-    border: '2px solid black'
+    border: '2px solid black',
+    boxSizing: 'border-box' as const
   };
 
   const headerStyle = {
@@ -265,8 +266,8 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
   const copiesCount = (paymentMode === 'cheque' || paymentMode === 'credit') ? 2 : 1;
 
   const pageSize = orientation === 'portrait'
-    ? { width: '140mm', height: '190mm' } // Significantly safer margins for A5
-    : { width: '200mm', height: '138mm' };
+    ? { width: '148mm', height: '210mm' }
+    : { width: '210mm', height: '148mm' };
 
   // Generate the challan HTML for each copy
   const challansHtml = Array.from({ length: copiesCount }).map((_, i) => {
@@ -382,19 +383,22 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
           }
           .challan-wrapper {
             width: ${pageSize.width};
-            min-height: ${pageSize.height};
+            height: ${pageSize.height};
             background: white;
-            padding: 5mm; /* Reduced outer buffer for A5 */
+            padding: 10mm; /* Mandatory safety buffer for physical printers */
+            display: block;
+            position: relative;
           }
           .container {
             width: 100%;
             height: 100%;
-            padding: 4mm;
+            padding: 5mm;
             border: 2px solid black;
             position: relative;
             display: flex;
             flex-direction: column;
-            overflow: hidden; /* Prevent content leaking */
+            overflow: hidden;
+            box-sizing: border-box;
           }
           .header { text-align: center; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 2px solid black; }
           .header h1 { margin: 0; font-size: 14pt; font-weight: bold; }
@@ -461,8 +465,8 @@ export const printChallans = (
   }
 
   const pageSize = orientation === 'portrait'
-    ? { width: '140mm', height: '195mm' }
-    : { width: '200mm', height: '138mm' };
+    ? { width: '148mm', height: '210mm' }
+    : { width: '210mm', height: '148mm' };
 
   const challanHtml = (orders || []).flatMap(order => {
     const paymentMode = ((order as any).paymentMethod || order.paymentMode || 'Cash').toLowerCase();
@@ -612,16 +616,23 @@ export const printChallans = (
           }
           
           body { font-family: Arial, sans-serif; font-size: 9pt; background: white; }
-          .challan-page { width: ${pageSize.width}; min-height: ${pageSize.height}; background: white; padding: 5mm; }
+          .challan-page { 
+            width: ${pageSize.width}; 
+            height: ${pageSize.height}; 
+            background: white; 
+            padding: 10mm; /* Mandatory safety buffer for physical printers */
+            display: block;
+          }
           .container {
             width: 100%;
             height: 100%;
-            padding: 4mm;
+            padding: 5mm;
             border: 2px solid black;
             position: relative;
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            box-sizing: border-box;
           }
           
           .header { text-align: center; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 2px solid black; }
