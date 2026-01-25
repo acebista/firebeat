@@ -77,7 +77,7 @@ export const ChallanPrint: React.FC<ChallanPrintProps> = ({
 
   const containerStyle = {
     ...pageStyle,
-    padding: '10mm', // Increased padding for hardware safety
+    padding: '5mm', // Reduced from 10mm to fill more space
     fontFamily: 'Arial, sans-serif',
     fontSize: '9pt',
     backgroundColor: 'white',
@@ -385,14 +385,15 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
             width: ${pageSize.width};
             height: ${pageSize.height};
             background: white;
-            padding: 10mm; /* Mandatory safety buffer for physical printers */
+            padding: 0; /* Let physical printer margins handle the edge */
             display: block;
             position: relative;
+            box-sizing: border-box;
           }
           .container {
             width: 100%;
             height: 100%;
-            padding: 5mm;
+            padding: 3mm; /* Tight internal spacing */
             border: 2px solid black;
             position: relative;
             display: flex;
@@ -597,7 +598,7 @@ export const printChallans = (
           
           @media print {
             @page { 
-              size: ${orientation === 'portrait' ? 'A5 portrait' : 'A5 landscape'};
+              size: 148mm 210mm;
               margin: 0;
             }
             body { margin: 0; padding: 0; }
@@ -620,13 +621,14 @@ export const printChallans = (
             width: ${pageSize.width}; 
             height: ${pageSize.height}; 
             background: white; 
-            padding: 10mm; /* Mandatory safety buffer for physical printers */
+            padding: 0; 
             display: block;
+            box-sizing: border-box;
           }
           .container {
             width: 100%;
             height: 100%;
-            padding: 5mm;
+            padding: 3mm;
             border: 2px solid black;
             position: relative;
             display: flex;

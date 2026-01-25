@@ -29,7 +29,7 @@ export const printChallanV2 = (order: Order, products: Product[], customer?: Cus
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
           @media print {
-            @page { size: A4 portrait; margin: 0; }
+            @page { size: 148mm 210mm; margin: 0; }
             body { margin: 0; padding: 0; }
             .challan-page { page-break-after: always; page-break-inside: avoid; }
             .challan-page:last-child { page-break-after: auto; }
@@ -38,36 +38,38 @@ export const printChallanV2 = (order: Order, products: Product[], customer?: Cus
             body { background: #f0f0f0; padding: 20px; }
             .challan-page { margin-bottom: 20px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
           }
-          body { font-family: Arial, sans-serif; font-size: 11pt; background: white; }
+          body { font-family: Arial, sans-serif; font-size: 9pt; background: white; }
           .challan-page { 
-            width: 210mm; 
-            min-height: 297mm; 
+            width: 148mm; 
+            height: 210mm; 
             background: white; 
-            padding: 10mm; 
+            padding: 0; 
+            box-sizing: border-box;
           }
           .container {
             width: 100%;
             height: 100%;
-            min-height: 257mm; /* 297mm - 40mm buffer */
-            padding: 10mm;
-            border: 3px solid black;
+            padding: 3mm;
+            border: 2px solid black;
             position: relative;
             display: flex;
             flex-direction: column;
+            overflow: hidden;
+            box-sizing: border-box;
           }
-          .header { text-align: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid black; }
-          .header h1 { margin: 0; font-size: 20pt; font-weight: bold; }
-          .header h2 { margin: 5px 0; font-size: 14pt; font-weight: normal; }
-          .header p { margin: 5px 0; font-size: 10pt; }
-          .qr-code-box { position: absolute; top: 10mm; right: 10mm; display: flex; flex-direction: column; align-items: center; }
-          .qr-label { font-size: 8pt; text-align: center; display: block; margin-top: 4px; }
+          .header { text-align: center; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 2px solid black; }
+          .header h1 { margin: 0; font-size: 14pt; font-weight: bold; }
+          .header h2 { margin: 3px 0; font-size: 11pt; font-weight: normal; }
+          .header p { margin: 3px 0; font-size: 8pt; }
+          .qr-code-box { position: absolute; top: 5mm; right: 5mm; display: flex; flex-direction: column; align-items: center; }
+          .qr-label { font-size: 7pt; text-align: center; display: block; margin-top: 2px; }
           
-          .details { margin-bottom: 20px; font-size: 11pt; }
-          .details div { margin-bottom: 6px; }
+          .details { margin-bottom: 12px; font-size: 9pt; }
+          .details div { margin-bottom: 3px; }
           
-          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 10pt; table-layout: auto; }
-          th, td { border: 1px solid black; padding: 8px 6px; line-height: 1.2; vertical-align: top; }
-          th { border-width: 2px; background-color: #f2f2f2; font-weight: bold; text-transform: uppercase; font-size: 9pt; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 8pt; table-layout: auto; }
+          th, td { border: 1px solid black; padding: 4px 3px; line-height: 1.1; vertical-align: top; }
+          th { border-width: 1.5px; background-color: #f2f2f2; font-weight: bold; text-transform: uppercase; font-size: 8pt; }
           
           /* Smart Column Distribution */
           .col-hash { width: 1%; white-space: nowrap; text-align: center; }
@@ -78,12 +80,12 @@ export const printChallanV2 = (order: Order, products: Product[], customer?: Cus
           .col-disc { width: 1%; white-space: nowrap; text-align: right; }
           .col-total { width: 1%; white-space: nowrap; text-align: right; font-weight: bold; }
           
-          .totals { margin-top: auto; margin-bottom: 30px; font-size: 11pt; }
-          .totals div { margin-bottom: 8px; }
-          .grand-total { font-size: 16pt; font-weight: bold; margin-top: 10px; border-top: 1px solid #ddd; padding-top: 10px; }
+          .totals { margin-top: auto; margin-bottom: 10px; font-size: 9pt; }
+          .totals div { margin-bottom: 4px; }
+          .grand-total { font-size: 11pt; font-weight: bold; margin-top: 4px; border-top: 1px solid #000; padding-top: 4px; }
           
-          .signatures { display: flex; justify-content: space-between; margin-top: 20px; font-size: 11pt; padding-bottom: 20px; }
-          .signatures div { border-top: 1px solid black; padding-top: 10px; width: 45%; }
+          .signatures { display: flex; justify-content: space-between; margin-top: 10px; font-size: 9pt; padding-bottom: 5px; }
+          .signatures div { border-top: 1.5px solid black; padding-top: 4px; width: 45%; }
         </style>
       </head>
       <body>
