@@ -66,12 +66,13 @@ export const ChallanPrint: React.FC<ChallanPrintProps> = ({
   console.log('[ChallanPrint] Calculated subtotal:', subtotal, 'grandTotal:', grandTotal);
 
   // Dimension styles based on orientation - FIXED for A5 (148mm x 210mm)
+  // Using slightly smaller height (200mm) to ensure containment within physical A5 page
   const pageStyle = currentOrientation === 'portrait' ? {
     width: '148mm',
-    minHeight: '210mm',
+    height: '200mm', // Fixed height instead of minHeight to prevent overflow
   } : {
     width: '210mm',
-    minHeight: '148mm',
+    height: '138mm',
   };
 
   const containerStyle = {
@@ -264,8 +265,8 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
   const copiesCount = (paymentMode === 'cheque' || paymentMode === 'credit') ? 2 : 1;
 
   const pageSize = orientation === 'portrait'
-    ? { width: '148mm', height: '210mm' }
-    : { width: '210mm', height: '148mm' };
+    ? { width: '140mm', height: '190mm' } // Significantly safer margins for A5
+    : { width: '200mm', height: '138mm' };
 
   // Generate the challan HTML for each copy
   const challansHtml = Array.from({ length: copiesCount }).map((_, i) => {
@@ -388,12 +389,12 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
           .container {
             width: 100%;
             height: 100%;
-            min-height: calc(${pageSize.height} - 10mm);
-            padding: 5mm;
+            padding: 4mm;
             border: 2px solid black;
             position: relative;
             display: flex;
             flex-direction: column;
+            overflow: hidden; /* Prevent content leaking */
           }
           .header { text-align: center; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 2px solid black; }
           .header h1 { margin: 0; font-size: 14pt; font-weight: bold; }
@@ -425,11 +426,11 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
           .col-disc { width: 1%; white-space: nowrap; text-align: right; }
           .col-total { width: 1%; white-space: nowrap; text-align: right; font-weight: bold; }
           
-          .totals { margin-top: auto; margin-bottom: 15px; font-size: 9pt; }
-          .totals div { margin-bottom: 4px; }
-          .grand-total { font-size: 12pt; font-weight: bold; margin-top: 8px; border-top: 1px solid #ddd; padding-top: 6px; }
-          .signatures { display: flex; justify-content: space-between; margin-top: 10px; font-size: 9pt; padding-bottom: 10px; }
-          .signatures div { border-top: 1px solid black; padding-top: 6px; width: 45%; }
+          .totals { margin-top: auto; margin-bottom: 10px; font-size: 9pt; }
+          .totals div { margin-bottom: 2px; }
+          .grand-total { font-size: 11pt; font-weight: bold; margin-top: 4px; border-top: 1px solid #000; padding-top: 4px; }
+          .signatures { display: flex; justify-content: space-between; margin-top: 10px; font-size: 9pt; padding-bottom: 5px; }
+          .signatures div { border-top: 1.5px solid black; padding-top: 4px; width: 45%; }
         </style>
       </head>
       <body>
@@ -460,8 +461,8 @@ export const printChallans = (
   }
 
   const pageSize = orientation === 'portrait'
-    ? { width: '148mm', height: '210mm' }
-    : { width: '210mm', height: '148mm' };
+    ? { width: '140mm', height: '195mm' }
+    : { width: '200mm', height: '138mm' };
 
   const challanHtml = (orders || []).flatMap(order => {
     const paymentMode = ((order as any).paymentMethod || order.paymentMode || 'Cash').toLowerCase();
@@ -615,12 +616,12 @@ export const printChallans = (
           .container {
             width: 100%;
             height: 100%;
-            min-height: calc(${pageSize.height} - 10mm);
-            padding: 5mm;
+            padding: 4mm;
             border: 2px solid black;
             position: relative;
             display: flex;
             flex-direction: column;
+            overflow: hidden;
           }
           
           .header { text-align: center; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 2px solid black; }
@@ -656,12 +657,12 @@ export const printChallans = (
           .col-disc { width: 1%; white-space: nowrap; text-align: right; }
           .col-total { width: 1%; white-space: nowrap; text-align: right; font-weight: bold; }
           
-          .totals { margin-top: auto; margin-bottom: 15px; font-size: 9pt; }
-          .totals div { margin-bottom: 4px; }
-          .grand-total { font-size: 12pt; font-weight: bold; margin-top: 8px; border-top: 1px solid #ddd; padding-top: 6px; }
+          .totals { margin-top: auto; margin-bottom: 10px; font-size: 9pt; }
+          .totals div { margin-bottom: 2px; }
+          .grand-total { font-size: 11pt; font-weight: bold; margin-top: 4px; border-top: 1px solid #000; padding-top: 4px; }
           
-          .signatures { display: flex; justify-content: space-between; margin-top: 10px; font-size: 9pt; padding-bottom: 10px; }
-          .signatures div { border-top: 1px solid black; padding-top: 6px; width: 45%; }
+          .signatures { display: flex; justify-content: space-between; margin-top: 10px; font-size: 9pt; padding-bottom: 5px; }
+          .signatures div { border-top: 1.5px solid black; padding-top: 4px; width: 45%; }
         </style>
       </head>
       <body>
