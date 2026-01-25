@@ -161,6 +161,12 @@ export const ReportFilters: React.FC<ReportFiltersProps> = ({ filters, setFilter
               >
                 All
               </button>
+              <button
+                onClick={() => toggleEmployee('office')}
+                className={`px-3 py-1 text-xs rounded-full border ${filters.employeeIds.includes('office') ? 'bg-indigo-100 text-indigo-800 border-indigo-200' : 'bg-white text-gray-600 border-gray-300'}`}
+              >
+                Office / Direct
+              </button>
               {employees.map(e => (
                 <button
                   key={e.id}

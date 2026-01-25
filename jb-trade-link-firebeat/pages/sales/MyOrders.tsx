@@ -258,6 +258,7 @@ export const MyOrders: React.FC = () => {
                         <Select
                             options={[
                                 { label: 'All Salespeople', value: 'all' },
+                                { label: 'Office / Direct', value: 'office' },
                                 ...users.map(u => ({ label: u.name, value: u.id }))
                             ]}
                             value={salespersonFilter}

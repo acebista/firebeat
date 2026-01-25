@@ -26,8 +26,12 @@ export const SalesPrintChallans: React.FC = () => {
 
         setLoading(true);
         try {
+            // Determine the salesperson ID to filter by
+            // Admins should see all orders (including 'office') for printing, sales see only theirs
+            const targetUserId = user.role === 'admin' ? 'all' : user.id;
+
             // Get orders, customers, and users
-            const allOrders = await OrderService.getOrdersFiltered(selectedDate, selectedDate, user.id);
+            const allOrders = await OrderService.getOrdersFiltered(selectedDate, selectedDate, targetUserId);
 
             // Filter non-cancelled orders AND exclude rescheduled orders (they belong to a different day/salesperson)
             const validOrders = allOrders.filter(o => o.status !== 'cancelled' && !o.rescheduled_from);
@@ -197,6 +201,11 @@ export const SalesPrintChallans: React.FC = () => {
                                             <p className="font-medium text-gray-900">{order.customerName}</p>
                                             <p className="text-sm text-gray-500">
                                                 #{order.id} • {order.totalItems} items
+                                                {user?.role === 'admin' && (
+                                                    <span className="ml-2 text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase">
+                                                        {order.salespersonName || 'Office'}
+                                                    </span>
+                                                )}
                                             </p>
                                         </div>
                                     </div>
