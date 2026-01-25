@@ -353,8 +353,8 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
             </div>
 
             <div class="signatures">
-              <div>For J.B. Trade Link: <br/>_______________________</div>
-              <div>Customer Signature: <br/>_______________________</div>
+              <div>For J.B. Trade Link</div>
+              <div>Customer Signature</div>
             </div>
           </div>
         </div>
@@ -385,14 +385,14 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
             width: 100%;
             height: 100%;
             background: white;
-            padding: 0; 
+            padding: 5mm; /* Essential safety margin to prevent border clipping */
             display: block;
             box-sizing: border-box;
           }
           .container {
             width: 100%;
             height: 100%;
-            padding: 5mm;
+            padding: 6mm;
             border: 2px solid black;
             position: relative;
             display: flex;
@@ -430,11 +430,11 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
           .col-disc { width: 1%; white-space: nowrap; text-align: right; }
           .col-total { width: 1%; white-space: nowrap; text-align: right; font-weight: bold; }
           
-          .totals { margin-top: auto; margin-bottom: 10px; font-size: 9pt; }
-          .totals div { margin-bottom: 2px; }
-          .grand-total { font-size: 11pt; font-weight: bold; margin-top: 4px; border-top: 1px solid #000; padding-top: 4px; }
-          .signatures { display: flex; justify-content: space-between; margin-top: 10px; font-size: 9pt; padding-bottom: 5px; }
-          .signatures div { border-top: 1.5px solid black; padding-top: 4px; width: 45%; }
+          .totals { margin-top: auto; margin-bottom: 20px; font-size: 10pt; }
+          .totals div { margin-bottom: 5px; }
+          .grand-total { font-size: 13pt; font-weight: bold; margin-top: 10px; border-top: 2px solid black; padding-top: 8px; }
+          .signatures { display: flex; justify-content: space-between; margin-top: 10px; font-size: 10pt; padding-bottom: 10px; }
+          .signatures div { border-top: 1.5px solid black; padding-top: 6px; width: 40%; text-align: center; }
         </style>
       </head>
       <body>
@@ -579,8 +579,8 @@ export const printChallans = (
               </div>
 
               <div class="signatures">
-                <div>For J.B. Trade Link: <br/>_______________________</div>
-                <div>Customer Signature: <br/>_______________________</div>
+                <div>For J.B. Trade Link</div>
+                <div>Customer Signature</div>
               </div>
             </div>
           </div>
@@ -620,14 +620,14 @@ export const printChallans = (
             width: 100%; 
             height: 100%; 
             background: white; 
-            padding: 0; 
+            padding: 5mm; 
             display: block;
             box-sizing: border-box;
           }
           .container {
             width: 100%;
             height: 100%;
-            padding: 5mm;
+            padding: 6mm;
             border: 2px solid black;
             position: relative;
             display: flex;
@@ -669,12 +669,12 @@ export const printChallans = (
           .col-disc { width: 1%; white-space: nowrap; text-align: right; }
           .col-total { width: 1%; white-space: nowrap; text-align: right; font-weight: bold; }
           
-          .totals { margin-top: auto; margin-bottom: 10px; font-size: 9pt; }
-          .totals div { margin-bottom: 2px; }
-          .grand-total { font-size: 11pt; font-weight: bold; margin-top: 4px; border-top: 1px solid #000; padding-top: 4px; }
+          .totals { margin-top: auto; margin-bottom: 20px; font-size: 10pt; }
+          .totals div { margin-bottom: 5px; }
+          .grand-total { font-size: 13pt; font-weight: bold; margin-top: 10px; border-top: 2px solid black; padding-top: 8px; }
           
-          .signatures { display: flex; justify-content: space-between; margin-top: 10px; font-size: 9pt; padding-bottom: 5px; }
-          .signatures div { border-top: 1.5px solid black; padding-top: 4px; width: 45%; }
+          .signatures { display: flex; justify-content: space-between; margin-top: 10px; font-size: 10pt; padding-bottom: 10px; }
+          .signatures div { border-top: 1.5px solid black; padding-top: 6px; width: 40%; text-align: center; }
         </style>
       </head>
       <body>
