@@ -132,7 +132,7 @@ export const ChallanReport: React.FC<{ data: ChallanValidationRow[] }> = ({ data
                 ? 'bg-indigo-600 text-white'
                 : 'bg-white text-gray-700 hover:bg-gray-100'
                 }`}
-              title="Portrait (210mm × 297mm)"
+              title="Portrait (148mm × 210mm)"
             >
               <LayoutIcon className="h-4 w-4" />
               Portrait
@@ -143,7 +143,7 @@ export const ChallanReport: React.FC<{ data: ChallanValidationRow[] }> = ({ data
                 ? 'bg-indigo-600 text-white'
                 : 'bg-white text-gray-700 hover:bg-gray-100'
                 }`}
-              title="Landscape (297mm × 210mm)"
+              title="Landscape (210mm × 148mm)"
             >
               <LayoutIcon className="h-4 w-4 rotate-90" />
               Landscape

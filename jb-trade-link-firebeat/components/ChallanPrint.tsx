@@ -65,23 +65,23 @@ export const ChallanPrint: React.FC<ChallanPrintProps> = ({
 
   console.log('[ChallanPrint] Calculated subtotal:', subtotal, 'grandTotal:', grandTotal);
 
-  // Dimension styles based on orientation
+  // Dimension styles based on orientation - FIXED for A5 (148mm x 210mm)
   const pageStyle = currentOrientation === 'portrait' ? {
-    width: '210mm',
-    minHeight: '297mm',
-  } : {
-    width: '297mm',
+    width: '148mm',
     minHeight: '210mm',
+  } : {
+    width: '210mm',
+    minHeight: '148mm',
   };
 
   const containerStyle = {
     ...pageStyle,
-    padding: '15mm',
+    padding: '8mm', // Reduced padding for A5
     fontFamily: 'Arial, sans-serif',
-    fontSize: '11pt',
+    fontSize: '9pt', // Scaled down globally
     backgroundColor: 'white',
     position: 'relative' as const,
-    border: '3px solid black'
+    border: '2px solid black'
   };
 
   const headerStyle = {
@@ -94,8 +94,8 @@ export const ChallanPrint: React.FC<ChallanPrintProps> = ({
 
   const qrContainerStyle = {
     position: 'absolute' as const,
-    top: '15mm',
-    right: '15mm',
+    top: '8mm',
+    right: '8mm',
     display: 'flex',
     flexDirection: 'column' as const,
     alignItems: 'center',
@@ -110,40 +110,40 @@ export const ChallanPrint: React.FC<ChallanPrintProps> = ({
           <img
             src={qrCodeUrl}
             alt="Location QR Code"
-            style={{ width: '120px', height: '120px', border: '1px solid #ccc' }}
+            style={{ width: '80px', height: '80px', border: '1px solid #ccc' }}
           />
-          <small style={{ fontSize: '8pt', textAlign: 'center' }}>Customer Location</small>
+          <small style={{ fontSize: '7pt', textAlign: 'center' }}>Customer Location</small>
         </div>
       )}
 
       {/* Header */}
       <div style={headerStyle}>
-        <h1 style={{ margin: '0 0 5px 0', fontSize: '18pt', fontWeight: 'bold' }}>J.B Trade Link Pvt. Ltd.</h1>
-        <h2 style={{ margin: '0 0 5px 0', fontSize: '14pt', fontWeight: 'normal' }}>Delivery Challan</h2>
-        <p style={{ margin: '5px 0', fontSize: '10pt' }}>Phone: 9802379658</p>
-        <p style={{ margin: '5px 0', fontSize: '10pt', fontWeight: 'bold' }}>Customer Copy</p>
+        <h1 style={{ margin: '0 0 3px 0', fontSize: '14pt', fontWeight: 'bold' }}>J.B Trade Link Pvt. Ltd.</h1>
+        <h2 style={{ margin: '0 0 3px 0', fontSize: '11pt', fontWeight: 'normal' }}>Delivery Challan</h2>
+        <p style={{ margin: '3px 0', fontSize: '9pt' }}>Phone: 9802379658</p>
+        <p style={{ margin: '3px 0', fontSize: '9pt', fontWeight: 'bold' }}>Customer Copy</p>
       </div>
 
       {/* Invoice Details */}
-      <div style={{ marginBottom: '15px', fontSize: '11pt' }}>
-        <div style={{ marginBottom: '5px' }}>
+      <div style={{ marginBottom: '10px', fontSize: '9pt' }}>
+        <div style={{ marginBottom: '3px' }}>
           <strong>Invoice No:</strong> {order.id}
         </div>
-        <div style={{ marginBottom: '5px' }}>
+        <div style={{ marginBottom: '3px' }}>
           <strong>Salesman:</strong> {order.salespersonName} &nbsp;&nbsp;&nbsp;
           <strong>Phone:</strong> {order.salespersonPhone || 'N/A'}
         </div>
-        <div style={{ marginBottom: '5px' }}>
+        <div style={{ marginBottom: '3px' }}>
           <strong>Customer Name:</strong> {order.customerName} &nbsp;&nbsp;&nbsp;
           <strong>Phone:</strong> {order.customerPhone || 'N/A'}
         </div>
-        <div style={{ marginBottom: '5px' }}>
+        <div style={{ marginBottom: '3px' }}>
           <strong>PAN Number:</strong> {order.customerPAN || 'N/A'}
         </div>
-        <div style={{ marginBottom: '5px' }}>
+        <div style={{ marginBottom: '3px' }}>
           <strong>Payment Mode:</strong> {(order as any).paymentMethod || order.paymentMode || 'Cash'}
         </div>
-        <div style={{ marginBottom: '10px' }}>
+        <div style={{ marginBottom: '8px' }}>
           <strong>Products Sold:</strong>
         </div>
       </div>
@@ -152,8 +152,8 @@ export const ChallanPrint: React.FC<ChallanPrintProps> = ({
       <table style={{
         width: '100%',
         borderCollapse: 'collapse',
-        marginBottom: '20px',
-        fontSize: '10pt'
+        marginBottom: '10px',
+        fontSize: '8pt'
       }}>
         <thead>
           <tr style={{ backgroundColor: '#f0f0f0' }}>
@@ -203,23 +203,23 @@ export const ChallanPrint: React.FC<ChallanPrintProps> = ({
       </table>
 
       {/* Totals */}
-      <div style={{ marginBottom: '30px', fontSize: '11pt' }}>
-        <div style={{ marginBottom: '8px' }}>
+      <div style={{ marginBottom: '20px', fontSize: '9pt' }}>
+        <div style={{ marginBottom: '5px' }}>
           <strong>Sub Total: Rs. {subtotal.toFixed(2)}</strong>
         </div>
         {discountAmount > 0 && (
-          <div style={{ marginBottom: '8px' }}>
+          <div style={{ marginBottom: '5px' }}>
             <strong>Discount ({discountPct}%): Rs. {discountAmount.toFixed(2)}</strong>
           </div>
         )}
-        <div style={{ fontSize: '14pt', fontWeight: 'bold', marginTop: '10px' }}>
+        <div style={{ fontSize: '12pt', fontWeight: 'bold', marginTop: '8px' }}>
           Grand Total: Rs. {grandTotal.toFixed(2)}
         </div>
       </div>
 
       {/* Signatures */}
-      <div style={{ marginTop: '50px', fontSize: '11pt' }}>
-        <div style={{ marginBottom: '50px' }}>
+      <div style={{ marginTop: '30px', fontSize: '9pt' }}>
+        <div style={{ marginBottom: '40px' }}>
           For J.B. Trade Link: _______________________
         </div>
         <div>
@@ -264,8 +264,8 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
   const copiesCount = (paymentMode === 'cheque' || paymentMode === 'credit') ? 2 : 1;
 
   const pageSize = orientation === 'portrait'
-    ? { width: '210mm', height: '297mm' }
-    : { width: '297mm', height: '210mm' };
+    ? { width: '148mm', height: '210mm' }
+    : { width: '210mm', height: '148mm' };
 
   // Generate the challan HTML for each copy
   const challansHtml = Array.from({ length: copiesCount }).map((_, i) => {
@@ -275,7 +275,7 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
           <div class="container">
             ${qrUrl ? `
               <div class="qr-container">
-                <img src="${qrUrl}" alt="Location QR Code" style="width: 120px; height: 120px;" />
+                <img src="${qrUrl}" alt="Location QR Code" style="width: 80px; height: 80px;" />
                 <span class="qr-label">Customer Location</span>
               </div>
             ` : ''}
@@ -351,8 +351,8 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
             </div>
 
             <div class="signatures">
-              <div>For J.B. Trade Link: _______________________</div>
-              <div>Customer Signature: _______________________</div>
+              <div>For J.B. Trade Link: <br/>_______________________</div>
+              <div>Customer Signature: <br/>_______________________</div>
             </div>
           </div>
         </div>
@@ -367,7 +367,7 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
           * { margin: 0; padding: 0; box-sizing: border-box; }
           @media print {
             @page {
-              size: ${orientation === 'portrait' ? 'A4 portrait' : 'A4 landscape'};
+              size: ${orientation === 'portrait' ? 'A5 portrait' : 'A5 landscape'};
               margin: 0;
             }
             body { margin: 0; padding: 0; }
@@ -376,45 +376,45 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
           }
           body { 
             font-family: Arial, sans-serif; 
-            font-size: 11pt;
+            font-size: 9pt;
             background: white;
           }
           .challan-wrapper {
             width: ${pageSize.width};
             min-height: ${pageSize.height};
             background: white;
-            padding: 10mm; /* Outer buffer for printer margins */
+            padding: 5mm; /* Reduced outer buffer for A5 */
           }
           .container {
             width: 100%;
             height: 100%;
-            min-height: calc(${pageSize.height} - 20mm);
-            padding: 10mm;
-            border: 3px solid black;
+            min-height: calc(${pageSize.height} - 10mm);
+            padding: 5mm;
+            border: 2px solid black;
             position: relative;
             display: flex;
             flex-direction: column;
           }
-          .header { text-align: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid black; }
-          .header h1 { margin: 0; font-size: 20pt; font-weight: bold; }
-          .header h2 { margin: 5px 0; font-size: 14pt; font-weight: normal; }
-          .header p { margin: 5px 0; font-size: 10pt; }
+          .header { text-align: center; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 2px solid black; }
+          .header h1 { margin: 0; font-size: 14pt; font-weight: bold; }
+          .header h2 { margin: 3px 0; font-size: 11pt; font-weight: normal; }
+          .header p { margin: 3px 0; font-size: 8pt; }
           .qr-container { 
             position: absolute; 
-            top: 10mm; 
-            right: 10mm; 
+            top: 5mm; 
+            right: 5mm; 
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 4px;
+            gap: 2px;
           }
-          .qr-label { font-size: 8pt; text-align: center; }
-          .details { margin-bottom: 20px; font-size: 11pt; }
-          .details div { margin-bottom: 6px; }
+          .qr-label { font-size: 7pt; text-align: center; }
+          .details { margin-bottom: 12px; font-size: 9pt; }
+          .details div { margin-bottom: 3px; }
           
-          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 10pt; table-layout: auto; }
-          th, td { border: 1px solid black; padding: 8px 6px; line-height: 1.2; vertical-align: top; }
-          th { border-width: 2px; background-color: #f2f2f2; font-weight: bold; text-transform: uppercase; font-size: 9pt; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 8pt; table-layout: auto; }
+          th, td { border: 1px solid black; padding: 4px 3px; line-height: 1.1; vertical-align: top; }
+          th { border-width: 1.5px; background-color: #f2f2f2; font-weight: bold; text-transform: uppercase; font-size: 8pt; }
           
           /* Smart Column Distribution */
           .col-hash { width: 1%; white-space: nowrap; text-align: center; }
@@ -425,11 +425,11 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
           .col-disc { width: 1%; white-space: nowrap; text-align: right; }
           .col-total { width: 1%; white-space: nowrap; text-align: right; font-weight: bold; }
           
-          .totals { margin-top: auto; margin-bottom: 30px; font-size: 11pt; }
-          .totals div { margin-bottom: 8px; }
-          .grand-total { font-size: 16pt; font-weight: bold; margin-top: 10px; border-top: 1px solid #ddd; padding-top: 10px; }
-          .signatures { display: flex; justify-content: space-between; margin-top: 20px; font-size: 11pt; padding-bottom: 20px; }
-          .signatures div { border-top: 1px solid black; padding-top: 10px; width: 45%; }
+          .totals { margin-top: auto; margin-bottom: 15px; font-size: 9pt; }
+          .totals div { margin-bottom: 4px; }
+          .grand-total { font-size: 12pt; font-weight: bold; margin-top: 8px; border-top: 1px solid #ddd; padding-top: 6px; }
+          .signatures { display: flex; justify-content: space-between; margin-top: 10px; font-size: 9pt; padding-bottom: 10px; }
+          .signatures div { border-top: 1px solid black; padding-top: 6px; width: 45%; }
         </style>
       </head>
       <body>
@@ -460,8 +460,8 @@ export const printChallans = (
   }
 
   const pageSize = orientation === 'portrait'
-    ? { width: '210mm', height: '297mm' }
-    : { width: '297mm', height: '210mm' };
+    ? { width: '148mm', height: '210mm' }
+    : { width: '210mm', height: '148mm' };
 
   const challanHtml = (orders || []).flatMap(order => {
     const paymentMode = ((order as any).paymentMethod || order.paymentMode || 'Cash').toLowerCase();
@@ -498,7 +498,7 @@ export const printChallans = (
             <div class="container">
               ${qrUrl ? `
                 <div class="qr-container">
-                  <img src="${qrUrl}" alt="Location QR Code" />
+                  <img src="${qrUrl}" alt="Location QR Code" style="width: 80px; height: 80px;" />
                   <span class="qr-label">Customer Location</span>
                 </div>
               ` : ''}
@@ -574,8 +574,8 @@ export const printChallans = (
               </div>
 
               <div class="signatures">
-                <div>For J.B. Trade Link: _______________________</div>
-                <div>Customer Signature: _______________________</div>
+                <div>For J.B. Trade Link: <br/>_______________________</div>
+                <div>Customer Signature: <br/>_______________________</div>
               </div>
             </div>
           </div>
@@ -592,7 +592,7 @@ export const printChallans = (
           
           @media print {
             @page { 
-              size: ${orientation === 'portrait' ? 'A4 portrait' : 'A4 landscape'};
+              size: ${orientation === 'portrait' ? 'A5 portrait' : 'A5 landscape'};
               margin: 0;
             }
             body { margin: 0; padding: 0; }
@@ -610,42 +610,42 @@ export const printChallans = (
             .challan-page { margin-bottom: 20px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
           }
           
-          body { font-family: Arial, sans-serif; font-size: 11pt; background: white; }
-          .challan-page { width: ${pageSize.width}; min-height: ${pageSize.height}; background: white; padding: 10mm; }
+          body { font-family: Arial, sans-serif; font-size: 9pt; background: white; }
+          .challan-page { width: ${pageSize.width}; min-height: ${pageSize.height}; background: white; padding: 5mm; }
           .container {
             width: 100%;
             height: 100%;
-            min-height: calc(${pageSize.height} - 20mm);
-            padding: 10mm;
-            border: 3px solid black;
+            min-height: calc(${pageSize.height} - 10mm);
+            padding: 5mm;
+            border: 2px solid black;
             position: relative;
             display: flex;
             flex-direction: column;
           }
           
-          .header { text-align: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid black; }
-          .header h1 { margin: 0; font-size: 20pt; font-weight: bold; }
-          .header h2 { margin: 5px 0; font-size: 14pt; font-weight: normal; }
-          .header p { margin: 5px 0; font-size: 10pt; }
+          .header { text-align: center; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 2px solid black; }
+          .header h1 { margin: 0; font-size: 14pt; font-weight: bold; }
+          .header h2 { margin: 3px 0; font-size: 11pt; font-weight: normal; }
+          .header p { margin: 3px 0; font-size: 8pt; }
           
           .qr-container { 
             position: absolute; 
-            top: 10mm; 
-            right: 10mm; 
+            top: 5mm; 
+            right: 5mm; 
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 4px;
+            gap: 2px;
           }
-          .qr-container img { width: 120px; height: 120px; border: 1px solid #ccc; }
-          .qr-label { font-size: 8pt; text-align: center; }
+          .qr-container img { width: 80px; height: 80px; border: 1px solid #ccc; }
+          .qr-label { font-size: 7pt; text-align: center; }
           
-          .details { margin-bottom: 20px; font-size: 11pt; }
-          .details div { margin-bottom: 6px; }
+          .details { margin-bottom: 12px; font-size: 9pt; }
+          .details div { margin-bottom: 3px; }
           
-          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 10pt; table-layout: auto; }
-          th, td { border: 1px solid black; padding: 8px 6px; line-height: 1.2; vertical-align: top; }
-          th { border-width: 2px; background-color: #f2f2f2; font-weight: bold; text-transform: uppercase; font-size: 9pt; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 8pt; table-layout: auto; }
+          th, td { border: 1px solid black; padding: 4px 3px; line-height: 1.1; vertical-align: top; }
+          th { border-width: 1.5px; background-color: #f2f2f2; font-weight: bold; text-transform: uppercase; font-size: 8pt; }
           
           /* Smart Column Distribution */
           .col-hash { width: 1%; white-space: nowrap; text-align: center; }
@@ -656,12 +656,12 @@ export const printChallans = (
           .col-disc { width: 1%; white-space: nowrap; text-align: right; }
           .col-total { width: 1%; white-space: nowrap; text-align: right; font-weight: bold; }
           
-          .totals { margin-top: auto; margin-bottom: 30px; font-size: 11pt; }
-          .totals div { margin-bottom: 8px; }
-          .grand-total { font-size: 16pt; font-weight: bold; margin-top: 10px; border-top: 1px solid #ddd; padding-top: 10px; }
+          .totals { margin-top: auto; margin-bottom: 15px; font-size: 9pt; }
+          .totals div { margin-bottom: 4px; }
+          .grand-total { font-size: 12pt; font-weight: bold; margin-top: 8px; border-top: 1px solid #ddd; padding-top: 6px; }
           
-          .signatures { display: flex; justify-content: space-between; margin-top: 20px; font-size: 11pt; padding-bottom: 20px; }
-          .signatures div { border-top: 1px solid black; padding-top: 10px; width: 45%; }
+          .signatures { display: flex; justify-content: space-between; margin-top: 10px; font-size: 9pt; padding-bottom: 10px; }
+          .signatures div { border-top: 1px solid black; padding-top: 6px; width: 45%; }
         </style>
       </head>
       <body>

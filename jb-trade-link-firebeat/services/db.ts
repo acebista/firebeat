@@ -136,7 +136,7 @@ export const ProductService = {
 };
 
 export const CustomerService = {
-  getAll: () => fetchCollection<Customer>(COLS.CUSTOMERS),
+  getAll: () => CustomerService.getAllRecursively(),
   // New method to fetch ALL customers recursively (bypassing 1000 row limit)
   getAllRecursively: async (): Promise<Customer[]> => {
     let from = 0;

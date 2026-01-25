@@ -216,9 +216,9 @@ export const SalesPrintChallans: React.FC = () => {
                 <Card className="p-4 bg-blue-50 border-blue-200">
                     <h4 className="font-medium text-blue-900 mb-2">📋 Print Tips</h4>
                     <ul className="text-sm text-blue-700 space-y-1">
-                        <li>• The challan will be printed in portrait mode for better readability</li>
+                        <li>• The challan is optimized for **A5 size** paper</li>
                         <li>• Each order will be printed on a separate page</li>
-                        <li>• Make sure your printer settings are set to "Fit to Page" for best results</li>
+                        <li>• Set your printer settings to **A5 paper size** and "Fit to Page"</li>
                     </ul>
                 </Card>
             )}

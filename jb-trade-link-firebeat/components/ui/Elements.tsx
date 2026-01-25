@@ -247,15 +247,22 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
       {isOpen && !disabled && (
         <div className="absolute z-50 mt-2 w-full rounded-lg bg-white shadow-lg border border-slate-200 max-h-64 overflow-auto py-1 text-sm">
           {filteredOptions.length > 0 ? (
-            filteredOptions.map((option) => (
-              <div
-                key={option.value}
-                className={`cursor-pointer px-4 py-2.5 transition-colors duration-150 ${option.value === value ? 'bg-blue-50 font-semibold text-blue-700 border-l-3 border-blue-600' : 'text-slate-900 hover:bg-slate-50'}`}
-                onClick={() => handleSelect(option.value)}
-              >
-                {option.label}
-              </div>
-            ))
+            <>
+              {filteredOptions.slice(0, 100).map((option) => (
+                <div
+                  key={option.value}
+                  className={`cursor-pointer px-4 py-2.5 transition-colors duration-150 ${option.value === value ? 'bg-blue-50 font-semibold text-blue-700 border-l-3 border-blue-600' : 'text-slate-900 hover:bg-slate-50'}`}
+                  onClick={() => handleSelect(option.value)}
+                >
+                  {option.label}
+                </div>
+              ))}
+              {filteredOptions.length > 100 && (
+                <div className="px-4 py-2 text-xs text-slate-500 bg-slate-50 border-t italic text-center">
+                  Showing first 100 of {filteredOptions.length} matches. Please type to refine.
+                </div>
+              )}
+            </>
           ) : (
             <div className="px-4 py-3 text-slate-500 italic text-center">No matches found</div>
           )}
