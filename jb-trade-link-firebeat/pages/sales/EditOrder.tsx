@@ -20,6 +20,7 @@ export const EditOrder: React.FC = () => {
     const [salespersons, setSalespersons] = useState<Salesperson[]>([]);
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [loadingData, setLoadingData] = useState(true);
+    const [loadingCustomers, setLoadingCustomers] = useState(true);
 
     // UI State
     const [searchTerm, setSearchTerm] = useState('');
@@ -93,31 +94,30 @@ export const EditOrder: React.FC = () => {
     // Load Data
     useEffect(() => {
         const loadAll = async () => {
-            setLoadingData(true);
             try {
-                const [prods, comps, custs, users] = await Promise.all([
+                console.log('[EditOrder] Loading core data...');
+                const [prods, comps, users] = await Promise.all([
                     ProductService.getAll(),
                     CompanyService.getAll(),
-                    CustomerService.getAll(),
                     UserService.getAll()
                 ]);
                 setProducts(prods);
                 setCompanies(comps);
-                setCustomers(custs);
                 setSalespersons(users.filter(u => u.role === 'sales').map(u => ({ id: u.id, name: u.name })));
+
+                // Allow core UI to render
+                setLoadingData(false);
 
                 // Load Order Data if ID exists
                 if (id) {
                     const order = await OrderService.getById(id);
                     if (order) {
-                        // ACCESS CONTROL: Check if user can edit this order
+                        // ACCESS CONTROL Check...
                         const today = new Date().toISOString().split('T')[0];
-                        const canEdit =
-                            order.date === today &&
-                            (user?.role === 'admin' || order.salespersonId === user?.id);
+                        const canEdit = order.date === today && (user?.role === 'admin' || order.salespersonId === user?.id);
 
                         if (!canEdit) {
-                            toast.error('You do not have permission to edit this order. Orders can only be edited on the same day they were created.');
+                            toast.error('You do not have permission to edit this order.');
                             navigate('/sales/orders');
                             return;
                         }
@@ -128,29 +128,28 @@ export const EditOrder: React.FC = () => {
                         if (order.paymentMethod || order.paymentMode) setPaymentMode((order.paymentMethod || order.paymentMode) as any);
                         if (order.vat_required !== undefined) setVatRequired(order.vat_required);
 
-                        // Calculate discount pct from amount if needed
                         const subTotal = order.items.reduce((sum: number, i: any) => sum + (i.total || 0), 0);
-                        if (subTotal > 0 && order.discount) {
-                            setOrderDiscountPct((order.discount / subTotal) * 100);
-                        }
+                        if (subTotal > 0 && order.discount) setOrderDiscountPct((order.discount / subTotal) * 100);
 
-                        // Set company based on first item
                         if (order.items.length > 0) {
                             const firstProd = prods.find(p => p.id === order.items[0].productId);
                             if (firstProd) setSelectedCompany(firstProd.companyId);
                         }
-                    } else {
-                        toast.error('Order not found');
-                        navigate('/sales/orders');
                     }
                 }
 
+                // Background load customers
+                console.log('[EditOrder] Loading customers in background...');
+                setLoadingCustomers(true);
+                const custs = await CustomerService.getAll();
+                setCustomers(custs);
             } catch (e) {
                 console.error(e);
                 toast.error("Failed to load order data");
                 navigate('/sales/orders');
             } finally {
                 setLoadingData(false);
+                setLoadingCustomers(false);
             }
         };
         loadAll();
@@ -542,10 +541,11 @@ export const EditOrder: React.FC = () => {
                                 <div className="flex-grow">
                                     <SearchableSelect
                                         label="Select Customer"
-                                        placeholder="Search Customer..."
                                         options={customerOptions}
                                         value={selectedCustomer}
                                         onChange={(val) => setSelectedCustomer(val)}
+                                        disabled={loadingCustomers}
+                                        placeholder={loadingCustomers ? "Loading 18,000+ customers..." : "Search Customer..."}
                                     />
                                 </div>
                                 <Button

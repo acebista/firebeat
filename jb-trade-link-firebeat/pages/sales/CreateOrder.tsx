@@ -20,6 +20,7 @@ export const CreateOrder: React.FC = () => {
     const [salespersons, setSalespersons] = useState<Salesperson[]>([]);
     const [customers, setCustomers] = useState<Customer[]>([]);
     const [loadingData, setLoadingData] = useState(true);
+    const [loadingCustomers, setLoadingCustomers] = useState(true);
 
     // UI State
     const [searchTerm, setSearchTerm] = useState('');
@@ -157,21 +158,25 @@ export const CreateOrder: React.FC = () => {
     // Load Data
     useEffect(() => {
         const loadAll = async () => {
-            setLoadingData(true);
             try {
-                console.log('[CreateOrder] Loading data...');
-                const [prods, comps, custs, users] = await Promise.all([
+                console.log('[CreateOrder] Loading core data (products, companies, users)...');
+                const [prods, comps, users] = await Promise.all([
                     ProductService.getAll(),
                     CompanyService.getAll(),
-                    CustomerService.getAll(),
                     UserService.getAll()
                 ]);
-                console.log('[CreateOrder] Data loaded: products=%d, companies=%d, customers=%d, users=%d',
-                    prods.length, comps.length, custs.length, users.length);
+
                 setProducts(prods);
                 setCompanies(comps);
-                setCustomers(custs);
                 setSalespersons(users.filter(u => u.role === 'sales').map(u => ({ id: u.id, name: u.name })));
+                setLoadingData(false); // Core data is ready, let's show the page!
+
+                // Now load customers in background
+                console.log('[CreateOrder] Loading customers in background...');
+                setLoadingCustomers(true);
+                const custs = await CustomerService.getAll();
+                console.log('[CreateOrder] Customers loaded:', custs.length);
+                setCustomers(custs);
             } catch (e: any) {
                 console.error('[CreateOrder] Failed to load data:', e);
                 toast.error(
@@ -183,6 +188,7 @@ export const CreateOrder: React.FC = () => {
                 );
             } finally {
                 setLoadingData(false);
+                setLoadingCustomers(false);
             }
         };
         loadAll();
@@ -1023,10 +1029,11 @@ export const CreateOrder: React.FC = () => {
                             <div className="flex-1">
                                 <SearchableSelect
                                     label=""
-                                    placeholder="Select Customer"
                                     options={customerOptions}
                                     value={selectedCustomer}
                                     onChange={(val) => setSelectedCustomer(val)}
+                                    disabled={loadingCustomers}
+                                    placeholder={loadingCustomers ? "Loading 18,000+ customers..." : "Select Customer"}
                                 />
                             </div>
                             <button

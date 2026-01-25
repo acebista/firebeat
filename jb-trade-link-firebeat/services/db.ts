@@ -139,21 +139,65 @@ export const CustomerService = {
   getAll: () => CustomerService.getAllRecursively(),
   // New method to fetch ALL customers recursively (bypassing 1000 row limit)
   getAllRecursively: async (): Promise<Customer[]> => {
+    const batchSize = 1000;
+
+    try {
+      // 1. Get total count first
+      const { count, error: countError } = await supabase
+        .from(COLS.CUSTOMERS)
+        .select('*', { count: 'exact', head: true });
+
+      if (countError) throw countError;
+
+      const total = count || 0;
+      if (total === 0) return [];
+
+      console.log(`[CustomerService] Fetching ${total} customers in parallel batches...`);
+
+      // 2. Prepare all ranges
+      const ranges: { from: number; to: number }[] = [];
+      for (let i = 0; i < total; i += batchSize) {
+        ranges.push({ from: i, to: Math.min(i + batchSize - 1, total - 1) });
+      }
+
+      // 3. Fetch all batches in parallel (limited by browser/Supabase concurrency)
+      const results = await Promise.all(
+        ranges.map(range =>
+          supabase
+            .from(COLS.CUSTOMERS)
+            .select('*')
+            .range(range.from, range.to)
+            .then(res => {
+              if (res.error) throw res.error;
+              return res.data as Customer[];
+            })
+        )
+      );
+
+      const allCustomers = results.flat();
+      console.log(`[CustomerService] Successfully loaded ${allCustomers.length} customers.`);
+      return allCustomers;
+    } catch (error) {
+      console.error('Error fetching customers in parallel:', error);
+      // Fallback to sequential if something goes wrong with parallel
+      return CustomerService.getAllSequential();
+    }
+  },
+
+  getAllSequential: async (): Promise<Customer[]> => {
     let from = 0;
     const batchSize = 1000;
     let hasMore = true;
     const allCustomers: Customer[] = [];
 
+    console.log('[CustomerService] Falling back to sequential fetch...');
     while (hasMore) {
       const { data, error } = await supabase
         .from(COLS.CUSTOMERS)
         .select('*')
         .range(from, from + batchSize - 1);
 
-      if (error) {
-        console.error('Error fetching all customers recursively:', error);
-        throw error;
-      }
+      if (error) throw error;
 
       if (data && data.length > 0) {
         allCustomers.push(...(data as Customer[]));
