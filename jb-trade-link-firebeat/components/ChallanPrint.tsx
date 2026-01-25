@@ -177,11 +177,11 @@ export const ChallanPrint: React.FC<ChallanPrintProps> = ({
             const hasExplicitBaseRate = item.baseRate !== undefined && item.baseRate !== null && Number(item.baseRate) !== netRate;
             const baseRate = hasExplicitBaseRate ? Number(item.baseRate) : netRate;
 
-            const subtotalAtBase = baseRate * qty;
+            const subtotalAtBase = Number(baseRate.toFixed(2)) * qty;
             const finalTotal = Number(item.total || item.amount) || (qty * netRate);
-            // Only show discount if it's meaningful (> Rs. 1) to avoid floating-point noise
+            // Only show discount if it's meaningful (> Rs. 0.5) to avoid floating-point noise
             const rawDiscount = subtotalAtBase - finalTotal;
-            const itemDiscountAmount = rawDiscount > 1 ? rawDiscount : 0;
+            const itemDiscountAmount = rawDiscount > 0.5 ? rawDiscount : 0;
 
             const productName = item.productName || item.tempProductName || 'undefined';
 
@@ -209,12 +209,18 @@ export const ChallanPrint: React.FC<ChallanPrintProps> = ({
         <div style={{ marginBottom: '5px' }}>
           <strong>Sub Total: Rs. {subtotal.toFixed(2)}</strong>
         </div>
-        {discountAmount > 0 && (
+        {(discountAmount > 0 || (order as any).totalDiscount > 0) && (
           <div style={{ marginBottom: '5px' }}>
-            <strong>Discount ({discountPct}%): Rs. {discountAmount.toFixed(2)}</strong>
+            <strong>Bill Discount: Rs. {(discountAmount || (order as any).totalDiscount || 0).toFixed(2)}</strong>
           </div>
         )}
-        <div style={{ fontSize: '12pt', fontWeight: 'bold', marginTop: '8px' }}>
+        {Math.abs(subtotal - (discountAmount || (order as any).totalDiscount || 0) - grandTotal) > 0.01 &&
+          Math.abs(subtotal - (discountAmount || (order as any).totalDiscount || 0) - grandTotal) < 2 && (
+            <div style={{ marginBottom: '5px', fontSize: '8pt', color: '#666' }}>
+              Rounding: Rs. {(grandTotal - (subtotal - (discountAmount || (order as any).totalDiscount || 0))).toFixed(2)}
+            </div>
+          )}
+        <div style={{ fontSize: '13pt', fontWeight: 'bold', marginTop: '10px', borderTop: '2px solid black', paddingTop: '8px' }}>
           Grand Total: Rs. {grandTotal.toFixed(2)}
         </div>
       </div>
@@ -320,15 +326,14 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
                 ${(orderItems || []).map((item: any, index: number) => {
       const qty = Number(item.qty || item.quantity) || 0;
       const netRate = Number(item.rate || item.price) || 0;
-      // Only use baseRate if it's explicitly set AND different from netRate
+      // Use rounded baseRate for display consistency
       const hasExplicitBaseRate = item.baseRate !== undefined && item.baseRate !== null && Number(item.baseRate) !== netRate;
       const baseRate = hasExplicitBaseRate ? Number(item.baseRate) : netRate;
 
-      const subtotalAtBase = baseRate * qty;
+      const subtotalAtBase = Number(baseRate.toFixed(2)) * qty;
       const finalTotal = Number(item.total || item.amount) || (qty * netRate);
-      // Only show discount if it's meaningful (> Rs. 1) to avoid floating-point noise
       const rawDiscount = subtotalAtBase - finalTotal;
-      const itemDiscountAmount = rawDiscount > 1 ? rawDiscount : 0;
+      const itemDiscountAmount = rawDiscount > 0.5 ? rawDiscount : 0;
 
       const productName = item.productName || item.tempProductName || 'undefined';
       return `
@@ -348,7 +353,11 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
 
             <div class="totals">
               <div><strong>Sub Total: Rs. ${subtotal.toFixed(2)}</strong></div>
-              ${discountAmount > 0 ? `<div><strong>Discount (${discountPct}%): Rs. ${discountAmount.toFixed(2)}</strong></div>` : ''}
+              ${(discountAmount > 0 || (order as any).totalDiscount > 0) ? `<div><strong>Bill Discount: Rs. ${(discountAmount || (order as any).totalDiscount || 0).toFixed(2)}</strong></div>` : ''}
+              ${Math.abs(subtotal - (discountAmount || (order as any).totalDiscount || 0) - grandTotal) > 0.01 &&
+        Math.abs(subtotal - (discountAmount || (order as any).totalDiscount || 0) - grandTotal) < 2
+        ? `<div style="font-size: 8pt; color: #666;">Rounding: Rs. ${(grandTotal - (subtotal - (discountAmount || (order as any).totalDiscount || 0))).toFixed(2)}</div>`
+        : ''}
               <div class="grand-total">Grand Total: Rs. ${grandTotal.toFixed(2)}</div>
             </div>
 
@@ -546,15 +555,14 @@ export const printChallans = (
                   ${(orderItems || []).map((item: any, index: number) => {
         const qty = Number(item.qty || item.quantity) || 0;
         const netRate = Number(item.rate || item.price) || 0;
-        // Only use baseRate if it's explicitly set AND different from netRate
+        // Use rounded baseRate for display consistency
         const hasExplicitBaseRate = item.baseRate !== undefined && item.baseRate !== null && Number(item.baseRate) !== netRate;
         const baseRate = hasExplicitBaseRate ? Number(item.baseRate) : netRate;
 
-        const subtotalAtBase = baseRate * qty;
+        const subtotalAtBase = Number(baseRate.toFixed(2)) * qty;
         const finalTotal = Number(item.total || item.amount) || (qty * netRate);
-        // Only show discount if it's meaningful (> Rs. 1) to avoid floating-point noise
         const rawDiscount = subtotalAtBase - finalTotal;
-        const itemDiscountAmount = rawDiscount > 1 ? rawDiscount : 0;
+        const itemDiscountAmount = rawDiscount > 0.5 ? rawDiscount : 0;
 
         const productName = item.productName || item.tempProductName || 'undefined';
         return `
@@ -574,7 +582,11 @@ export const printChallans = (
 
               <div class="totals">
                 <div><strong>Sub Total: Rs. ${subtotal.toFixed(2)}</strong></div>
-                ${discountAmount > 0 ? `<div><strong>Discount (${discountPct}%): Rs. ${discountAmount.toFixed(2)}</strong></div>` : ''}
+                ${(discountAmount > 0 || (order as any).totalDiscount > 0) ? `<div><strong>Bill Discount: Rs. ${(discountAmount || (order as any).totalDiscount || 0).toFixed(2)}</strong></div>` : ''}
+                ${Math.abs(subtotal - (discountAmount || (order as any).totalDiscount || 0) - grandTotal) > 0.01 &&
+          Math.abs(subtotal - (discountAmount || (order as any).totalDiscount || 0) - grandTotal) < 2
+          ? `<div style="font-size: 8pt; color: #666;">Rounding: Rs. ${(grandTotal - (subtotal - (discountAmount || (order as any).totalDiscount || 0))).toFixed(2)}</div>`
+          : ''}
                 <div class="grand-total">Grand Total: Rs. ${grandTotal.toFixed(2)}</div>
               </div>
 

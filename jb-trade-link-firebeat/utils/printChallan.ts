@@ -157,12 +157,16 @@ export const printChallanV2 = (order: Order, products: Product[], customer?: Cus
           </table>
           <div class="totals">
             <div><strong>Sub Total: Rs. ${subtotal.toFixed(2)}</strong></div>
-            ${discountAmount > 0 ? `<div><strong>Discount (${discountPct}%): Rs. ${discountAmount.toFixed(2)}</strong></div>` : ''}
+            ${(discountAmount > 0 || (order as any).totalDiscount > 0) ? `<div><strong>Bill Discount: Rs. ${(discountAmount || (order as any).totalDiscount || 0).toFixed(2)}</strong></div>` : ''}
+            ${Math.abs(subtotal - (discountAmount || (order as any).totalDiscount || 0) - grandTotal) > 0.01 &&
+        Math.abs(subtotal - (discountAmount || (order as any).totalDiscount || 0) - grandTotal) < 2
+        ? `<div style="font-size: 8pt; color: #666;">Rounding: Rs. ${(grandTotal - (subtotal - (discountAmount || (order as any).totalDiscount || 0))).toFixed(2)}</div>`
+        : ''}
             <div class="grand-total">Grand Total: Rs. ${grandTotal.toFixed(2)}</div>
           </div>
           <div class="signatures">
-            <div>For J.B. Trade Link: _______________________</div>
-            <div>Customer Signature: _______________________</div>
+            <div>For J.B. Trade Link</div>
+            <div>Customer Signature</div>
           </div>
         </div>
       </div>
