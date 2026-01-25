@@ -29,7 +29,7 @@ export const printChallanV2 = (order: Order, products: Product[], customer?: Cus
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
           @media print {
-            @page { size: 148mm 210mm; margin: 0; }
+            @page { size: A5; margin: 0; }
             body { margin: 0; padding: 0; }
             .challan-page { page-break-after: always; page-break-inside: avoid; }
             .challan-page:last-child { page-break-after: auto; }
@@ -40,8 +40,8 @@ export const printChallanV2 = (order: Order, products: Product[], customer?: Cus
           }
           body { font-family: Arial, sans-serif; font-size: 9pt; background: white; }
           .challan-page { 
-            width: 148mm; 
-            height: 210mm; 
+            width: 100%; 
+            height: 100%; 
             background: white; 
             padding: 0; 
             box-sizing: border-box;
@@ -49,7 +49,7 @@ export const printChallanV2 = (order: Order, products: Product[], customer?: Cus
           .container {
             width: 100%;
             height: 100%;
-            padding: 3mm;
+            padding: 5mm;
             border: 2px solid black;
             position: relative;
             display: flex;

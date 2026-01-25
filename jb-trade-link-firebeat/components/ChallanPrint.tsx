@@ -382,18 +382,17 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
             background: white;
           }
           .challan-wrapper {
-            width: ${pageSize.width};
-            height: ${pageSize.height};
+            width: 100%;
+            height: 100%;
             background: white;
-            padding: 0; /* Let physical printer margins handle the edge */
+            padding: 0; 
             display: block;
-            position: relative;
             box-sizing: border-box;
           }
           .container {
             width: 100%;
             height: 100%;
-            padding: 3mm; /* Tight internal spacing */
+            padding: 5mm;
             border: 2px solid black;
             position: relative;
             display: flex;
@@ -598,7 +597,7 @@ export const printChallans = (
           
           @media print {
             @page { 
-              size: 148mm 210mm;
+              size: A5;
               margin: 0;
             }
             body { margin: 0; padding: 0; }
@@ -618,8 +617,8 @@ export const printChallans = (
           
           body { font-family: Arial, sans-serif; font-size: 9pt; background: white; }
           .challan-page { 
-            width: ${pageSize.width}; 
-            height: ${pageSize.height}; 
+            width: 100%; 
+            height: 100%; 
             background: white; 
             padding: 0; 
             display: block;
@@ -628,7 +627,7 @@ export const printChallans = (
           .container {
             width: 100%;
             height: 100%;
-            padding: 3mm;
+            padding: 5mm;
             border: 2px solid black;
             position: relative;
             display: flex;
