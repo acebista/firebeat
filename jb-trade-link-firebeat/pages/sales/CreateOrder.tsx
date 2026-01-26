@@ -767,8 +767,11 @@ export const CreateOrder: React.FC = () => {
             }
 
             // MANDATORY DATA VALIDATION
+            // TEMPORARY: GPS validation disabled - set to false to re-enable
+            const SKIP_GPS_VALIDATION = true;
+
             const selectedCustObj = customers.find(c => c.id === selectedCustomer);
-            if (selectedCustObj) {
+            if (selectedCustObj && !SKIP_GPS_VALIDATION) {
                 const missingRoute = !selectedCustObj.routeName || selectedCustObj.routeName.trim() === '';
                 // Check if locationText exists OR specific lat/long fields are set
                 const missingLoc = (!selectedCustObj.locationText || selectedCustObj.locationText.trim() === '') &&
