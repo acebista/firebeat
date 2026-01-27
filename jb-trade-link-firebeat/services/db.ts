@@ -483,10 +483,13 @@ export const OrderService = {
     // We allow status updates and payments as those happen during delivery
     const sensitiveFields = ['items', 'totalAmount', 'qty', 'products'];
     const isSensitiveUpdate = Object.keys(data).some(k => sensitiveFields.includes(k));
+    const isDeliveryAction = data.status === 'delivered' || data.status === 'cancelled';
 
-    if (isSensitiveUpdate) {
-      const { data: currentOrder } = await supabase.from(COLS.ORDERS).select('assignedTripId').eq('id', id).single();
-      if (currentOrder?.assignedTripId) {
+    if (isSensitiveUpdate && !isDeliveryAction) {
+      const { data: currentOrder } = await supabase.from(COLS.ORDERS).select('assignedTripId, status').eq('id', id).single();
+
+      // Only block if trip is loaded AND the order isn't already in a delivery/final state
+      if (currentOrder?.assignedTripId && currentOrder.status !== 'delivered' && currentOrder.status !== 'cancelled') {
         const { count } = await supabase.from('trip_loads').select('*', { count: 'exact', head: true }).eq('trip_id', currentOrder.assignedTripId);
         if (count && count > 0) {
           throw new Error("Cannot edit order content: Truck is already loaded. Please remove order from trip first.");
