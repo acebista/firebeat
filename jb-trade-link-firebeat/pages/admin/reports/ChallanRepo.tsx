@@ -38,7 +38,8 @@ export const ChallanReport: React.FC<{ data: ChallanValidationRow[] }> = ({ data
   const handlePrintAll = async () => {
     const validOrders = orders.filter(o => {
       const challanRow = data.find(d => d.orderId === o.id);
-      return challanRow?.status === 'MATCH';
+      // Only print if status matches and it is NOT a rescheduled order
+      return challanRow?.status === 'MATCH' && !(o as any).rescheduled_from;
     });
 
     if (validOrders.length === 0) {
@@ -124,6 +125,9 @@ export const ChallanReport: React.FC<{ data: ChallanValidationRow[] }> = ({ data
           )}
         </div>
         <div className="flex gap-2 items-center">
+          <div className="text-xs text-gray-500 font-medium mr-2">
+            {orders.filter(o => !(o as any).rescheduled_from).length} Original Orders
+          </div>
           {/* Orientation Toggle */}
           <div className="flex gap-1 border border-gray-300 rounded-lg p-1 bg-gray-50">
             <button
@@ -150,7 +154,7 @@ export const ChallanReport: React.FC<{ data: ChallanValidationRow[] }> = ({ data
             </button>
           </div>
           <Button variant="primary" size="sm" disabled={issuesCount > 0 || loading} onClick={handlePrintAll}>
-            <Printer className="mr-2 h-4 w-4" /> Print All Valid Challans
+            <Printer className="mr-2 h-4 w-4" /> Print Today's Original Challans
           </Button>
         </div>
       </div>

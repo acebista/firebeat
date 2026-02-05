@@ -107,7 +107,7 @@ export const SalesPrintChallans: React.FC = () => {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">Print Challans</h1>
-                    <p className="text-gray-500">Print all your challans for a date</p>
+                    <p className="text-gray-500">Print only original orders placed on this day (excludes rescheduled)</p>
                 </div>
                 <Button
                     onClick={handlePrintAll}
@@ -119,7 +119,7 @@ export const SalesPrintChallans: React.FC = () => {
                     ) : (
                         <Printer className="h-4 w-4" />
                     )}
-                    Print All ({orders.length})
+                    Print Today's Original Challans ({orders.length})
                 </Button>
             </div>
 
