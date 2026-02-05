@@ -236,8 +236,22 @@ const calculateMetrics = (orders: Order[], filters: ReportFilterState, products:
   // 3. Scheme Rows (Simplified)
   const schemeRows: SchemeRow[] = [];
 
-  // 4. Challan Rows
-  const challanRows: ChallanValidationRow[] = activeOrders.map(o => ({
+  // 4. Challan Rows - Regular
+  const challanRows: ChallanValidationRow[] = regularOrders.map(o => ({
+    orderId: o.id,
+    invoiceNo: o.id,
+    customerName: o.customerName,
+    date: o.date,
+    expectedTotal: o.totalAmount,
+    calculatedTotal: o.totalAmount,
+    difference: 0,
+    status: 'MATCH',
+    itemsCount: o.totalItems,
+    rescheduledFrom: (o as any).rescheduled_from
+  }));
+
+  // 4b. Challan Rows - Rescheduled
+  const rescheduledChallanRows: ChallanValidationRow[] = rescheduledOrders.map(o => ({
     orderId: o.id,
     invoiceNo: o.id,
     customerName: o.customerName,
@@ -253,7 +267,7 @@ const calculateMetrics = (orders: Order[], filters: ReportFilterState, products:
   // 5. Extract unique salespeople from all orders
   const salespeople = Array.from(new Set(activeOrders.map(o => o.salespersonName))).filter(Boolean).sort();
 
-  return { salesRows, rescheduledSalesRows, dispatchRows, rescheduledDispatchRows, schemeRows, challanRows, salespeople };
+  return { salesRows, rescheduledSalesRows, dispatchRows, rescheduledDispatchRows, schemeRows, challanRows, rescheduledChallanRows, salespeople };
 };
 
 
@@ -280,8 +294,9 @@ export const Reports: React.FC = () => {
     rescheduledDispatchRows: DispatchRow[],
     schemeRows: SchemeRow[],
     challanRows: ChallanValidationRow[],
+    rescheduledChallanRows: ChallanValidationRow[],
     salespeople: string[]
-  }>({ salesRows: [], rescheduledSalesRows: [], dispatchRows: [], rescheduledDispatchRows: [], schemeRows: [], challanRows: [], salespeople: [] });
+  }>({ salesRows: [], rescheduledSalesRows: [], dispatchRows: [], rescheduledDispatchRows: [], schemeRows: [], challanRows: [], rescheduledChallanRows: [], salespeople: [] });
 
   const [deliveryReportData, setDeliveryReportData] = useState<DeliveryReportData>({
     rows: [],
@@ -786,7 +801,12 @@ export const Reports: React.FC = () => {
           {activeTab === 'dispatch' && <DispatchReport data={reportData.dispatchRows} rescheduledData={reportData.rescheduledDispatchRows} salespeople={reportData.salespeople} />}
           {activeTab === 'scheme' && <SchemeReport data={reportData.schemeRows} />}
           {activeTab === 'damage' && <DamagedGoodsReport />}
-          {activeTab === 'challan' && <ChallanReport data={reportData.challanRows} />}
+          {activeTab === 'challan' && (
+            <ChallanReport
+              data={reportData.challanRows}
+              rescheduledData={reportData.rescheduledChallanRows}
+            />
+          )}
           {activeTab === 'delivery' && (
             <>
               {deliveryReportError && (

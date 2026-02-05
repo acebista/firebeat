@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Button } from '../../components/ui/Elements';
-import { Printer, Calendar, FileText, Loader2 } from 'lucide-react';
+import { Card, Button, Badge } from '../../components/ui/Elements';
+import { Printer, Calendar, FileText, Loader2, CalendarClock } from 'lucide-react';
 import { useAuth } from '../../services/auth';
-import { OrderService, CustomerService, UserService } from '../../services/db';
-import { Order, Customer, User } from '../../types';
+import { OrderService } from '../../services/db';
+import { Order } from '../../types';
 import { printChallans } from '../../components/ChallanPrint';
 import toast from 'react-hot-toast';
 
@@ -11,8 +11,7 @@ export const SalesPrintChallans: React.FC = () => {
     const { user } = useAuth();
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [orders, setOrders] = useState<Order[]>([]);
-    const [customers, setCustomers] = useState<Customer[]>([]);
-    const [users, setUsers] = useState<User[]>([]);
+    const [rescheduledOrders, setRescheduledOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(false);
     const [printing, setPrinting] = useState(false);
 
@@ -26,16 +25,15 @@ export const SalesPrintChallans: React.FC = () => {
 
         setLoading(true);
         try {
-            // Determine the salesperson ID to filter by
-            // Admins should see all orders (including 'office') for printing, sales see only theirs
             const targetUserId = user.role === 'admin' ? 'all' : user.id;
-
-            // Get orders, customers, and users
             const allOrders = await OrderService.getOrdersFiltered(selectedDate, selectedDate, targetUserId);
 
-            // Filter non-cancelled orders AND exclude rescheduled orders (they belong to a different day/salesperson)
-            const validOrders = allOrders.filter(o => o.status !== 'cancelled' && !o.rescheduled_from);
-            setOrders(validOrders);
+            // Separate regular and rescheduled orders
+            const regular = allOrders.filter(o => o.status !== 'cancelled' && !o.rescheduled_from);
+            const rescheduled = allOrders.filter(o => o.status !== 'cancelled' && o.rescheduled_from);
+
+            setOrders(regular);
+            setRescheduledOrders(rescheduled);
         } catch (error) {
             console.error('Failed to load orders:', error);
             toast.error('Failed to load orders');
@@ -44,14 +42,16 @@ export const SalesPrintChallans: React.FC = () => {
         }
     };
 
-    const handlePrintAll = () => {
-        if (orders.length === 0) {
+    const handlePrint = (includeRescheduled = false) => {
+        const activeOrders = includeRescheduled ? [...orders, ...rescheduledOrders] : orders;
+
+        if (activeOrders.length === 0) {
             toast.error('No orders to print');
             return;
         }
 
         // Check for orders missing GPS data
-        const ordersWithoutGPS = orders.filter(o => {
+        const ordersWithoutGPS = activeOrders.filter(o => {
             const gps = (o as any)?.GPS;
             if (!gps || typeof gps !== 'string') return true;
             const parts = gps.split(',').map((p: string) => p.trim());
@@ -61,21 +61,13 @@ export const SalesPrintChallans: React.FC = () => {
         if (ordersWithoutGPS.length > 0) {
             const proceed = window.confirm(
                 `⚠️ ${ordersWithoutGPS.length} order(s) are missing GPS location data.\n\n` +
-                `Customers without location:\n${ordersWithoutGPS.slice(0, 5).map(o => `• ${o.customerName}`).join('\n')}` +
-                `${ordersWithoutGPS.length > 5 ? `\n... and ${ordersWithoutGPS.length - 5} more` : ''}\n\n` +
-                `QR codes will not appear on these challans.\n\n` +
-                `To fix: Re-create orders with "Capture GPS" enabled before placing.\n\n` +
-                `Print anyway?`
+                `QR codes will not appear on these challans. Print anyway?`
             );
             if (!proceed) return;
         }
 
         setPrinting(true);
         try {
-            // Orders are already enriched by OrderService
-            const enrichedOrders = [...orders];
-
-            // Get GPS coordinates for QR code - only return valid lat,lng format
             const getCustomerLocation = (order: Order) => {
                 const gps = (order as any)?.GPS;
                 if (gps && typeof gps === 'string') {
@@ -84,12 +76,11 @@ export const SalesPrintChallans: React.FC = () => {
                         return gps;
                     }
                 }
-                return undefined; // No valid GPS - QR code won't appear
+                return undefined;
             };
 
-            // Print all challans in portrait mode
-            printChallans(enrichedOrders, 'portrait', getCustomerLocation);
-            toast.success(`Printing ${orders.length} challans`);
+            printChallans(activeOrders, 'portrait', getCustomerLocation);
+            toast.success(`Printing ${activeOrders.length} challans`);
         } catch (error) {
             console.error('Print failed:', error);
             toast.error('Failed to print challans');
@@ -98,29 +89,78 @@ export const SalesPrintChallans: React.FC = () => {
         }
     };
 
-    const totalAmount = orders.reduce((sum, o) => sum + o.totalAmount, 0);
-    const totalItems = orders.reduce((sum, o) => sum + o.totalItems, 0);
+    const totalOrdersCount = orders.length + rescheduledOrders.length;
+    const totalAmount = [...orders, ...rescheduledOrders].reduce((sum, o) => sum + o.totalAmount, 0);
+    const totalItems = [...orders, ...rescheduledOrders].reduce((sum, o) => sum + o.totalItems, 0);
+
+    const renderOrderList = (targetOrders: Order[], title: string, isRescheduled = false) => {
+        if (targetOrders.length === 0) return null;
+        return (
+            <Card className={`overflow-hidden ${isRescheduled ? 'border-2 border-amber-200 mt-6' : ''}`}>
+                <div className={`p-4 border-b ${isRescheduled ? 'bg-amber-50' : 'bg-gray-50'}`}>
+                    <h3 className={`font-semibold flex items-center gap-2 ${isRescheduled ? 'text-amber-800' : 'text-gray-800'}`}>
+                        {isRescheduled ? <CalendarClock className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
+                        {title}
+                    </h3>
+                </div>
+                <div className="divide-y">
+                    {targetOrders.map((order) => (
+                        <div key={order.id} className="p-4 hover:bg-gray-50 transition-colors flex items-center justify-between">
+                            <div className="flex-1">
+                                <div className="flex items-center gap-3">
+                                    <span className={`w-2 h-2 rounded-full ${order.status === 'delivered' ? 'bg-green-500' :
+                                        order.status === 'dispatched' ? 'bg-blue-500' :
+                                            order.status === 'approved' ? 'bg-yellow-500' : 'bg-gray-400'
+                                        }`} />
+                                    <div>
+                                        <p className="font-medium text-gray-900">{order.customerName}</p>
+                                        <div className="flex items-center gap-2 text-sm text-gray-500">
+                                            <span>#{order.id} • {order.totalItems} items</span>
+                                            {order.rescheduled_from && (
+                                                <Badge color="amber" size="sm">↩ {order.rescheduled_from}</Badge>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <p className="font-bold text-indigo-600">₹{order.totalAmount.toLocaleString()}</p>
+                                <p className="text-xs text-gray-500 capitalize">{order.status}</p>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </Card>
+        );
+    };
 
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">Print Challans</h1>
-                    <p className="text-gray-500">Print only original orders placed on this day (excludes rescheduled)</p>
+                    <p className="text-gray-500">Generate challans for today's deliveries</p>
                 </div>
-                <Button
-                    onClick={handlePrintAll}
-                    disabled={loading || printing || orders.length === 0}
-                    className="flex items-center gap-2"
-                >
-                    {printing ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                        <Printer className="h-4 w-4" />
-                    )}
-                    Print Today's Original Challans ({orders.length})
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                    <Button
+                        variant="outline"
+                        onClick={() => handlePrint(false)}
+                        disabled={loading || printing || orders.length === 0}
+                        className="flex items-center gap-2"
+                    >
+                        {printing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+                        Today Only ({orders.length})
+                    </Button>
+                    <Button
+                        onClick={() => handlePrint(true)}
+                        disabled={loading || printing || totalOrdersCount === 0}
+                        className="flex items-center gap-2"
+                    >
+                        {printing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+                        Today + Rescheduled ({totalOrdersCount})
+                    </Button>
+                </div>
             </div>
 
             {/* Date Selector */}
@@ -146,7 +186,7 @@ export const SalesPrintChallans: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <Card className="p-4 bg-indigo-50 border-indigo-200">
                     <p className="text-sm text-indigo-600 font-medium">Total Orders</p>
-                    <p className="text-2xl font-bold text-indigo-900">{orders.length}</p>
+                    <p className="text-2xl font-bold text-indigo-900">{totalOrdersCount}</p>
                 </Card>
                 <Card className="p-4 bg-green-50 border-green-200">
                     <p className="text-sm text-green-600 font-medium">Total Items</p>
@@ -158,76 +198,33 @@ export const SalesPrintChallans: React.FC = () => {
                 </Card>
             </div>
 
-            {/* Orders List */}
-            <Card className="overflow-hidden">
-                <div className="p-4 border-b bg-gray-50">
-                    <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-                        <FileText className="h-5 w-5" />
-                        Orders for {new Date(selectedDate).toLocaleDateString('en-IN', {
-                            weekday: 'long',
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric'
-                        })}
-                    </h3>
+            {/* Orders Sections */}
+            {loading ? (
+                <div className="p-12 text-center">
+                    <Loader2 className="h-10 w-10 animate-spin mx-auto text-indigo-500" />
+                    <p className="mt-4 text-gray-500 font-medium">Loading orders for {selectedDate}...</p>
                 </div>
-
-                {loading ? (
-                    <div className="p-8 text-center">
-                        <Loader2 className="h-8 w-8 animate-spin mx-auto text-indigo-500" />
-                        <p className="mt-2 text-gray-500">Loading orders...</p>
-                    </div>
-                ) : orders.length === 0 ? (
-                    <div className="p-8 text-center">
-                        <FileText className="h-12 w-12 mx-auto text-gray-300 mb-3" />
-                        <p className="text-gray-500">No orders found for this date</p>
-                        <p className="text-sm text-gray-400 mt-1">Try selecting a different date</p>
-                    </div>
-                ) : (
-                    <div className="divide-y">
-                        {orders.map((order) => (
-                            <div
-                                key={order.id}
-                                className="p-4 hover:bg-gray-50 transition-colors flex items-center justify-between"
-                            >
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-3">
-                                        <span className={`w-2 h-2 rounded-full ${order.status === 'delivered' ? 'bg-green-500' :
-                                            order.status === 'dispatched' ? 'bg-blue-500' :
-                                                order.status === 'approved' ? 'bg-yellow-500' :
-                                                    'bg-gray-400'
-                                            }`} />
-                                        <div>
-                                            <p className="font-medium text-gray-900">{order.customerName}</p>
-                                            <p className="text-sm text-gray-500">
-                                                #{order.id} • {order.totalItems} items
-                                                {user?.role === 'admin' && (
-                                                    <span className="ml-2 text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase">
-                                                        {order.salespersonName || 'Office'}
-                                                    </span>
-                                                )}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="text-right">
-                                    <p className="font-bold text-indigo-600">₹{order.totalAmount.toLocaleString()}</p>
-                                    <p className="text-xs text-gray-500 capitalize">{order.status}</p>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </Card>
+            ) : totalOrdersCount === 0 ? (
+                <div className="p-12 text-center bg-white rounded-xl shadow-sm border border-gray-100">
+                    <FileText className="h-16 w-16 mx-auto text-gray-200 mb-4" />
+                    <p className="text-xl font-semibold text-gray-700">Nothing to deliver</p>
+                    <p className="text-gray-500 mt-2">No orders found for the selected date.</p>
+                </div>
+            ) : (
+                <div className="space-y-6">
+                    {renderOrderList(orders, "Today's Original Orders")}
+                    {renderOrderList(rescheduledOrders, "Rescheduled Orders (Backlog)", true)}
+                </div>
+            )}
 
             {/* Print Instructions */}
-            {orders.length > 0 && (
+            {totalOrdersCount > 0 && (
                 <Card className="p-4 bg-blue-50 border-blue-200">
-                    <h4 className="font-medium text-blue-900 mb-2">📋 Print Tips</h4>
+                    <h4 className="font-medium text-blue-900 mb-2">📋 Print Guidelines</h4>
                     <ul className="text-sm text-blue-700 space-y-1">
-                        <li>• The challan is optimized for **A5 size** paper</li>
-                        <li>• Each order will be printed on a separate page</li>
-                        <li>• Set your printer settings to **A5 paper size** and "Fit to Page"</li>
+                        <li>• Use **A5 Portrait** paper for best results.</li>
+                        <li>• Rescheduled orders are clearly marked with a ↩ icon.</li>
+                        <li>• QR codes will show the delivery location for scan-to-map.</li>
                     </ul>
                 </Card>
             )}

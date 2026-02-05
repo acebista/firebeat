@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Badge } from '../../../components/ui/Elements';
 import { ChallanValidationRow } from '../../../types/reports';
-import { Printer, CheckCircle, AlertTriangle, Layout as LayoutIcon } from 'lucide-react';
+import { Printer, CheckCircle, AlertTriangle, Layout as LayoutIcon, CalendarClock } from 'lucide-react';
 import { printChallan, printChallans } from '../../../components/ChallanPrint';
-import { OrderService, CustomerService, ProductService, UserService } from '../../../services/db';
-import { Order, Customer, Product, User } from '../../../types';
+import { OrderService, ProductService } from '../../../services/db';
+import { Order, Product } from '../../../types';
 import toast from 'react-hot-toast';
 
-export const ChallanReport: React.FC<{ data: ChallanValidationRow[] }> = ({ data }) => {
-  const issuesCount = data.filter(r => r.status === 'MISMATCH').length;
+export const ChallanReport: React.FC<{ data: ChallanValidationRow[], rescheduledData?: ChallanValidationRow[] }> = ({ data, rescheduledData = [] }) => {
+  const issuesCount = data.filter(r => r.status === 'MISMATCH').length + rescheduledData.filter(r => r.status === 'MISMATCH').length;
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
@@ -16,12 +16,17 @@ export const ChallanReport: React.FC<{ data: ChallanValidationRow[] }> = ({ data
 
   useEffect(() => {
     loadOrdersAndCustomers();
-  }, [data]);
+  }, [data, rescheduledData]);
 
   const loadOrdersAndCustomers = async () => {
     setLoading(true);
     try {
-      const orderIds = data.map(d => d.orderId);
+      const allData = [...data, ...rescheduledData];
+      const orderIds = allData.map(d => d.orderId);
+      if (orderIds.length === 0) {
+        setOrders([]);
+        return;
+      }
       const [ordersData, productsData] = await Promise.all([
         OrderService.getOrdersByIds(orderIds),
         ProductService.getAll()
@@ -35,11 +40,11 @@ export const ChallanReport: React.FC<{ data: ChallanValidationRow[] }> = ({ data
     }
   };
 
-  const handlePrintAll = async () => {
+  const handlePrintAll = async (includeRescheduled = false) => {
+    const activeData = includeRescheduled ? [...data, ...rescheduledData] : data;
     const validOrders = orders.filter(o => {
-      const challanRow = data.find(d => d.orderId === o.id);
-      // Only print if status matches and it is NOT a rescheduled order
-      return challanRow?.status === 'MATCH' && !(o as any).rescheduled_from;
+      const challanRow = activeData.find(d => d.orderId === o.id);
+      return challanRow?.status === 'MATCH';
     });
 
     if (validOrders.length === 0) {
@@ -61,18 +66,11 @@ export const ChallanReport: React.FC<{ data: ChallanValidationRow[] }> = ({ data
     if (ordersWithoutGPS.length > 0) {
       const proceed = window.confirm(
         `⚠️ ${ordersWithoutGPS.length} of ${validOrders.length} order(s) are missing GPS location data.\n\n` +
-        `Customers without location:\n${ordersWithoutGPS.slice(0, 5).map(o => `• ${o.customerName}`).join('\n')}` +
-        `${ordersWithoutGPS.length > 5 ? `\n... and ${ordersWithoutGPS.length - 5} more` : ''}\n\n` +
-        `QR codes will not appear on these challans.\n\n` +
-        `Print anyway?`
+        `QR codes will not appear on these challans. Print anyway?`
       );
       if (!proceed) return;
     }
 
-    // Orders are already enriched by OrderService
-    const enrichedOrders = [...validOrders];
-
-    // Get GPS coordinates for QR code - only return valid lat,lng format
     const getCustomerLocation = (order: Order) => {
       const gps = (order as any)?.GPS;
       if (gps && typeof gps === 'string') {
@@ -81,11 +79,11 @@ export const ChallanReport: React.FC<{ data: ChallanValidationRow[] }> = ({ data
           return gps;
         }
       }
-      return undefined; // No valid GPS - QR won't appear
+      return undefined;
     };
 
-    // Use the new printChallans function with orientation support
-    printChallans(enrichedOrders, orientation, getCustomerLocation);
+    printChallans(validOrders, orientation, getCustomerLocation);
+    toast.success(`Printing ${validOrders.length} challans`);
   };
 
   const handlePrintSingle = (orderId: string) => {
@@ -95,9 +93,6 @@ export const ChallanReport: React.FC<{ data: ChallanValidationRow[] }> = ({ data
       return;
     }
 
-    const enrichedOrder = { ...order };
-
-    // Use GPS location from order - only if valid coordinates
     const gps = (order as any)?.GPS;
     let customerLocation: string | undefined;
     if (gps && typeof gps === 'string') {
@@ -106,12 +101,40 @@ export const ChallanReport: React.FC<{ data: ChallanValidationRow[] }> = ({ data
         customerLocation = gps;
       }
     }
-    printChallan(enrichedOrder, customerLocation, orientation);
+    printChallan(order, customerLocation, orientation);
+  };
+
+  const renderTableRows = (rows: ChallanValidationRow[], isRescheduled = false) => {
+    if (rows.length === 0) return null;
+    return rows.map(row => (
+      <tr key={row.orderId} className={row.status === 'MISMATCH' ? 'bg-red-50' : isRescheduled ? 'hover:bg-amber-50' : 'hover:bg-gray-50'}>
+        <td className="px-4 py-2 font-mono text-xs text-indigo-600">{row.orderId}</td>
+        <td className="px-4 py-2">
+          {isRescheduled ? <Badge color="amber">↩ {row.rescheduledFrom}</Badge> : row.date}
+        </td>
+        <td className="px-4 py-2">{row.customerName}</td>
+        <td className="px-4 py-2 text-center">{row.itemsCount}</td>
+        <td className="px-4 py-2 text-right">₹{row.expectedTotal.toLocaleString()}</td>
+        <td className="px-4 py-2 text-center">
+          <Badge color={row.status === 'MATCH' ? 'emerald' : 'red'}>{row.status}</Badge>
+        </td>
+        <td className="px-4 py-2 text-center no-print">
+          {row.status === 'MATCH' && (
+            <button
+              onClick={() => handlePrintSingle(row.orderId)}
+              disabled={loading}
+              className={`${isRescheduled ? 'text-amber-700 underline' : 'text-indigo-600'} hover:opacity-75 font-medium text-xs disabled:opacity-50`}>
+              Print {isRescheduled ? 'Challan' : 'Challan'}
+            </button>
+          )}
+        </td>
+      </tr>
+    ));
   };
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center gap-4">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h3 className="text-lg font-bold text-gray-800">Challan Validation & Generation</h3>
           {issuesCount > 0 ? (
@@ -120,47 +143,27 @@ export const ChallanReport: React.FC<{ data: ChallanValidationRow[] }> = ({ data
             </p>
           ) : (
             <p className="text-sm text-green-600 font-medium flex items-center mt-1">
-              <CheckCircle className="h-4 w-4 mr-1" /> All calculations match system totals.
+              <CheckCircle className="h-4 w-4 mr-1" /> All calculations match.
             </p>
           )}
         </div>
-        <div className="flex gap-2 items-center">
-          <div className="text-xs text-gray-500 font-medium mr-2">
-            {orders.filter(o => !(o as any).rescheduled_from).length} Original Orders
-          </div>
-          {/* Orientation Toggle */}
+
+        <div className="flex flex-wrap gap-2 items-center">
           <div className="flex gap-1 border border-gray-300 rounded-lg p-1 bg-gray-50">
-            <button
-              onClick={() => setOrientation('portrait')}
-              className={`px-3 py-1 text-sm font-medium rounded flex items-center gap-1 transition ${orientation === 'portrait'
-                ? 'bg-indigo-600 text-white'
-                : 'bg-white text-gray-700 hover:bg-gray-100'
-                }`}
-              title="Portrait (148mm × 210mm)"
-            >
-              <LayoutIcon className="h-4 w-4" />
-              Portrait
-            </button>
-            <button
-              onClick={() => setOrientation('landscape')}
-              className={`px-3 py-1 text-sm font-medium rounded flex items-center gap-1 transition ${orientation === 'landscape'
-                ? 'bg-indigo-600 text-white'
-                : 'bg-white text-gray-700 hover:bg-gray-100'
-                }`}
-              title="Landscape (210mm × 148mm)"
-            >
-              <LayoutIcon className="h-4 w-4 rotate-90" />
-              Landscape
-            </button>
+            <button onClick={() => setOrientation('portrait')} className={`px-3 py-1 text-sm font-medium rounded ${orientation === 'portrait' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700'}`}><LayoutIcon className="h-4 w-4" /></button>
+            <button onClick={() => setOrientation('landscape')} className={`px-3 py-1 text-sm font-medium rounded ${orientation === 'landscape' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700'}`}><LayoutIcon className="h-4 w-4 rotate-90" /></button>
           </div>
-          <Button variant="primary" size="sm" disabled={issuesCount > 0 || loading} onClick={handlePrintAll}>
-            <Printer className="mr-2 h-4 w-4" /> Print Today's Original Challans
+          <Button variant="outline" size="sm" onClick={() => handlePrintAll(false)} disabled={loading}>
+            <Printer className="mr-2 h-4 w-4" /> Today Only ({data.length})
+          </Button>
+          <Button variant="primary" size="sm" onClick={() => handlePrintAll(true)} disabled={loading}>
+            <Printer className="mr-2 h-4 w-4" /> Today + Rescheduled ({data.length + rescheduledData.length})
           </Button>
         </div>
       </div>
 
       <Card className="overflow-hidden">
-        <div className="overflow-x-auto" id="challan-report-table">
+        <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-100">
               <tr>
@@ -174,40 +177,22 @@ export const ChallanReport: React.FC<{ data: ChallanValidationRow[] }> = ({ data
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
-              {data.length === 0 ? (
+              {data.length === 0 && rescheduledData.length === 0 ? (
                 <tr><td colSpan={7} className="p-8 text-center text-gray-400">No data available.</td></tr>
               ) : (
-                data.map(row => (
-                  <tr key={row.orderId} className={row.status === 'MISMATCH' ? 'bg-red-50' : 'hover:bg-gray-50'}>
-                    <td className="px-4 py-2 font-mono text-xs text-indigo-600">{row.orderId}</td>
-                    <td className="px-4 py-2">
-                      {row.date}
-                      {row.rescheduledFrom && (
-                        <div className="mt-1">
-                          <Badge color="amber">
-                            ↩ {row.rescheduledFrom}
-                          </Badge>
+                <>
+                  {renderTableRows(data)}
+                  {rescheduledData.length > 0 && (
+                    <tr className="bg-amber-50">
+                      <td colSpan={7} className="px-4 py-2">
+                        <div className="flex items-center gap-2 font-bold text-amber-800 uppercase tracking-wider text-xs">
+                          <CalendarClock className="h-4 w-4" /> Rescheduled Orders
                         </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-2">{row.customerName}</td>
-                    <td className="px-4 py-2 text-center">{row.itemsCount}</td>
-                    <td className="px-4 py-2 text-right">₹{row.expectedTotal.toLocaleString()}</td>
-                    <td className="px-4 py-2 text-center">
-                      <Badge color={row.status === 'MATCH' ? 'emerald' : 'red'}>{row.status}</Badge>
-                    </td>
-                    <td className="px-4 py-2 text-center no-print">
-                      {row.status === 'MATCH' && (
-                        <button
-                          onClick={() => handlePrintSingle(row.orderId)}
-                          disabled={loading}
-                          className="text-indigo-600 hover:text-indigo-900 font-medium text-xs disabled:opacity-50">
-                          Print Challan
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                    </tr>
+                  )}
+                  {renderTableRows(rescheduledData, true)}
+                </>
               )}
             </tbody>
           </table>
