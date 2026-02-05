@@ -31,7 +31,8 @@ export interface SetPasswordResponse {
  */
 export async function adminSetPassword(
   userId: string,
-  newPassword: string
+  newPassword: string,
+  email?: string
 ): Promise<SetPasswordResponse> {
   try {
     // Get the current session to ensure we have a valid auth token
@@ -47,6 +48,7 @@ export async function adminSetPassword(
       body: {
         userId,
         newPassword,
+        email,
       },
     });
 

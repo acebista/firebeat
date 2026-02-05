@@ -62,6 +62,7 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
     const [selectedVatBill, setSelectedVatBill] = useState<VatBill | null>(null);
     const [showTallyModal, setShowTallyModal] = useState(false);
     const [forcedIndividualIds, setForcedIndividualIds] = useState<string[]>([]);
+    const [expandedBillId, setExpandedBillId] = useState<string | null>(null);
     const [isStockSectionExpanded, setIsStockSectionExpanded] = useState(false);
 
     const handlePrint = () => {
@@ -668,35 +669,83 @@ export const DeliveryReport: React.FC<DeliveryReportProps> = ({ data }) => {
                                     </thead>
                                     <tbody className="divide-y divide-gray-200">
                                         {generatedBills.map(bill => (
-                                            <tr key={bill.id} className="hover:bg-gray-50">
-                                                <td className="px-4 py-3 font-mono text-xs text-indigo-600 font-medium">{bill.id}</td>
-                                                <td className="px-4 py-3 text-center">
-                                                    <Badge color={bill.type === 'Combined' ? 'blue' : 'purple' as any}>{bill.type}</Badge>
-                                                </td>
-                                                <td className="px-4 py-3 text-center uppercase text-xs font-bold text-gray-700">
-                                                    {bill.paymentMethod}
-                                                </td>
-                                                <td className="px-4 py-3 text-xs text-gray-600 max-w-md">
-                                                    <div className="truncate" title={bill.invoiceNumbers.join(', ')}>
-                                                        {bill.invoiceNumbers.length > 5
-                                                            ? `${bill.invoiceNumbers.slice(0, 5).join(', ')} ... +${bill.invoiceNumbers.length - 5} more`
-                                                            : bill.invoiceNumbers.join(', ')
-                                                        }
-                                                    </div>
-                                                </td>
-                                                <td className="px-4 py-3 text-right font-bold text-gray-900">
-                                                    ₹{bill.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                                </td>
-                                                <td className="px-4 py-3 text-center">
-                                                    <button
-                                                        onClick={() => setSelectedVatBill(bill)}
-                                                        className="text-indigo-600 hover:text-indigo-900 transition-colors"
-                                                        title="View Bill"
-                                                    >
-                                                        <Eye className="h-4 w-4" />
-                                                    </button>
-                                                </td>
-                                            </tr>
+                                            <React.Fragment key={bill.id}>
+                                                <tr className={`hover:bg-gray-50 ${expandedBillId === bill.id ? 'bg-indigo-50/30' : ''}`}>
+                                                    <td className="px-4 py-3 font-mono text-xs text-indigo-600 font-medium">{bill.id}</td>
+                                                    <td className="px-4 py-3 text-center">
+                                                        <Badge color={bill.type === 'Combined' ? 'blue' : 'purple' as any}>{bill.type}</Badge>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-center uppercase text-xs font-bold text-gray-700">
+                                                        {bill.paymentMethod}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-xs text-gray-600 max-w-md">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="flex-1 truncate" title={bill.invoiceNumbers.join(', ')}>
+                                                                {bill.invoiceNumbers.length > 5
+                                                                    ? `${bill.invoiceNumbers.slice(0, 5).join(', ')} ... +${bill.invoiceNumbers.length - 5} more`
+                                                                    : bill.invoiceNumbers.join(', ')
+                                                                }
+                                                            </div>
+                                                            {bill.type === 'Combined' && (
+                                                                <button
+                                                                    onClick={() => setExpandedBillId(expandedBillId === bill.id ? null : bill.id)}
+                                                                    className="p-1 hover:bg-white rounded text-indigo-600 transition-colors"
+                                                                    title="See Invoices"
+                                                                >
+                                                                    {expandedBillId === bill.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right font-bold text-gray-900">
+                                                        ₹{bill.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-center">
+                                                        <div className="flex justify-center gap-2">
+                                                            <button
+                                                                onClick={() => setSelectedVatBill(bill)}
+                                                                className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                                                title="View Bill"
+                                                            >
+                                                                <Eye className="h-4 w-4" />
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                                {expandedBillId === bill.id && bill.type === 'Combined' && (
+                                                    <tr className="bg-white">
+                                                        <td colSpan={6} className="px-8 py-4 border-b border-indigo-100">
+                                                            <div className="bg-gray-50 rounded-xl p-4 border border-indigo-100 shadow-inner">
+                                                                <h4 className="text-xs font-bold text-indigo-800 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                                                    <Package className="h-3.5 w-3.5" />
+                                                                    Smart Segregation: Child Invoices
+                                                                </h4>
+                                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                                                    {bill.invoiceIds.map((invId, idx) => (
+                                                                        <div key={invId} className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-gray-200 hover:border-indigo-300 transition-colors group">
+                                                                            <span className="text-xs font-mono font-medium text-gray-700">{bill.invoiceNumbers[idx]}</span>
+                                                                            <Button
+                                                                                size="sm"
+                                                                                variant="ghost"
+                                                                                className="h-7 text-[10px] text-indigo-600 hover:bg-indigo-50 group-hover:bg-indigo-50"
+                                                                                onClick={() => {
+                                                                                    toggleBillingMode(invId);
+                                                                                    // Recalculating happens via useEffect
+                                                                                }}
+                                                                            >
+                                                                                <TrendingUp className="h-3 w-3 mr-1" /> Segregate
+                                                                            </Button>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                                <p className="mt-3 text-[10px] text-gray-500 italic">
+                                                                    * Segregating will pull this invoice out into its own dedicated bill.
+                                                                </p>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </React.Fragment>
                                         ))}
                                     </tbody>
                                 </table>

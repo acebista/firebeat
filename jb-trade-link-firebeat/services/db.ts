@@ -841,9 +841,39 @@ export const TripService = {
 export const UserService = {
   getAll: () => fetchCollection<User>(COLS.USERS),
   add: async (user: Omit<User, 'id'>) => {
-    const { data, error } = await supabase.from(COLS.USERS).upsert(user).select().single();
+    // 1. Create entry in public.users table
+    const { data: profile, error } = await supabase.from(COLS.USERS).upsert(user).select().single();
     if (error) throw error;
-    return data as User;
+
+    // 2. Automatically create entry in Auth system (Backfill)
+    if (profile && profile.email) {
+      try {
+        console.log('[UserService.add] Registering user in Auth system...');
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-update-password`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${session.access_token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                userId: profile.id,
+                email: profile.email
+                // Edge function will generate random password if not provided
+              })
+            }
+          );
+        }
+      } catch (e) {
+        console.warn('[UserService.add] Auth registration background call failed:', e);
+        // We don't throw here - the profile is created, and the admin can set password manually later if this fails
+      }
+    }
+
+    return profile as User;
   },
   update: async (id: string, data: Partial<User>) => {
     // If email is being updated, use the Edge Function which has service role access

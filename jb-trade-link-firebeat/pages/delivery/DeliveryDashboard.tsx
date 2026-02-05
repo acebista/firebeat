@@ -399,6 +399,7 @@ export const DeliveryDashboard: React.FC = () => {
             status: 'approved',
             assignedTripId: null,
             date: tomorrowStr,
+            rescheduled_from: order.rescheduled_from || order.date,
             remarks: `Rescheduled to ${tomorrowStr}. ${order.remarks || ''}`
           } as any);
         }

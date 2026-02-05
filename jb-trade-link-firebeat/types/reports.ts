@@ -56,4 +56,5 @@ export interface ChallanValidationRow {
   difference: number;
   status: 'MATCH' | 'MISMATCH';
   itemsCount: number;
+  rescheduledFrom?: string;
 }

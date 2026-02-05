@@ -246,7 +246,8 @@ const calculateMetrics = (orders: Order[], filters: ReportFilterState, products:
     calculatedTotal: o.totalAmount,
     difference: 0,
     status: 'MATCH',
-    itemsCount: o.totalItems
+    itemsCount: o.totalItems,
+    rescheduledFrom: (o as any).rescheduled_from
   }));
 
   // 5. Extract unique salespeople from all orders

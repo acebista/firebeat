@@ -1,3 +1,4 @@
+
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 
@@ -13,195 +14,156 @@ Deno.serve(async (req) => {
     }
 
     try {
-        // Get environment variables first
+        // Get environment variables
         const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
-        const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
         const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 
-        if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceKey) {
-            console.error('[admin-update-password] Missing required environment variables')
+        if (!supabaseUrl || !supabaseServiceKey) {
             return new Response(
                 JSON.stringify({ error: 'Server configuration error: Missing environment variables' }),
                 { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             )
         }
 
-        // Get the authorization header
+        // Get authorization
         const authHeader = req.headers.get('Authorization')
         if (!authHeader) {
-            console.log('[admin-update-password] No authorization header provided')
             return new Response(
                 JSON.stringify({ error: 'No authorization header' }),
                 { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             )
         }
 
-        // Create admin client with service role key (bypasses RLS)
         const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
-            auth: {
-                autoRefreshToken: false,
-                persistSession: false
-            }
+            auth: { autoRefreshToken: false, persistSession: false }
         })
 
-        // Verify the user using the admin client and the provided JWT
+        // Verify the caller is an admin
         const token = authHeader.replace('Bearer ', '')
         const { data: { user: callerUser }, error: userError } = await adminClient.auth.getUser(token)
 
         if (userError || !callerUser) {
-            console.error('[admin-update-password] Auth error:', userError?.message)
             return new Response(
                 JSON.stringify({ error: 'Invalid authentication', details: userError?.message }),
                 { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             )
         }
 
-        console.log(`[admin-update-password] Caller authenticated: ${callerUser.id}`)
-
-        // Check if caller is an admin by looking up their role in the public.users table
         const { data: callerProfile, error: profileError } = await adminClient
             .from('users')
             .select('role')
             .eq('id', callerUser.id)
             .single()
 
-        if (profileError) {
-            console.error('[admin-update-password] Profile lookup error:', profileError.message)
+        if (profileError || !callerProfile || callerProfile.role !== 'admin') {
             return new Response(
-                JSON.stringify({ error: `Failed to verify admin status: ${profileError.message}` }),
+                JSON.stringify({ error: 'Unauthorized: Admin access required' }),
                 { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             )
         }
 
-        if (!callerProfile || callerProfile.role !== 'admin') {
-            console.log('[admin-update-password] Unauthorized access attempt by:', callerUser.id)
+        // Parse request
+        const body = await req.json()
+        const { userId, newPassword, newEmail, email: bodyEmail } = body
+
+        if (!userId) {
             return new Response(
-                JSON.stringify({ error: 'Only admins can update user passwords' }),
+                JSON.stringify({ error: 'userId is required' }),
                 { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             )
         }
 
-        // Parse the request body
-        let body;
-        try {
-            body = await req.json()
-        } catch (e) {
+        // Target user details
+        let updateData: any = {}
+        if (newPassword) updateData.password = newPassword
+        if (newEmail) updateData.email = newEmail
+
+        if (Object.keys(updateData).length === 0) {
             return new Response(
-                JSON.stringify({ error: 'Invalid request body' }),
+                JSON.stringify({ error: 'newPassword or newEmail is required' }),
                 { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             )
         }
 
-        const { userId, newPassword } = body
+        console.log(`[admin-update-password] Admin ${callerUser.id} updating user ${userId}`)
 
-        if (!userId || !newPassword) {
-            return new Response(
-                JSON.stringify({ error: 'userId and newPassword are required' }),
-                { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            )
-        }
-
-
-        if (newPassword.length < 6) {
-            return new Response(
-                JSON.stringify({ error: 'Password must be at least 6 characters' }),
-                { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            )
-        }
-
-        console.log(`[admin-update-password] Admin ${callerUser.id} processing user ${userId}`)
-
-        // 1. Check if the user exists in Auth
+        // 1. Check if user exists in Auth
         const { data: { user: existingAuthUser }, error: getUserError } = await adminClient.auth.admin.getUserById(userId)
 
         if (existingAuthUser) {
-            // User exists in Auth, update password
-            console.log(`[admin-update-password] Auth user found, updating password for ${userId}`)
-
-            const { error: updateError } = await adminClient.auth.admin.updateUserById(
-                userId,
-                { password: newPassword }
-            )
+            // User exists, update them
+            const { error: updateError } = await adminClient.auth.admin.updateUserById(userId, updateData)
 
             if (updateError) {
-                console.error('[admin-update-password] Password update failed:', updateError.message)
+                console.error('[admin-update-password] Update failed:', updateError.message)
                 return new Response(
-                    JSON.stringify({ error: `Password update failed: ${updateError.message}` }),
+                    JSON.stringify({ error: `Update failed: ${updateError.message}` }),
                     { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
                 )
             }
 
-            console.log(`[admin-update-password] Password updated successfully for user ${userId}`)
+            // If email was updated, also update the public.users table
+            if (newEmail) {
+                await adminClient.from('users').update({ email: newEmail }).eq('id', userId)
+            }
+
             return new Response(
-                JSON.stringify({ success: true, message: 'Password updated successfully' }),
+                JSON.stringify({ success: true, message: 'User updated successfully' }),
                 { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             )
-
         } else {
-            // User does not exist in Auth, we need to create them (Backfill)
-            // We need their email from the public profile first
-            console.log(`[admin-update-password] Auth user not found from ID, attempting to create backfill for ${userId}`)
+            // User DOES NOT exist in Auth - needs Backfill
+            console.log(`[admin-update-password] User ${userId} not in Auth, attempting backfill`)
 
-            const { data: targetProfile, error: targetProfileError } = await adminClient
-                .from('users')
-                .select('email')
-                .eq('id', userId)
-                .single()
+            // We MUST have an email and a password to create an auth user
+            let emailToUse = bodyEmail || newEmail;
 
-            if (targetProfileError || !targetProfile) {
-                console.error('[admin-update-password] Could not find public profile for backfill:', targetProfileError?.message)
+            if (!emailToUse) {
+                // Look up in public.users if not provided in body
+                const { data: profile } = await adminClient.from('users').select('email').eq('id', userId).single()
+                emailToUse = profile?.email;
+            }
+
+            if (!emailToUse) {
                 return new Response(
-                    JSON.stringify({ error: 'User profile not found. Cannot create login without email.' }),
+                    JSON.stringify({ error: 'User does not exist in auth system. Provide email and newPassword to create login.' }),
                     { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
                 )
             }
 
-            const email = targetProfile.email
-            if (!email) {
-                return new Response(
-                    JSON.stringify({ error: 'User profile has no email. Cannot create login.' }),
-                    { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-                )
-            }
-
-            console.log(`[admin-update-password] Creating new Auth user for ${email} with ID ${userId}`)
+            // We need a password to create the user if one wasn't provided for update
+            const passwordToUse = newPassword || Math.random().toString(36).slice(-12) + "A1!";
 
             const { data: createdUser, error: createError } = await adminClient.auth.admin.createUser({
                 id: userId,
-                email: email,
-                password: newPassword,
+                email: emailToUse,
+                password: passwordToUse,
                 email_confirm: true,
                 user_metadata: { source: 'admin-backfill' }
             })
 
             if (createError) {
-                console.error('[admin-update-password] User creation failed:', createError.message)
-
-                // Friendly error if email is taken
-                if (createError.message.includes('already been registered')) {
-                    return new Response(
-                        JSON.stringify({ error: `The email ${email} is already associated with another user ID.` }),
-                        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-                    )
-                }
-
+                console.error('[admin-update-password] Backfill failed:', createError.message)
                 return new Response(
-                    JSON.stringify({ error: `Failed to create login: ${createError.message}` }),
+                    JSON.stringify({ error: `Backfill failed: ${createError.message}` }),
                     { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
                 )
             }
 
-            console.log(`[admin-update-password] User created successfully: ${userId}`)
             return new Response(
-                JSON.stringify({ success: true, message: 'User login created and password set successfully' }),
+                JSON.stringify({
+                    success: true,
+                    message: newPassword ? 'User login created and password set' : 'User login created successfully (random password)',
+                    note: !newPassword ? 'User created with temporary password as none was provided.' : undefined
+                }),
                 { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             )
         }
 
     } catch (error: any) {
-        console.error('[admin-update-password] Unexpected error:', error?.message || error)
+        console.error('[admin-update-password] Unexpected error:', error.message)
         return new Response(
-            JSON.stringify({ error: `Internal server error: ${error?.message || 'Unknown error'}` }),
+            JSON.stringify({ error: `Server error: ${error.message}` }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         )
     }

@@ -244,7 +244,7 @@ export const UserManagement: React.FC = () => {
     try {
       console.log('[Users] Setting password for user:', selectedUserForPassword.id, selectedUserForPassword.name);
       // Call the admin password management Edge Function
-      const result = await adminSetPassword(selectedUserForPassword.id, newPassword);
+      const result = await adminSetPassword(selectedUserForPassword.id, newPassword, selectedUserForPassword.email);
       console.log('[Users] Password set result:', result);
 
       toast.success(`Password set for ${selectedUserForPassword.name}`);

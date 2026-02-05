@@ -176,7 +176,16 @@ export const ChallanReport: React.FC<{ data: ChallanValidationRow[] }> = ({ data
                 data.map(row => (
                   <tr key={row.orderId} className={row.status === 'MISMATCH' ? 'bg-red-50' : 'hover:bg-gray-50'}>
                     <td className="px-4 py-2 font-mono text-xs text-indigo-600">{row.orderId}</td>
-                    <td className="px-4 py-2">{row.date}</td>
+                    <td className="px-4 py-2">
+                      {row.date}
+                      {row.rescheduledFrom && (
+                        <div className="mt-1">
+                          <Badge color="amber">
+                            ↩ {row.rescheduledFrom}
+                          </Badge>
+                        </div>
+                      )}
+                    </td>
                     <td className="px-4 py-2">{row.customerName}</td>
                     <td className="px-4 py-2 text-center">{row.itemsCount}</td>
                     <td className="px-4 py-2 text-right">₹{row.expectedTotal.toLocaleString()}</td>
