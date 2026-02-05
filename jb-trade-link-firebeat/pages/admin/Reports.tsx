@@ -25,14 +25,11 @@ const calculateMetrics = (orders: Order[], filters: ReportFilterState, products:
   const activeOrders = orders.filter(o => o.status !== 'cancelled');
 
   // Separate regular orders from rescheduled orders
-  // Regular includes:
-  // 1. Normal orders (no rescheduled_from)
-  // 2. Rescheduled orders NOT on a trip (backlog) - implicit "unassigned" status for dispatch purposes
-  const regularOrders = activeOrders.filter(o => !(o as any).rescheduled_from || !(o as any).assignedTripId);
+  // Regular: Only orders originally placed for this date (no rescheduled_from)
+  const regularOrders = activeOrders.filter(o => !(o as any).rescheduled_from);
 
-  // Rescheduled section ONLY for:
-  // 1. Rescheduled orders ON a trip
-  const rescheduledOrders = activeOrders.filter(o => !!(o as any).rescheduled_from && !!(o as any).assignedTripId);
+  // Rescheduled: Orders originally placed for a different date but moved here
+  const rescheduledOrders = activeOrders.filter(o => !!(o as any).rescheduled_from);
 
   // Helper to map order to sales row
   const mapToSalesRow = (o: Order): SalesReportRow => {
