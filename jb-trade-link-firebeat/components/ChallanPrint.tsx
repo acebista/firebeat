@@ -159,13 +159,13 @@ export const ChallanPrint: React.FC<ChallanPrintProps> = ({
       }}>
         <thead>
           <tr style={{ backgroundColor: '#f0f0f0' }}>
-            <th style={{ border: '2px solid black', padding: '8px', textAlign: 'center', width: '40px' }}>#</th>
-            <th style={{ border: '2px solid black', padding: '8px', textAlign: 'left' }}>Product</th>
-            <th style={{ border: '2px solid black', padding: '8px', textAlign: 'center', width: '80px' }}>Qty</th>
-            <th style={{ border: '2px solid black', padding: '8px', textAlign: 'right', width: '80px' }}>Rate</th>
-            <th style={{ border: '2px solid black', padding: '8px', textAlign: 'right', width: '100px' }}>SubTotal</th>
-            <th style={{ border: '2px solid black', padding: '8px', textAlign: 'right', width: '80px' }}>Disc</th>
-            <th style={{ border: '2px solid black', padding: '8px', textAlign: 'right', width: '100px' }}>Total</th>
+            <th style={{ border: '2px solid black', padding: '4px', textAlign: 'center', width: '30px' }}>#</th>
+            <th style={{ border: '2px solid black', padding: '4px', textAlign: 'left' }}>Product</th>
+            <th style={{ border: '2px solid black', padding: '4px', textAlign: 'center', width: '60px' }}>Qty</th>
+            <th style={{ border: '2px solid black', padding: '4px', textAlign: 'right', width: '70px' }}>Rate</th>
+            <th style={{ border: '2px solid black', padding: '4px', textAlign: 'right', width: '80px' }}>SubTotal</th>
+            <th style={{ border: '2px solid black', padding: '4px', textAlign: 'right', width: '70px' }}>Disc</th>
+            <th style={{ border: '2px solid black', padding: '4px', textAlign: 'right', width: '90px' }}>Total</th>
           </tr>
         </thead>
         <tbody>
@@ -189,13 +189,13 @@ export const ChallanPrint: React.FC<ChallanPrintProps> = ({
 
             return (
               <tr key={index}>
-                <td style={{ border: '1px solid black', padding: '6px', textAlign: 'center' }}>{index + 1}</td>
-                <td style={{ border: '1px solid black', padding: '6px' }}>{productName}</td>
-                <td style={{ border: '1px solid black', padding: '6px', textAlign: 'center' }}>{qty}</td>
-                <td style={{ border: '1px solid black', padding: '6px', textAlign: 'right' }}>{baseRate.toFixed(2)}</td>
-                <td style={{ border: '1px solid black', padding: '6px', textAlign: 'right' }}>{subtotalAtBase.toFixed(2)}</td>
-                <td style={{ border: '1px solid black', padding: '6px', textAlign: 'right' }}>{itemDiscountAmount.toFixed(2)}</td>
-                <td style={{ border: '1px solid black', padding: '6px', textAlign: 'right', fontWeight: 'bold' }}>
+                <td style={{ border: '1px solid black', padding: '3px 4px', textAlign: 'center' }}>{index + 1}</td>
+                <td style={{ border: '1px solid black', padding: '3px 4px' }}>{productName}</td>
+                <td style={{ border: '1px solid black', padding: '3px 4px', textAlign: 'center' }}>{qty}</td>
+                <td style={{ border: '1px solid black', padding: '3px 4px', textAlign: 'right' }}>{baseRate.toFixed(2)}</td>
+                <td style={{ border: '1px solid black', padding: '3px 4px', textAlign: 'right' }}>{subtotalAtBase.toFixed(2)}</td>
+                <td style={{ border: '1px solid black', padding: '3px 4px', textAlign: 'right' }}>{itemDiscountAmount.toFixed(2)}</td>
+                <td style={{ border: '1px solid black', padding: '3px 4px', textAlign: 'right', fontWeight: 'bold' }}>
                   {finalTotal.toFixed(2)}
                 </td>
               </tr>
@@ -439,14 +439,20 @@ export const printChallan = (order: Order, customerLocation?: string, orientatio
           .col-disc { width: 1%; white-space: nowrap; text-align: right; }
           .col-total { width: 1%; white-space: nowrap; text-align: right; font-weight: bold; }
           
-          .totals { margin-top: auto; margin-bottom: 20px; font-size: 10pt; }
-          .totals div { margin-bottom: 5px; }
-          .grand-total { font-size: 13pt; font-weight: bold; margin-top: 10px; border-top: 2px solid black; padding-top: 8px; }
-          .signatures { display: flex; justify-content: space-between; margin-top: 10px; font-size: 10pt; padding-bottom: 10px; }
-          .signatures div { border-top: 1.5px solid black; padding-top: 6px; width: 40%; text-align: center; }
+          .totals { margin-top: 10px; margin-bottom: 10px; font-size: 10pt; page-break-inside: avoid; }
+          .totals div { margin-bottom: 3px; }
+          .grand-total { font-size: 12pt; font-weight: bold; margin-top: 6px; border-top: 2px solid black; padding-top: 6px; }
+          .signatures { display: flex; justify-content: space-between; margin-top: 20px; font-size: 9pt; padding-bottom: 5px; page-break-inside: avoid; }
+          .signatures div { border-top: 1.5px solid black; padding-top: 4px; width: 40%; text-align: center; }
+          
+          /* Compact mode for long lists */
+          .compact table { font-size: 7.5pt; margin-bottom: 8px; }
+          .compact th, .compact td { padding: 2px 3px; }
+          .compact .header { margin-bottom: 8px; }
+          .compact .details { margin-bottom: 8px; font-size: 8.5pt; }
         </style>
       </head>
-      <body>
+      <body class="${(orderItems || []).length > 12 ? 'compact' : ''}">
         ${challansHtml}
       </body>
     </html>
@@ -507,8 +513,9 @@ export const printChallans = (
 
     return Array.from({ length: copiesCount }).map((_, i) => {
       const label = copiesCount > 1 ? (i === 0 ? 'Original Copy' : 'Duplicate Copy') : 'Customer Copy';
+      const isCompact = (orderItems || []).length > 12;
       return `
-          <div class="challan-page">
+          <div class="challan-page ${isCompact ? 'compact' : ''}">
             <div class="container">
               ${qrUrl ? `
                 <div class="qr-container">
@@ -681,16 +688,29 @@ export const printChallans = (
           .col-disc { width: 1%; white-space: nowrap; text-align: right; }
           .col-total { width: 1%; white-space: nowrap; text-align: right; font-weight: bold; }
           
-          .totals { margin-top: auto; margin-bottom: 20px; font-size: 10pt; }
-          .totals div { margin-bottom: 5px; }
-          .grand-total { font-size: 13pt; font-weight: bold; margin-top: 10px; border-top: 2px solid black; padding-top: 8px; }
+          .totals { margin-top: 10px; margin-bottom: 10px; font-size: 10pt; page-break-inside: avoid; }
+          .totals div { margin-bottom: 3px; }
+          .grand-total { font-size: 12pt; font-weight: bold; margin-top: 6px; border-top: 2px solid black; padding-top: 6px; }
           
-          .signatures { display: flex; justify-content: space-between; margin-top: 10px; font-size: 10pt; padding-bottom: 10px; }
-          .signatures div { border-top: 1.5px solid black; padding-top: 6px; width: 40%; text-align: center; }
+          .signatures { display: flex; justify-content: space-between; margin-top: 20px; font-size: 9pt; padding-bottom: 5px; page-break-inside: avoid; }
+          .signatures div { border-top: 1.5px solid black; padding-top: 4px; width: 40%; text-align: center; }
+          
+          /* Compact mode for long lists */
+          .compact table { font-size: 7.5pt; margin-bottom: 8px; }
+          .compact th, .compact td { padding: 2px 3px; }
+          .compact .header { margin-bottom: 8px; }
+          .compact .details { margin-bottom: 8px; font-size: 8.5pt; }
         </style>
       </head>
       <body>
-        ${challanHtml}
+        ${challanHtml.replace(/class="container"/g, (match, offset, string) => {
+    // Very crude way to inject dynamic class per page in a pre-rendered string, 
+    // but since we are mapping orders above, let's just use the body class if we are ok with global compacting
+    // Better: we can handle it inside the challanHtml generation itself.
+    return match;
+  })}
+        <!-- Note: Global body class for batch print is tricky if some are long and some short. 
+             Injecting class into challan-page instead. -->
       </body>
     </html>
   `);
