@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Card, Button } from '../../../components/ui/Elements';
+import { Card, Button, Badge } from '../../../components/ui/Elements';
 import { SalesReportRow } from '../../../types/reports';
 import { Download, Printer, CalendarClock } from 'lucide-react';
 import { printContent } from '../../../lib/printUtils';
