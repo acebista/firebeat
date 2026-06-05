@@ -136,22 +136,32 @@ export const CreateOrder: React.FC = () => {
         }
 
         setIsGettingLocation(true);
+        const toastId = toast.loading("📌 Checking GPS access...");
+
         navigator.geolocation.getCurrentPosition(
             (pos) => {
                 setPermissionStatus('granted');
                 setIsGettingLocation(false);
-                toast.success("Location access granted");
+                toast.success("✅ GPS Access Granted", { id: toastId });
             },
             (err) => {
                 setIsGettingLocation(false);
                 if (err.code === err.PERMISSION_DENIED) {
                     setPermissionStatus('denied');
-                    toast.error("Location access denied. Please enable in settings.");
+                    toast.error(
+                        <div className="space-y-1">
+                            <p className="font-bold">📍 Location Access Blocked</p>
+                            <p className="text-xs">Sales tracking requires GPS. Please click the Lock icon in your browser address bar and set Location to 'Allow'.</p>
+                        </div>,
+                        { id: toastId, duration: 8000 }
+                    );
+                } else if (err.code === err.TIMEOUT) {
+                    toast.error("⏱️ GPS Timeout. Please make sure you are in an open area with clear sky view.", { id: toastId });
                 } else {
-                    toast.error("Could not get location. Try again if you are outside.");
+                    toast.error("❌ Could not get location. Please try again.", { id: toastId });
                 }
             },
-            { enableHighAccuracy: true, timeout: 5000 }
+            { enableHighAccuracy: true, timeout: 10000 }
         );
     };
 
@@ -307,7 +317,7 @@ export const CreateOrder: React.FC = () => {
         }
     }, [user, selectedSalesperson]);
 
-    // Effect: Populate editable fields when customer is selected
+    // Effect: Populate editable fields and check mandatory GPS/Route when customer is selected
     useEffect(() => {
         if (selectedCustomer) {
             const cust = customers.find(c => c.id === selectedCustomer);
@@ -317,11 +327,26 @@ export const CreateOrder: React.FC = () => {
                     panNumber: cust.panNumber || '',
                     routeName: cust.routeName || ''
                 });
+
+                // Sync location check
+                const missingRoute = !cust.routeName || cust.routeName.trim() === '';
+                const missingLoc = (!cust.locationText || cust.locationText.trim() === '') &&
+                    (!cust.latitude || !cust.longitude);
+
+                if (missingRoute || missingLoc) {
+                    const canOverride = user?.allow_override_customer_validation;
+                    if (!canOverride) {
+                        toast.error("📍 Mandatory: Customer missing Route/GPS. Please sync now.", { id: 'gps-sync-missing' });
+                        setFixRoute(cust.routeName || '');
+                        setFixLocation(cust.locationText || '');
+                        setFixDataOpen(true);
+                    }
+                }
             }
         } else {
             setEditableCustomer({ phone: '', panNumber: '', routeName: '' });
         }
-    }, [selectedCustomer, customers]);
+    }, [selectedCustomer, customers, user?.allow_override_customer_validation]);
 
     // --- PRICING ENGINE ---
     const calculateItemPricing = (product: Product, qty: number) => {
@@ -329,13 +354,13 @@ export const CreateOrder: React.FC = () => {
         let netRate = product.discountedRate;
         let schemeText = '';
 
-        if (product.secondaryAvailable && product.secondaryQualifyingQty && qty >= product.secondaryQualifyingQty) {
+        if (product.secondaryAvailable && product.secondaryQualifyingQty !== undefined && product.secondaryQualifyingQty !== null && qty >= product.secondaryQualifyingQty) {
             if (product.secondaryDiscountPct) {
                 netRate = netRate * (1 - product.secondaryDiscountPct / 100);
                 schemeText = `${product.secondaryDiscountPct}% Qty Scheme`;
             }
 
-            if (product.additionalQualifyingQty && qty >= product.additionalQualifyingQty && product.additionalSecondaryDiscountPct) {
+            if (product.additionalQualifyingQty !== undefined && product.additionalQualifyingQty !== null && qty >= product.additionalQualifyingQty && product.additionalSecondaryDiscountPct) {
                 netRate = netRate * (1 - product.additionalSecondaryDiscountPct / 100);
                 schemeText += ` + ${product.additionalSecondaryDiscountPct}% Add.`;
             }
@@ -719,24 +744,35 @@ export const CreateOrder: React.FC = () => {
 
     const handleCaptureGpsPreemptively = () => {
         if (!navigator.geolocation) {
-            toast.error("GPS not supported");
+            toast.error("GPS not supported on this browser");
             return;
         }
         setGpsStatus('capturing');
+        const toastId = toast.loading("📍 Locking location...");
+
         navigator.geolocation.getCurrentPosition(
             (pos) => {
                 const coords = `${pos.coords.latitude},${pos.coords.longitude}`;
                 setPreCaughtGps(coords);
                 setGpsStatus('ready');
-                toast.success("Location locked for order");
+                toast.success("✅ Location locked for order", { id: toastId });
             },
             (err) => {
                 setGpsStatus('error');
                 console.error("GPS error", err);
-                if (err.code === 1) toast.error("Location permission denied");
-                else toast.error("Could not get location. Try again?");
+                if (err.code === 1) {
+                    toast.error(
+                        <div className="space-y-1">
+                            <p className="font-bold text-sm">📍 GPS Blocked</p>
+                            <p className="text-[10px]">Please allow location in browser settings to punch orders.</p>
+                        </div>,
+                        { id: toastId, duration: 6000 }
+                    );
+                } else {
+                    toast.error("❌ GPS Timeout/Error. Please try again outside.", { id: toastId });
+                }
             },
-            { timeout: 10000, enableHighAccuracy: true }
+            { timeout: 10000, enableHighAccuracy: true, maximumAge: 0 }
         );
     };
 
@@ -767,8 +803,8 @@ export const CreateOrder: React.FC = () => {
             }
 
             // MANDATORY DATA VALIDATION
-            // TEMPORARY: GPS validation disabled - set to false to re-enable
-            const SKIP_GPS_VALIDATION = true;
+            // CUSTOMER DATA VALIDATION (GPS/ROUTE)
+            const SKIP_GPS_VALIDATION = false;
 
             const selectedCustObj = customers.find(c => c.id === selectedCustomer);
             if (selectedCustObj && !SKIP_GPS_VALIDATION) {
@@ -798,19 +834,23 @@ export const CreateOrder: React.FC = () => {
 
             if (cart.length === 0) {
                 toast.error("Cart is empty");
+                orderPlacementRef.current = false;
+                setIsPlacingOrder(false);
                 return;
             }
 
             const errors = validateCart();
             if (errors.length > 0) {
                 toast.error(`Fix these:\n${errors.map(e => "• " + e).join("\n")}`, { duration: 6000 });
+                orderPlacementRef.current = false;
+                setIsPlacingOrder(false);
                 return;
             }
 
             const spName = selectedSalesperson === 'office' ? 'Office' : salespersons.find(s => s.id === selectedSalesperson)?.name || 'Unknown';
             const custName = customers.find(c => c.id === selectedCustomer)?.name || 'Unknown';
 
-            // Capture GPS with user feedback
+            // Capture GPS with user feedback - MANDATORY
             const captureGPS = (): Promise<string | null> => {
                 return new Promise((resolve) => {
                     // Use pre-captured if available
@@ -825,27 +865,48 @@ export const CreateOrder: React.FC = () => {
                     }
 
                     // Only show toast if it takes a moment
+                    const toastId = 'gps-capture-toast';
                     const timer = setTimeout(() => {
-                        toast.loading("Capturing sale location...", { id: 'gps-load' });
+                        toast.loading("📍 Capturing sale location...", { id: toastId });
                     }, 500);
 
                     navigator.geolocation.getCurrentPosition(
                         (position) => {
                             clearTimeout(timer);
-                            toast.success("Location recorded", { id: 'gps-load' });
+                            toast.success("✅ Location recorded", { id: toastId });
                             resolve(`${position.coords.latitude},${position.coords.longitude}`);
                         },
-                        () => {
+                        (err) => {
                             clearTimeout(timer);
-                            toast.dismiss('gps-load');
+                            toast.dismiss(toastId);
+                            console.error('[GPS] Capture failed:', err);
                             resolve(null);
                         },
-                        { timeout: 4000, enableHighAccuracy: true }
+                        { timeout: 6000, enableHighAccuracy: true, maximumAge: 0 }
                     );
                 });
             };
 
             const gpsCoords = await captureGPS();
+
+            // STRICT ENFORCEMENT: Order must have GPS
+            if (!gpsCoords) {
+                toast.error(
+                    <div className="space-y-1">
+                        <p className="font-bold">📍 GPS Location Required</p>
+                        <p className="text-sm">Cannot punch order without GPS coordinates. Please enable location access, move to an open area, and try again.</p>
+                        <p className="text-[10px] opacity-75 mt-1">Tip: Click the '📍 Get GPS' button in the cart to lock location first.</p>
+                    </div>,
+                    { duration: 8000 }
+                );
+
+                // Prompt pre-capture logic
+                setGpsStatus('error');
+
+                orderPlacementRef.current = false;
+                setIsPlacingOrder(false);
+                return;
+            }
 
             // Prepare order data WITHOUT id - id will be generated in retry loop
             const orderData = {
@@ -1258,7 +1319,12 @@ export const CreateOrder: React.FC = () => {
                                     >
                                         {/* Row 1: Full Product Name + Delete */}
                                         <div className="flex items-start justify-between gap-2 mb-2">
-                                            <p className="text-sm font-medium text-gray-900 leading-tight flex-1">{item.productName}</p>
+                                            <div className="flex-grow">
+                                                <p className="text-sm font-medium text-gray-900 leading-tight">{item.productName}</p>
+                                                {item.schemeAppliedText && (
+                                                    <p className="text-[10px] text-green-600 font-medium mt-0.5">{item.schemeAppliedText}</p>
+                                                )}
+                                            </div>
                                             <button
                                                 onClick={() => removeFromCart(item.productId)}
                                                 className="p-1 text-red-400 hover:text-red-600 shrink-0"

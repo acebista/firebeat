@@ -32,6 +32,7 @@ import { SystemHealth } from './pages/admin/SystemHealth';
 import HRPanel from './components/admin/HRPanel';
 import { CustomerLedgerPage } from './pages/admin/CustomerLedgerPage';
 import { AllCreditsPage } from './pages/admin/AllCreditsPage';
+import { CustomerAnalysis } from './pages/admin/CustomerAnalysis';
 
 // Returns & Damages
 import { ReturnsList } from './pages/admin/Returns';
@@ -163,6 +164,7 @@ const App: React.FC = () => {
             <Route path="/admin/customers" element={<CustomerManagement />} />
             <Route path="/admin/customers/:customerId/ledger" element={<CustomerLedgerPage />} />
             <Route path="/admin/credits" element={<AllCreditsPage />} />
+            <Route path="/admin/customer-analysis" element={<CustomerAnalysis />} />
             <Route path="/admin/orders" element={<OrderManagement />} />
             <Route path="/admin/dispatch" element={<DispatchPlanner />} />
             <Route path="/admin/dispatch/trips/:id" element={<DispatchTripDetails />} />

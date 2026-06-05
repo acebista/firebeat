@@ -21,7 +21,8 @@ import {
   DollarSign,
   Boxes,
   History,
-  FileOutput
+  FileOutput,
+  Target
 } from 'lucide-react';
 import { useAuth } from '../../services/auth';
 import { UserRole } from '../../types';
@@ -39,6 +40,7 @@ const navItems: Record<UserRole, { label: string; path: string; icon: any }[]> =
     { label: 'Companies', path: '/admin/companies', icon: Building2 },
     { label: 'Products', path: '/admin/products', icon: Package },
     { label: 'Customers', path: '/admin/customers', icon: Users },
+    { label: 'Customer Intelligence', path: '/admin/customer-analysis', icon: Target },
     { label: 'All Credits (AR)', path: '/admin/credits', icon: DollarSign },
     { label: 'Sales Orders', path: '/admin/orders', icon: ShoppingBag },
     { label: 'Purchases', path: '/admin/purchases', icon: ShoppingCart },

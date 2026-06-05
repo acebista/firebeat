@@ -113,13 +113,13 @@ export const CreateOrder: React.FC = () => {
     let netRate = product.discountedRate;
     let schemeText = '';
 
-    if (product.secondaryAvailable && product.secondaryQualifyingQty && qty >= product.secondaryQualifyingQty) {
+    if (product.secondaryAvailable && product.secondaryQualifyingQty !== undefined && product.secondaryQualifyingQty !== null && qty >= product.secondaryQualifyingQty) {
       if (product.secondaryDiscountPct) {
         netRate = netRate * (1 - product.secondaryDiscountPct / 100);
         schemeText = `${product.secondaryDiscountPct}% Qty Scheme`;
       }
 
-      if (product.additionalQualifyingQty && qty >= product.additionalQualifyingQty && product.additionalSecondaryDiscountPct) {
+      if (product.additionalQualifyingQty !== undefined && product.additionalQualifyingQty !== null && qty >= product.additionalQualifyingQty && product.additionalSecondaryDiscountPct) {
         netRate = netRate * (1 - product.additionalSecondaryDiscountPct / 100);
         schemeText += ` + ${product.additionalSecondaryDiscountPct}% Add.`;
       }

@@ -31,7 +31,7 @@ const generateMockOrdersForRange = (startDate: string, endDate: string) => {
          let discPct = ((prod.baseRate - prod.discountedRate) / prod.baseRate) * 100;
          // Apply scheme if eligible (Simulate secondary)
          let schemePct = 0;
-         if (prod.secondaryAvailable && prod.secondaryQualifyingQty && qty >= prod.secondaryQualifyingQty) {
+         if (prod.secondaryAvailable && prod.secondaryQualifyingQty !== undefined && prod.secondaryQualifyingQty !== null && qty >= prod.secondaryQualifyingQty) {
             schemePct = prod.secondaryDiscountPct || 0;
          }
          
