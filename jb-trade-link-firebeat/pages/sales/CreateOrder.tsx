@@ -328,7 +328,8 @@ export const CreateOrder: React.FC = () => {
                     routeName: cust.routeName || ''
                 });
 
-                // Sync location check
+                // Sync location check (Disabled GPS/Route missing block)
+                /*
                 const missingRoute = !cust.routeName || cust.routeName.trim() === '';
                 const missingLoc = (!cust.locationText || cust.locationText.trim() === '') &&
                     (!cust.latitude || !cust.longitude);
@@ -342,6 +343,7 @@ export const CreateOrder: React.FC = () => {
                         setFixDataOpen(true);
                     }
                 }
+                */
             }
         } else {
             setEditableCustomer({ phone: '', panNumber: '', routeName: '' });
@@ -804,7 +806,7 @@ export const CreateOrder: React.FC = () => {
 
             // MANDATORY DATA VALIDATION
             // CUSTOMER DATA VALIDATION (GPS/ROUTE)
-            const SKIP_GPS_VALIDATION = false;
+            const SKIP_GPS_VALIDATION = true;
 
             const selectedCustObj = customers.find(c => c.id === selectedCustomer);
             if (selectedCustObj && !SKIP_GPS_VALIDATION) {
@@ -889,7 +891,8 @@ export const CreateOrder: React.FC = () => {
 
             const gpsCoords = await captureGPS();
 
-            // STRICT ENFORCEMENT: Order must have GPS
+            // STRICT ENFORCEMENT: Order must have GPS (Disabled for now)
+            /*
             if (!gpsCoords) {
                 toast.error(
                     <div className="space-y-1">
@@ -907,6 +910,7 @@ export const CreateOrder: React.FC = () => {
                 setIsPlacingOrder(false);
                 return;
             }
+            */
 
             // Prepare order data WITHOUT id - id will be generated in retry loop
             const orderData = {
