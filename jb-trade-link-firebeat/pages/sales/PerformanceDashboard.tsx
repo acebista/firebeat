@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, Button } from '../../components/ui/Elements';
 import { TrendingUp, TrendingDown, Target, Award, Sparkles, RefreshCw, Calendar, DollarSign, ShoppingBag, Users } from 'lucide-react';
 import { useAuth } from '../../services/auth';
-import { OrderService, ProductService, CustomerService } from '../../services/db';
+import { OrderService, ProductService } from '../../services/db';
 import { Order } from '../../types';
 import { getSalesInsights, getPerformanceTips } from '../../services/aiService';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';

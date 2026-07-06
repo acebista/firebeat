@@ -61,10 +61,15 @@ export const RouteMap: React.FC = () => {
                 if (activeTrip && activeTrip.orderIds.length > 0) {
                     const orders = await OrderService.getOrdersByIds(activeTrip.orderIds);
 
+                    // Batch fetch all customers in a single query to avoid N+1 sequential requests
+                    const customerIds = Array.from(new Set(orders.map(o => o.customerId).filter(Boolean)));
+                    const customers = await CustomerService.getCustomersByIds(customerIds);
+                    const customerMap = new Map(customers.map(c => [c.id, c]));
+
                     const stopsData = [];
                     for (const order of orders) {
                         if (order.customerId) {
-                            const customer = await CustomerService.getById(order.customerId);
+                            const customer = customerMap.get(order.customerId);
                             // Parse location
                             if (customer && customer.locationText) {
                                 const [latStr, lngStr] = customer.locationText.split(',').map(s => s.trim());

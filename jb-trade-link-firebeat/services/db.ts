@@ -17,6 +17,12 @@ export const COLS = {
   VEHICLES: 'vehicles'
 };
 
+// Module-level caches for static/semi-static data
+let cachedCustomers: Customer[] | null = null;
+let cachedProducts: Product[] | null = null;
+let cachedCompanies: Company[] | null = null;
+let cachedUsers: User[] | null = null;
+
 // Helper to standardize response
 // NOTE: Session is verified at boot time. We trust it's valid here.
 // If session expires, Supabase will return 401 and we handle it globally.
@@ -111,7 +117,12 @@ const enrichOrders = async (orders: Order[]): Promise<Order[]> => {
 };
 
 export const ProductService = {
-  getAll: () => fetchCollection<Product>(COLS.PRODUCTS),
+  getAll: async () => {
+    if (cachedProducts) return cachedProducts;
+    const products = await fetchCollection<Product>(COLS.PRODUCTS);
+    cachedProducts = products;
+    return products;
+  },
   add: async (product: Omit<Product, 'id'>) => {
     // Generate a unique ID if not provided (using short UUID prefix)
     const id = (product as any).id || `prod_${crypto.randomUUID().split('-')[0]}`;
@@ -123,15 +134,28 @@ export const ProductService = {
       .select()
       .single();
     if (error) throw error;
-    return data as Product;
+    const newProd = data as Product;
+    if (cachedProducts) {
+      cachedProducts.push(newProd);
+    }
+    return newProd;
   },
   update: async (id: string, product: Partial<Product>) => {
     const { error } = await supabase.from(COLS.PRODUCTS).update(product).eq('id', id);
     if (error) throw error;
+    if (cachedProducts) {
+      const idx = cachedProducts.findIndex(p => p.id === id);
+      if (idx !== -1) {
+        cachedProducts[idx] = { ...cachedProducts[idx], ...product };
+      }
+    }
   },
   delete: async (id: string) => {
     const { error } = await supabase.from(COLS.PRODUCTS).delete().eq('id', id);
     if (error) throw error;
+    if (cachedProducts) {
+      cachedProducts = cachedProducts.filter(p => p.id !== id);
+    }
   }
 };
 
@@ -139,6 +163,10 @@ export const CustomerService = {
   getAll: () => CustomerService.getAllRecursively(),
   // New method to fetch ALL customers recursively (bypassing 1000 row limit)
   getAllRecursively: async (): Promise<Customer[]> => {
+    if (cachedCustomers) {
+      console.log('[CustomerService] Returning cached customers:', cachedCustomers.length);
+      return cachedCustomers;
+    }
     const batchSize = 1000;
 
     try {
@@ -176,6 +204,7 @@ export const CustomerService = {
 
       const allCustomers = results.flat();
       console.log(`[CustomerService] Successfully loaded ${allCustomers.length} customers.`);
+      cachedCustomers = allCustomers;
       return allCustomers;
     } catch (error) {
       console.error('Error fetching customers in parallel:', error);
@@ -185,6 +214,7 @@ export const CustomerService = {
   },
 
   getAllSequential: async (): Promise<Customer[]> => {
+    if (cachedCustomers) return cachedCustomers;
     let from = 0;
     const batchSize = 1000;
     let hasMore = true;
@@ -207,6 +237,7 @@ export const CustomerService = {
         hasMore = false;
       }
     }
+    cachedCustomers = allCustomers;
     return allCustomers;
   },
   add: async (customer: Omit<Customer, 'id'>) => {
@@ -217,39 +248,104 @@ export const CustomerService = {
       .select()
       .single();
     if (error) throw error;
-    return data as Customer;
+    const newCust = data as Customer;
+    if (cachedCustomers) {
+      cachedCustomers.push(newCust);
+    }
+    return newCust;
   },
   update: async (id: string, customer: Partial<Customer>) => {
     const { error } = await supabase.from(COLS.CUSTOMERS).update(customer).eq('id', id);
     if (error) throw error;
+    if (cachedCustomers) {
+      const idx = cachedCustomers.findIndex(c => c.id === id);
+      if (idx !== -1) {
+        cachedCustomers[idx] = { ...cachedCustomers[idx], ...customer };
+      }
+    }
   },
   getCount: async () => {
+    if (cachedCustomers) return cachedCustomers.length;
     const { count, error } = await supabase.from(COLS.CUSTOMERS).select('*', { count: 'exact', head: true });
     if (error) throw error;
     return count;
   },
   getById: async (id: string) => {
+    if (cachedCustomers) {
+      const cached = cachedCustomers.find(c => c.id === id);
+      if (cached) return cached;
+    }
     const { data, error } = await supabase.from(COLS.CUSTOMERS).select('*').eq('id', id).single();
     if (error) return null;
     return data as Customer;
+  },
+  getCustomersByIds: async (ids: string[]): Promise<Customer[]> => {
+    if (ids.length === 0) return [];
+    if (cachedCustomers) {
+      const fromCache = ids.map(id => cachedCustomers!.find(c => c.id === id)).filter(Boolean) as Customer[];
+      if (fromCache.length === ids.length) return fromCache;
+    }
+    const { data, error } = await supabase
+      .from(COLS.CUSTOMERS)
+      .select('*')
+      .in('id', ids);
+    if (error) throw error;
+    const list = data as Customer[];
+    if (cachedCustomers) {
+      for (const c of list) {
+        if (!cachedCustomers.some(cc => cc.id === c.id)) {
+          cachedCustomers.push(c);
+        }
+      }
+    }
+    return list;
   }
 };
 
 export const CompanyService = {
-  getAll: () => fetchCollection<Company>(COLS.COMPANIES),
+  getAll: async () => {
+    if (cachedCompanies) return cachedCompanies;
+    const companies = await fetchCollection<Company>(COLS.COMPANIES);
+    cachedCompanies = companies;
+    return companies;
+  },
   add: async (company: Omit<Company, 'id'> & { id: string }) => {
     const { data, error } = await supabase.from(COLS.COMPANIES).upsert(company).select().single();
     if (error) throw error;
-    return data as Company;
+    const newComp = data as Company;
+    if (cachedCompanies) {
+      const idx = cachedCompanies.findIndex(c => c.id === company.id);
+      if (idx !== -1) {
+        cachedCompanies[idx] = newComp;
+      } else {
+        cachedCompanies.push(newComp);
+      }
+    }
+    return newComp;
   },
   update: async (id: string, company: Partial<Company>) => {
     const { error } = await supabase.from(COLS.COMPANIES).update(company).eq('id', id);
     if (error) throw error;
+    if (cachedCompanies) {
+      const idx = cachedCompanies.findIndex(c => c.id === id);
+      if (idx !== -1) {
+        cachedCompanies[idx] = { ...cachedCompanies[idx], ...company };
+      }
+    }
   },
 };
 
 export const OrderService = {
   getAll: () => fetchCollection<Order>(COLS.ORDERS),
+
+  getUnknownCleanupOrders: async (): Promise<any[]> => {
+    // Only select id and items to minimize egress
+    const { data, error } = await supabase
+      .from(COLS.ORDERS)
+      .select('id, items');
+    if (error) throw error;
+    return data;
+  },
 
   // Fetch ALL order IDs (no limit) for duplicate checking
   getAllOrderIds: async (): Promise<string[]> => {
@@ -839,11 +935,26 @@ export const TripService = {
 };
 
 export const UserService = {
-  getAll: () => fetchCollection<User>(COLS.USERS),
+  getAll: async () => {
+    if (cachedUsers) return cachedUsers;
+    const users = await fetchCollection<User>(COLS.USERS);
+    cachedUsers = users;
+    return users;
+  },
   add: async (user: Omit<User, 'id'>) => {
     // 1. Create entry in public.users table
     const { data: profile, error } = await supabase.from(COLS.USERS).upsert(user).select().single();
     if (error) throw error;
+    
+    const newUserObj = profile as User;
+    if (cachedUsers) {
+      const idx = cachedUsers.findIndex(u => u.id === newUserObj.id);
+      if (idx !== -1) {
+        cachedUsers[idx] = newUserObj;
+      } else {
+        cachedUsers.push(newUserObj);
+      }
+    }
 
     // 2. Automatically create entry in Auth system (Backfill)
     if (profile && profile.email) {
@@ -873,7 +984,7 @@ export const UserService = {
       }
     }
 
-    return profile as User;
+    return newUserObj;
   },
   update: async (id: string, data: Partial<User>) => {
     // If email is being updated, use the Edge Function which has service role access
@@ -926,6 +1037,13 @@ export const UserService = {
           const { error } = await supabase.from(COLS.USERS).update(otherData).eq('id', id);
           if (error) throw error;
         }
+
+        if (cachedUsers) {
+          const idx = cachedUsers.findIndex(u => u.id === id);
+          if (idx !== -1) {
+            cachedUsers[idx] = { ...cachedUsers[idx], ...data };
+          }
+        }
         return; // Exit early - email update handled by Edge Function
       } catch (authUpdateError) {
         console.error('Error updating auth email:', authUpdateError);
@@ -936,17 +1054,35 @@ export const UserService = {
     // Update the public.users table
     const { error } = await supabase.from(COLS.USERS).update(data).eq('id', id);
     if (error) throw error;
+
+    if (cachedUsers) {
+      const idx = cachedUsers.findIndex(u => u.id === id);
+      if (idx !== -1) {
+        cachedUsers[idx] = { ...cachedUsers[idx], ...data };
+      }
+    }
   },
   delete: async (id: string) => {
     const { error } = await supabase.from(COLS.USERS).delete().eq('id', id);
     if (error) throw error;
+    if (cachedUsers) {
+      cachedUsers = cachedUsers.filter(u => u.id !== id);
+    }
   },
   getByEmail: async (email: string) => {
+    if (cachedUsers) {
+      const list = cachedUsers.filter(u => u.email === email);
+      if (list.length > 0) return list;
+    }
     const { data, error } = await supabase.from(COLS.USERS).select('*').eq('email', email);
     if (error) throw error;
     return data as User[];
   },
   getByPhone: async (phone: string) => {
+    if (cachedUsers) {
+      const list = cachedUsers.filter(u => u.phone === phone);
+      if (list.length > 0) return list;
+    }
     const { data, error } = await supabase.from(COLS.USERS).select('*').eq('phone', phone);
     if (error) throw error;
     return data as User[];

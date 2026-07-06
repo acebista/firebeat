@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Card, Button, Select, Badge, Input } from '../../components/ui/Elements';
 import { Modal } from '../../components/ui/Modal';
 import { Eye, Calendar, Search, Filter, Printer, Edit } from 'lucide-react';
-import { Order, User, Product, Customer } from '../../types';
-import { OrderService, UserService, ProductService, CustomerService } from '../../services/db';
+import { Order, User, Product } from '../../types';
+import { OrderService, UserService, ProductService } from '../../services/db';
 import { useAuth } from '../../services/auth';
 import { printChallanV2 } from '../../utils/printChallan';
 import { useNavigate } from 'react-router-dom';
@@ -16,7 +16,6 @@ export const MyOrders: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [users, setUsers] = useState<User[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
-    const [customers, setCustomers] = useState<Customer[]>([]);
 
     // Filter State
     const [searchTerm, setSearchTerm] = useState('');
@@ -43,15 +42,13 @@ export const MyOrders: React.FC = () => {
 
     const loadData = async () => {
         try {
-            const [usersData, productsData, customersData] = await Promise.all([
+            const [usersData, productsData] = await Promise.all([
                 UserService.getAll(),
-                ProductService.getAll(),
-                CustomerService.getAll()
+                ProductService.getAll()
             ]);
             const salesUsers = usersData.filter(u => (u.role === 'sales') && u.isActive);
             setUsers(salesUsers);
             setProducts(productsData);
-            setCustomers(customersData);
         } catch (error) {
             console.error('Failed to load data:', error);
         }

@@ -25,7 +25,7 @@ export const UnknownProductCleanup: React.FC = () => {
         const fetchData = async () => {
             setLoading(true);
             try {
-                const orders = await OrderService.getAll();
+                const orders = await OrderService.getUnknownCleanupOrders();
                 const comps = await CompanyService.getAll();
                 setCompanies(comps);
                 const map = new Map<string, UnknownItem>();
