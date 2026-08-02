@@ -314,7 +314,7 @@ export const CustomerService = {
       const clean = query ? query.trim().replace(/,/g, ' ') : '';
       let builder = supabase
         .from(COLS.CUSTOMERS)
-        .select('id, name, phone, panNumber, routeName, locationText, latitude, longitude, isActive, status');
+        .select('id, name, phone, panNumber, routeName, locationText, isActive, status');
 
       if (clean) {
         // Split multi-word query into tokens so e.g. "Budathoki Ratopul" matches shop name & route
