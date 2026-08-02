@@ -14,48 +14,48 @@ import { initVersionCheck, APP_VERSION } from './lib/appVersion';
 initVersionCheck();
 console.log(`[App] Version: ${APP_VERSION}`);
 
-// Admin Pages
-import { AdminDashboard } from './pages/admin/AdminDashboard';
-import { UserManagement } from './pages/admin/Users';
-import { CustomerManagement } from './pages/admin/Customers';
-import { CompanyManagement } from './pages/admin/Companies';
-import { UnknownProductCleanup } from './pages/admin/UnknownProductCleanup';
-import { ProductManagement } from './pages/admin/Products';
-import { OrderManagement } from './pages/admin/Orders';
-import { DispatchPlanner } from './pages/admin/Dispatch';
-import { DispatchTripDetails } from './pages/admin/DispatchTripDetails';
-import { TripsOverview } from './pages/admin/TripsOverview';
-import { VehicleManagement } from './pages/admin/Vehicles';
-import { Purchases } from './pages/admin/Purchases';
-import { Reports } from './pages/admin/Reports';
-import { SystemHealth } from './pages/admin/SystemHealth';
-import HRPanel from './components/admin/HRPanel';
-import { CustomerLedgerPage } from './pages/admin/CustomerLedgerPage';
-import { AllCreditsPage } from './pages/admin/AllCreditsPage';
-import { CustomerAnalysis } from './pages/admin/CustomerAnalysis';
+// Lazy Loaded Admin Pages
+const AdminDashboard = React.lazy(() => import('./pages/admin/AdminDashboard').then(m => ({ default: m.AdminDashboard })));
+const UserManagement = React.lazy(() => import('./pages/admin/Users').then(m => ({ default: m.UserManagement })));
+const CustomerManagement = React.lazy(() => import('./pages/admin/Customers').then(m => ({ default: m.CustomerManagement })));
+const CompanyManagement = React.lazy(() => import('./pages/admin/Companies').then(m => ({ default: m.CompanyManagement })));
+const UnknownProductCleanup = React.lazy(() => import('./pages/admin/UnknownProductCleanup').then(m => ({ default: m.UnknownProductCleanup })));
+const ProductManagement = React.lazy(() => import('./pages/admin/Products').then(m => ({ default: m.ProductManagement })));
+const OrderManagement = React.lazy(() => import('./pages/admin/Orders').then(m => ({ default: m.OrderManagement })));
+const DispatchPlanner = React.lazy(() => import('./pages/admin/Dispatch').then(m => ({ default: m.DispatchPlanner })));
+const DispatchTripDetails = React.lazy(() => import('./pages/admin/DispatchTripDetails').then(m => ({ default: m.DispatchTripDetails })));
+const TripsOverview = React.lazy(() => import('./pages/admin/TripsOverview').then(m => ({ default: m.TripsOverview })));
+const VehicleManagement = React.lazy(() => import('./pages/admin/Vehicles').then(m => ({ default: m.VehicleManagement })));
+const Purchases = React.lazy(() => import('./pages/admin/Purchases').then(m => ({ default: m.Purchases })));
+const Reports = React.lazy(() => import('./pages/admin/Reports').then(m => ({ default: m.Reports })));
+const SystemHealth = React.lazy(() => import('./pages/admin/SystemHealth').then(m => ({ default: m.SystemHealth })));
+const HRPanel = React.lazy(() => import('./components/admin/HRPanel'));
+const CustomerLedgerPage = React.lazy(() => import('./pages/admin/CustomerLedgerPage').then(m => ({ default: m.CustomerLedgerPage })));
+const AllCreditsPage = React.lazy(() => import('./pages/admin/AllCreditsPage').then(m => ({ default: m.AllCreditsPage })));
+const CustomerAnalysis = React.lazy(() => import('./pages/admin/CustomerAnalysis').then(m => ({ default: m.CustomerAnalysis })));
 
 // Returns & Damages
-import { ReturnsList } from './pages/admin/Returns';
-import { CreateReturn } from './pages/admin/CreateReturn';
-import { DamagedGoodsReport } from './pages/admin/DamagedGoods';
-import { Migration } from './pages/admin/Migration';
-import { SupabaseTest } from './pages/admin/SupabaseTest';
-import { InventoryPage } from './pages/inventory/InventoryPage';
+const ReturnsList = React.lazy(() => import('./pages/admin/Returns').then(m => ({ default: m.ReturnsList })));
+const CreateReturn = React.lazy(() => import('./pages/admin/CreateReturn').then(m => ({ default: m.CreateReturn })));
+const DamagedGoodsReport = React.lazy(() => import('./pages/admin/DamagedGoods').then(m => ({ default: m.DamagedGoodsReport })));
+const Migration = React.lazy(() => import('./pages/admin/Migration').then(m => ({ default: m.Migration })));
+const SupabaseTest = React.lazy(() => import('./pages/admin/SupabaseTest').then(m => ({ default: m.SupabaseTest })));
+const InventoryPage = React.lazy(() => import('./pages/inventory/InventoryPage').then(m => ({ default: m.InventoryPage })));
 
 // Sales Pages
-import { SalesDashboard } from './pages/sales/SalesDashboard';
-import { CreateOrder } from './pages/sales/CreateOrder';
-import { EditOrder } from './pages/sales/EditOrder';
-import { MyOrders } from './pages/sales/MyOrders';
-import { PerformanceDashboard } from './pages/sales/PerformanceDashboard';
-import { SalesPrintChallans } from './pages/sales/SalesPrintChallans';
+const SalesDashboard = React.lazy(() => import('./pages/sales/SalesDashboard').then(m => ({ default: m.SalesDashboard })));
+const CreateOrder = React.lazy(() => import('./pages/sales/CreateOrder').then(m => ({ default: m.CreateOrder })));
+const EditOrder = React.lazy(() => import('./pages/sales/EditOrder').then(m => ({ default: m.EditOrder })));
+const MyOrders = React.lazy(() => import('./pages/sales/MyOrders').then(m => ({ default: m.MyOrders })));
+const PerformanceDashboard = React.lazy(() => import('./pages/sales/PerformanceDashboard').then(m => ({ default: m.PerformanceDashboard })));
+const SalesPrintChallans = React.lazy(() => import('./pages/sales/SalesPrintChallans').then(m => ({ default: m.SalesPrintChallans })));
 
 // Delivery Pages
-import { DeliveryDashboard } from './pages/delivery/DeliveryDashboard';
-import { DeliveryOrderDetails } from './pages/delivery/DeliveryOrderDetails';
-import { RouteMap } from './pages/delivery/RouteMap';
-import { PackingListPage } from './pages/delivery/PackingListPage';
-import { PastTrips } from './pages/delivery/PastTrips';
+const DeliveryDashboard = React.lazy(() => import('./pages/delivery/DeliveryDashboard').then(m => ({ default: m.DeliveryDashboard })));
+const DeliveryOrderDetails = React.lazy(() => import('./pages/delivery/DeliveryOrderDetails').then(m => ({ default: m.DeliveryOrderDetails })));
+const RouteMap = React.lazy(() => import('./pages/delivery/RouteMap').then(m => ({ default: m.RouteMap })));
+const PackingListPage = React.lazy(() => import('./pages/delivery/PackingListPage').then(m => ({ default: m.PackingListPage })));
+const PastTrips = React.lazy(() => import('./pages/delivery/PastTrips').then(m => ({ default: m.PastTrips })));
 
 // Placeholder for missing pages
 const Placeholder = ({ title }: { title: string }) => (
@@ -148,66 +148,68 @@ const App: React.FC = () => {
         }}
       />
       <HashRouter>
-        <Routes>
-          <Route path="/test" element={<SupabaseTest />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/" element={<Navigate to="/login" replace />} />
+        <React.Suspense fallback={<LoadingOverlay message="Loading module..." />}>
+          <Routes>
+            <Route path="/test" element={<SupabaseTest />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/" element={<Navigate to="/login" replace />} />
 
-          {/* Admin Routes */}
-          <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
-            <Route path="/admin/dashboard" element={<AdminDashboard />} />
-            <Route path="/admin/users" element={<UserManagement />} />
-            <Route path="/admin/products" element={<ProductManagement />} />
-            <Route path="/admin/inventory" element={<InventoryPage />} />
-            <Route path="/admin/companies" element={<CompanyManagement />} />
-            <Route path="/admin/customers" element={<CustomerManagement />} />
-            <Route path="/admin/customers/:customerId/ledger" element={<CustomerLedgerPage />} />
-            <Route path="/admin/credits" element={<AllCreditsPage />} />
-            <Route path="/admin/customer-analysis" element={<CustomerAnalysis />} />
-            <Route path="/admin/orders" element={<OrderManagement />} />
-            <Route path="/admin/dispatch" element={<DispatchPlanner />} />
-            <Route path="/admin/dispatch/trips/:id" element={<DispatchTripDetails />} />
-            <Route path="/admin/trips" element={<TripsOverview />} />
-            <Route path="/admin/vehicles" element={<VehicleManagement />} />
-            <Route path="/admin/purchases" element={<Purchases />} />
-            <Route path="/admin/hr" element={<HRPanel />} />
+            {/* Admin Routes */}
+            <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+              <Route path="/admin/dashboard" element={<AdminDashboard />} />
+              <Route path="/admin/users" element={<UserManagement />} />
+              <Route path="/admin/products" element={<ProductManagement />} />
+              <Route path="/admin/inventory" element={<InventoryPage />} />
+              <Route path="/admin/companies" element={<CompanyManagement />} />
+              <Route path="/admin/customers" element={<CustomerManagement />} />
+              <Route path="/admin/customers/:customerId/ledger" element={<CustomerLedgerPage />} />
+              <Route path="/admin/credits" element={<AllCreditsPage />} />
+              <Route path="/admin/customer-analysis" element={<CustomerAnalysis />} />
+              <Route path="/admin/orders" element={<OrderManagement />} />
+              <Route path="/admin/dispatch" element={<DispatchPlanner />} />
+              <Route path="/admin/dispatch/trips/:id" element={<DispatchTripDetails />} />
+              <Route path="/admin/trips" element={<TripsOverview />} />
+              <Route path="/admin/vehicles" element={<VehicleManagement />} />
+              <Route path="/admin/purchases" element={<Purchases />} />
+              <Route path="/admin/hr" element={<HRPanel />} />
 
-            {/* Returns & Damages */}
-            <Route path="/admin/returns" element={<ReturnsList />} />
-            <Route path="/admin/invoices/select-return" element={<CreateReturn />} />
-            <Route path="/admin/invoices/:invoiceId/return" element={<CreateReturn />} />
-            <Route path="/admin/damaged-goods" element={<DamagedGoodsReport />} />
+              {/* Returns & Damages */}
+              <Route path="/admin/returns" element={<ReturnsList />} />
+              <Route path="/admin/invoices/select-return" element={<CreateReturn />} />
+              <Route path="/admin/invoices/:invoiceId/return" element={<CreateReturn />} />
+              <Route path="/admin/damaged-goods" element={<DamagedGoodsReport />} />
 
-            <Route path="/admin/reports" element={<Reports />} />
+              <Route path="/admin/reports" element={<Reports />} />
 
-            <Route path="/admin/health" element={<SystemHealth />} />
-            <Route path="/admin/migration" element={<Migration />} />
-            <Route path="/admin/unknown-product-cleanup" element={<UnknownProductCleanup />} />
-            <Route path="/admin/create-order" element={<CreateOrder />} />
-          </Route>
+              <Route path="/admin/health" element={<SystemHealth />} />
+              <Route path="/admin/migration" element={<Migration />} />
+              <Route path="/admin/unknown-product-cleanup" element={<UnknownProductCleanup />} />
+              <Route path="/admin/create-order" element={<CreateOrder />} />
+            </Route>
 
-          {/* Sales Routes */}
-          <Route element={<ProtectedRoute allowedRoles={['sales', 'admin']} />}>
-            <Route path="/sales/dashboard" element={<SalesDashboard />} />
-            <Route path="/sales/create-order" element={<CreateOrder />} />
-            <Route path="/sales/edit-order/:id" element={<EditOrder />} />
-            <Route path="/sales/orders" element={<MyOrders />} />
-            <Route path="/sales/print-challans" element={<SalesPrintChallans />} />
-            <Route path="/sales/performance" element={<PerformanceDashboard />} />
-          </Route>
+            {/* Sales Routes */}
+            <Route element={<ProtectedRoute allowedRoles={['sales', 'admin']} />}>
+              <Route path="/sales/dashboard" element={<SalesDashboard />} />
+              <Route path="/sales/create-order" element={<CreateOrder />} />
+              <Route path="/sales/edit-order/:id" element={<EditOrder />} />
+              <Route path="/sales/orders" element={<MyOrders />} />
+              <Route path="/sales/print-challans" element={<SalesPrintChallans />} />
+              <Route path="/sales/performance" element={<PerformanceDashboard />} />
+            </Route>
 
-          {/* Delivery Routes */}
-          <Route element={<ProtectedRoute allowedRoles={['delivery', 'admin']} />}>
-            <Route path="/delivery/dashboard" element={<DeliveryDashboard />} />
-            <Route path="/delivery/past-trips" element={<PastTrips />} />
-            <Route path="/delivery/route-map" element={<RouteMap />} />
-            <Route path="/delivery/invoice/:id" element={<DeliveryOrderDetails />} />
-            <Route path="/delivery/packing-list/:tripId" element={<PackingListPage />} />
-          </Route>
+            {/* Delivery Routes */}
+            <Route element={<ProtectedRoute allowedRoles={['delivery', 'admin']} />}>
+              <Route path="/delivery/dashboard" element={<DeliveryDashboard />} />
+              <Route path="/delivery/past-trips" element={<PastTrips />} />
+              <Route path="/delivery/route-map" element={<RouteMap />} />
+              <Route path="/delivery/invoice/:id" element={<DeliveryOrderDetails />} />
+              <Route path="/delivery/packing-list/:tripId" element={<PackingListPage />} />
+            </Route>
 
-          <Route path="*" element={<Navigate to="/login" />} />
-        </Routes>
+            <Route path="*" element={<Navigate to="/login" />} />
+          </Routes>
+        </React.Suspense>
       </HashRouter>
     </AuthProvider>
   );

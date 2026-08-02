@@ -17,11 +17,18 @@ export const COLS = {
   VEHICLES: 'vehicles'
 };
 
-// Module-level caches for static/semi-static data
+// Module-level caches for static/semi-static data with TTL (5 minutes)
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
 let cachedCustomers: Customer[] | null = null;
 let cachedProducts: Product[] | null = null;
+let lastProductsFetch = 0;
+
 let cachedCompanies: Company[] | null = null;
+let lastCompaniesFetch = 0;
+
 let cachedUsers: User[] | null = null;
+let lastUsersFetch = 0;
 
 // Helper to standardize response
 // NOTE: Session is verified at boot time. We trust it's valid here.
@@ -118,9 +125,11 @@ const enrichOrders = async (orders: Order[]): Promise<Order[]> => {
 
 export const ProductService = {
   getAll: async () => {
-    if (cachedProducts) return cachedProducts;
+    const now = Date.now();
+    if (cachedProducts && (now - lastProductsFetch < CACHE_TTL_MS)) return cachedProducts;
     const products = await fetchCollection<Product>(COLS.PRODUCTS);
     cachedProducts = products;
+    lastProductsFetch = now;
     return products;
   },
   add: async (product: Omit<Product, 'id'>) => {
@@ -345,9 +354,11 @@ export const CustomerService = {
 
 export const CompanyService = {
   getAll: async () => {
-    if (cachedCompanies) return cachedCompanies;
+    const now = Date.now();
+    if (cachedCompanies && (now - lastCompaniesFetch < CACHE_TTL_MS)) return cachedCompanies;
     const companies = await fetchCollection<Company>(COLS.COMPANIES);
     cachedCompanies = companies;
+    lastCompaniesFetch = now;
     return companies;
   },
   add: async (company: Omit<Company, 'id'> & { id: string }) => {
@@ -977,9 +988,11 @@ export const TripService = {
 
 export const UserService = {
   getAll: async () => {
-    if (cachedUsers) return cachedUsers;
+    const now = Date.now();
+    if (cachedUsers && (now - lastUsersFetch < CACHE_TTL_MS)) return cachedUsers;
     const users = await fetchCollection<User>(COLS.USERS);
     cachedUsers = users;
+    lastUsersFetch = now;
     return users;
   },
   add: async (user: Omit<User, 'id'>) => {
