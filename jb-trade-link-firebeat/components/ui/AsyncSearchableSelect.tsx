@@ -77,11 +77,12 @@ export const AsyncSearchableSelect: React.FC<AsyncSearchableSelectProps> = ({
   };
 
   // Initial fetch when opened or value changed
+  // Initial fetch when opened
   useEffect(() => {
     if (isOpen && options.length === 0) {
-      fetchOptions(searchTerm);
+      fetchOptions("");
     }
-  }, [isOpen, options.length, searchTerm, fetchOptions]);
+  }, [isOpen, options.length, fetchOptions]);
 
   // Keep selected option label in sync if initialLabel updates
   useEffect(() => {

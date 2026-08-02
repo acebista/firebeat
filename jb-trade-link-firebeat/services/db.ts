@@ -317,7 +317,14 @@ export const CustomerService = {
         .select('id, name, phone, panNumber, routeName, locationText, latitude, longitude, isActive, status');
 
       if (clean) {
-        builder = builder.or(`name.ilike.%${clean}%,phone.ilike.%${clean}%,routeName.ilike.%${clean}%,panNumber.ilike.%${clean}%`);
+        // Split multi-word query into tokens so e.g. "Budathoki Ratopul" matches shop name & route
+        const words = clean.split(/\s+/).filter(Boolean);
+        for (const word of words) {
+          const sanitized = word.replace(/['"\\%_]/g, '');
+          if (sanitized) {
+            builder = builder.or(`name.ilike.%${sanitized}%,phone.ilike.%${sanitized}%,routeName.ilike.%${sanitized}%,panNumber.ilike.%${sanitized}%`);
+          }
+        }
       }
 
       const { data, error } = await builder.order('name').limit(limit);
