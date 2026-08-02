@@ -7,7 +7,7 @@
  */
 
 const PORT = process.env.PROXY_PORT || 3001;
-const SUPABASE_URL = 'https://qlosefnvwvmqeebfqdcg.supabase.co';
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://kvdwookvkhrdnkjhwnkg.supabase.co';
 
 // Create HTTP server
 const server = await import('http').then(mod => mod.createServer);
