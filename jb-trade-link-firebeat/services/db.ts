@@ -605,10 +605,10 @@ export const OrderService = {
   },
 
   add: async (order: Omit<Order, 'id'> | Order) => {
-    // Use insert instead of upsert to avoid silent failures
-    // If you need upsert behavior, the caller should handle it explicitly
-    console.log('[OrderService.add] Attempting to insert order:', JSON.stringify(order, null, 2));
-    const { data, error } = await supabase.from(COLS.ORDERS).insert(order).select().single();
+    // Strip UI-only fields (e.g. customerLocation, createdAt) that aren't database columns
+    const { customerLocation, createdAt, ...dbPayload } = order as any;
+    console.log('[OrderService.add] Attempting to insert order:', JSON.stringify(dbPayload, null, 2));
+    const { data, error } = await supabase.from(COLS.ORDERS).insert(dbPayload).select().single();
     if (error) {
       console.error('[OrderService.add] Insert failed:', error);
       throw error;
