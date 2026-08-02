@@ -302,7 +302,7 @@ export const CustomerService = {
   },
   search: async (query: string, limit: number = 30): Promise<Customer[]> => {
     try {
-      const clean = query ? query.trim() : '';
+      const clean = query ? query.trim().replace(/,/g, ' ') : '';
       let builder = supabase
         .from(COLS.CUSTOMERS)
         .select('id, name, phone, panNumber, routeName, locationText, latitude, longitude, isActive, status');
