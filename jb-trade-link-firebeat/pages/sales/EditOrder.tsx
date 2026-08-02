@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, Input, Button, SearchableSelect } from '../../components/ui/Elements';
+import { AsyncSearchableSelect, AsyncOption } from '../../components/ui/AsyncSearchableSelect';
 import { Modal } from '../../components/ui/Modal';
 import { Search, Trash2, ShoppingBag, ShoppingCart, Building2, X, UserPlus, Phone, CreditCard, MapPin, Navigation, Save, Plus, Minus, ChevronUp, FileText } from 'lucide-react';
 import { Product, OrderItem, Customer, Order, Company, Salesperson } from '../../types';
@@ -19,8 +20,32 @@ export const EditOrder: React.FC = () => {
     const [companies, setCompanies] = useState<Company[]>([]);
     const [salespersons, setSalespersons] = useState<Salesperson[]>([]);
     const [customers, setCustomers] = useState<Customer[]>([]);
+    const [selectedCustomerObj, setSelectedCustomerObj] = useState<Customer | null>(null);
     const [loadingData, setLoadingData] = useState(true);
-    const [loadingCustomers, setLoadingCustomers] = useState(true);
+    const [loadingCustomers, setLoadingCustomers] = useState(false);
+
+    const handleCustomerSearch = async (query: string): Promise<AsyncOption[]> => {
+        const results = await CustomerService.search(query, 30);
+        return results.map(c => ({
+            label: `${c.name} (${c.routeName || 'No Route'})`,
+            value: c.id,
+            sublabel: [c.phone, c.panNumber].filter(Boolean).join(' • '),
+            raw: c
+        }));
+    };
+
+    const handleCustomerSelect = (val: string, option?: AsyncOption) => {
+        setSelectedCustomer(val);
+        if (option?.raw) {
+            setSelectedCustomerObj(option.raw);
+        } else if (val) {
+            CustomerService.getById(val).then(c => {
+                if (c) setSelectedCustomerObj(c);
+            });
+        } else {
+            setSelectedCustomerObj(null);
+        }
+    };
 
     // UI State
     const [searchTerm, setSearchTerm] = useState('');
@@ -138,11 +163,6 @@ export const EditOrder: React.FC = () => {
                     }
                 }
 
-                // Background load customers
-                console.log('[EditOrder] Loading customers in background...');
-                setLoadingCustomers(true);
-                const custs = await CustomerService.getAll();
-                setCustomers(custs);
             } catch (e) {
                 console.error(e);
                 toast.error("Failed to load order data");
@@ -539,13 +559,13 @@ export const EditOrder: React.FC = () => {
                         <div className={`${user?.role === 'admin' ? 'md:col-span-8' : 'md:col-span-12'} relative z-20`}>
                             <div className="flex gap-2 items-end">
                                 <div className="flex-grow">
-                                    <SearchableSelect
+                                    <AsyncSearchableSelect
                                         label="Select Customer"
-                                        options={customerOptions}
                                         value={selectedCustomer}
-                                        onChange={(val) => setSelectedCustomer(val)}
-                                        disabled={loadingCustomers}
-                                        placeholder={loadingCustomers ? "Loading 18,000+ customers..." : "Search Customer..."}
+                                        onChange={handleCustomerSelect}
+                                        onSearch={handleCustomerSearch}
+                                        initialLabel={selectedCustomerObj ? `${selectedCustomerObj.name} (${selectedCustomerObj.routeName || 'No Route'})` : ''}
+                                        placeholder="Search Customer..."
                                     />
                                 </div>
                                 <Button

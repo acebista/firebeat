@@ -29,6 +29,10 @@ export const CustomerManagement: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRoute, setFilterRoute] = useState('all');
+  const [page, setPage] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+  const pageSize = 50;
+
   const [isModalOpen, setModalOpen] = useState(false);
   const [isDetailsOpen, setDetailsOpen] = useState(false);
   const [currentCustomer, setCurrentCustomer] = useState<Customer | null>(null);
@@ -39,16 +43,21 @@ export const CustomerManagement: React.FC = () => {
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    fetchCustomers();
-  }, []);
+    const timer = setTimeout(() => {
+      fetchCustomers(page, searchTerm);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [page, searchTerm]);
 
-  const fetchCustomers = async () => {
+  const fetchCustomers = async (p: number, search: string) => {
     setLoading(true);
     try {
-      const data = await CustomerService.getAll();
-      setCustomers(data);
+      const res = await CustomerService.getPaged(p, pageSize, search);
+      setCustomers(res.data);
+      setTotalCount(res.total);
     } catch (e) {
       console.error(e);
+      toast.error('Failed to load customers');
     } finally {
       setLoading(false);
     }
@@ -248,6 +257,29 @@ export const CustomerManagement: React.FC = () => {
               )}
             </tbody>
           </table>
+        </div>
+        <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+          <span className="text-xs text-gray-600">
+            Showing {Math.min(page * pageSize + 1, totalCount)} to {Math.min((page + 1) * pageSize, totalCount)} of {totalCount} customers
+          </span>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={page === 0 || loading}
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+            >
+              Previous
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={(page + 1) * pageSize >= totalCount || loading}
+              onClick={() => setPage(p => p + 1)}
+            >
+              Next
+            </Button>
+          </div>
         </div>
       </Card>
 

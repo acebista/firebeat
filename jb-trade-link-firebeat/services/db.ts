@@ -299,6 +299,47 @@ export const CustomerService = {
       }
     }
     return list;
+  },
+  search: async (query: string, limit: number = 30): Promise<Customer[]> => {
+    try {
+      const clean = query ? query.trim() : '';
+      let builder = supabase
+        .from(COLS.CUSTOMERS)
+        .select('id, name, phone, panNumber, routeName, locationText, latitude, longitude, isActive, status');
+
+      if (clean) {
+        builder = builder.or(`name.ilike.%${clean}%,phone.ilike.%${clean}%,routeName.ilike.%${clean}%,panNumber.ilike.%${clean}%`);
+      }
+
+      const { data, error } = await builder.order('name').limit(limit);
+      if (error) throw error;
+      return (data || []) as Customer[];
+    } catch (err) {
+      console.error('Error searching customers:', err);
+      return [];
+    }
+  },
+  getPaged: async (page: number = 0, limit: number = 50, search: string = ''): Promise<{ data: Customer[]; total: number }> => {
+    try {
+      const from = page * limit;
+      const to = from + limit - 1;
+      const clean = search ? search.trim() : '';
+
+      let builder = supabase
+        .from(COLS.CUSTOMERS)
+        .select('*', { count: 'exact' });
+
+      if (clean) {
+        builder = builder.or(`name.ilike.%${clean}%,phone.ilike.%${clean}%,routeName.ilike.%${clean}%,panNumber.ilike.%${clean}%`);
+      }
+
+      const { data, count, error } = await builder.order('name').range(from, to);
+      if (error) throw error;
+      return { data: (data || []) as Customer[], total: count || 0 };
+    } catch (err) {
+      console.error('Error fetching paged customers:', err);
+      return { data: [], total: 0 };
+    }
   }
 };
 

@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, Input, Button, SearchableSelect } from '../../components/ui/Elements';
+import { AsyncSearchableSelect, AsyncOption } from '../../components/ui/AsyncSearchableSelect';
 import { Modal } from '../../components/ui/Modal';
 import { Search, Trash2, ShoppingBag, ShoppingCart, Building2, X, UserPlus, Phone, CreditCard, MapPin, Navigation, Save, Plus, Minus, ChevronUp, ZoomIn, ZoomOut, RotateCcw, FileText } from 'lucide-react';
 import { Product, OrderItem, Customer, Order, Company, Salesperson } from '../../types';
@@ -19,8 +20,32 @@ export const CreateOrder: React.FC = () => {
     const [companies, setCompanies] = useState<Company[]>([]);
     const [salespersons, setSalespersons] = useState<Salesperson[]>([]);
     const [customers, setCustomers] = useState<Customer[]>([]);
+    const [selectedCustomerObj, setSelectedCustomerObj] = useState<Customer | null>(null);
     const [loadingData, setLoadingData] = useState(true);
-    const [loadingCustomers, setLoadingCustomers] = useState(true);
+    const [loadingCustomers, setLoadingCustomers] = useState(false);
+
+    const handleCustomerSearch = async (query: string): Promise<AsyncOption[]> => {
+        const results = await CustomerService.search(query, 30);
+        return results.map(c => ({
+            label: `${c.name} (${c.routeName || 'No Route'})`,
+            value: c.id,
+            sublabel: [c.phone, c.panNumber].filter(Boolean).join(' • '),
+            raw: c
+        }));
+    };
+
+    const handleCustomerSelect = (val: string, option?: AsyncOption) => {
+        setSelectedCustomer(val);
+        if (option?.raw) {
+            setSelectedCustomerObj(option.raw);
+        } else if (val) {
+            CustomerService.getById(val).then(c => {
+                if (c) setSelectedCustomerObj(c);
+            });
+        } else {
+            setSelectedCustomerObj(null);
+        }
+    };
 
     // UI State
     const [searchTerm, setSearchTerm] = useState('');
@@ -180,13 +205,6 @@ export const CreateOrder: React.FC = () => {
                 setCompanies(comps);
                 setSalespersons(users.filter(u => u.role === 'sales').map(u => ({ id: u.id, name: u.name })));
                 setLoadingData(false); // Core data is ready, let's show the page!
-
-                // Now load customers in background
-                console.log('[CreateOrder] Loading customers in background...');
-                setLoadingCustomers(true);
-                const custs = await CustomerService.getAll();
-                console.log('[CreateOrder] Customers loaded:', custs.length);
-                setCustomers(custs);
             } catch (e: any) {
                 console.error('[CreateOrder] Failed to load data:', e);
                 toast.error(
@@ -320,35 +338,28 @@ export const CreateOrder: React.FC = () => {
     // Effect: Populate editable fields and check mandatory GPS/Route when customer is selected
     useEffect(() => {
         if (selectedCustomer) {
-            const cust = customers.find(c => c.id === selectedCustomer);
-            if (cust) {
-                setEditableCustomer({
-                    phone: cust.phone || '',
-                    panNumber: cust.panNumber || '',
-                    routeName: cust.routeName || ''
-                });
-
-                // Sync location check (Disabled GPS/Route missing block)
-                /*
-                const missingRoute = !cust.routeName || cust.routeName.trim() === '';
-                const missingLoc = (!cust.locationText || cust.locationText.trim() === '') &&
-                    (!cust.latitude || !cust.longitude);
-
-                if (missingRoute || missingLoc) {
-                    const canOverride = user?.allow_override_customer_validation;
-                    if (!canOverride) {
-                        toast.error("📍 Mandatory: Customer missing Route/GPS. Please sync now.", { id: 'gps-sync-missing' });
-                        setFixRoute(cust.routeName || '');
-                        setFixLocation(cust.locationText || '');
-                        setFixDataOpen(true);
+            if (!selectedCustomerObj || selectedCustomerObj.id !== selectedCustomer) {
+                CustomerService.getById(selectedCustomer).then(cust => {
+                    if (cust) {
+                        setSelectedCustomerObj(cust);
+                        setEditableCustomer({
+                            phone: cust.phone || '',
+                            panNumber: cust.panNumber || '',
+                            routeName: cust.routeName || ''
+                        });
                     }
-                }
-                */
+                });
+            } else {
+                setEditableCustomer({
+                    phone: selectedCustomerObj.phone || '',
+                    panNumber: selectedCustomerObj.panNumber || '',
+                    routeName: selectedCustomerObj.routeName || ''
+                });
             }
         } else {
             setEditableCustomer({ phone: '', panNumber: '', routeName: '' });
         }
-    }, [selectedCustomer, customers, user?.allow_override_customer_validation]);
+    }, [selectedCustomer, selectedCustomerObj]);
 
     // --- PRICING ENGINE ---
     const calculateItemPricing = (product: Product, qty: number) => {
@@ -808,7 +819,7 @@ export const CreateOrder: React.FC = () => {
             // CUSTOMER DATA VALIDATION (GPS/ROUTE)
             const SKIP_GPS_VALIDATION = true;
 
-            const selectedCustObj = customers.find(c => c.id === selectedCustomer);
+            const selectedCustObj = selectedCustomerObj;
             if (selectedCustObj && !SKIP_GPS_VALIDATION) {
                 const missingRoute = !selectedCustObj.routeName || selectedCustObj.routeName.trim() === '';
                 // Check if locationText exists OR specific lat/long fields are set
@@ -850,7 +861,7 @@ export const CreateOrder: React.FC = () => {
             }
 
             const spName = selectedSalesperson === 'office' ? 'Office' : salespersons.find(s => s.id === selectedSalesperson)?.name || 'Unknown';
-            const custName = customers.find(c => c.id === selectedCustomer)?.name || 'Unknown';
+            const custName = selectedCustomerObj?.name || 'Unknown';
 
             // Capture GPS with user feedback - MANDATORY
             const captureGPS = (): Promise<string | null> => {
@@ -918,8 +929,8 @@ export const CreateOrder: React.FC = () => {
                 customerName: custName,
                 salespersonId: selectedSalesperson,
                 salespersonName: spName,
-                customerPhone: customers.find(c => c.id === selectedCustomer)?.phone || '',
-                customerPAN: customers.find(c => c.id === selectedCustomer)?.panNumber || '',
+                customerPhone: selectedCustomerObj?.phone || editableCustomer.phone || '',
+                customerPAN: selectedCustomerObj?.panNumber || editableCustomer.panNumber || '',
                 salespersonPhone: salespersons.find(s => s.id === selectedSalesperson)?.phone || '',
                 date: new Date().toISOString().split('T')[0],
                 totalItems: cart.reduce((a, b) => a + b.qty, 0),
@@ -1095,13 +1106,13 @@ export const CreateOrder: React.FC = () => {
                         {/* Customer Selection - Priority 1 */}
                         <div className="flex gap-2">
                             <div className="flex-1">
-                                <SearchableSelect
+                                <AsyncSearchableSelect
                                     label=""
-                                    options={customerOptions}
                                     value={selectedCustomer}
-                                    onChange={(val) => setSelectedCustomer(val)}
-                                    disabled={loadingCustomers}
-                                    placeholder={loadingCustomers ? "Loading 18,000+ customers..." : "Select Customer"}
+                                    onChange={handleCustomerSelect}
+                                    onSearch={handleCustomerSearch}
+                                    initialLabel={selectedCustomerObj ? `${selectedCustomerObj.name} (${selectedCustomerObj.routeName || 'No Route'})` : ''}
+                                    placeholder="Search customer by name, phone, or route..."
                                 />
                             </div>
                             <button
