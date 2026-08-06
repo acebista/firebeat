@@ -8,12 +8,13 @@
  * - Stock in Transit: Dispatched but not delivered items
  */
 
-import React, { useState, useCallback } from 'react';
-import { X, AlertCircle, RefreshCw } from 'lucide-react';
-import { SummaryTab } from './tabs/SummaryTab';
-import { MovementsTab } from './tabs/MovementsTab';
-import { AdjustmentsTab } from './tabs/AdjustmentsTab';
-import { StockInTransitTab } from './tabs/StockInTransitTab';
+import React, { useState, useCallback, Suspense } from 'react';
+import { X, AlertCircle, RefreshCw, Loader } from 'lucide-react';
+
+const SummaryTab = React.lazy(() => import('./tabs/SummaryTab').then(module => ({ default: module.SummaryTab })));
+const MovementsTab = React.lazy(() => import('./tabs/MovementsTab').then(module => ({ default: module.MovementsTab })));
+const AdjustmentsTab = React.lazy(() => import('./tabs/AdjustmentsTab').then(module => ({ default: module.AdjustmentsTab })));
+const StockInTransitTab = React.lazy(() => import('./tabs/StockInTransitTab').then(module => ({ default: module.StockInTransitTab })));
 
 type TabType = 'summary' | 'movements' | 'adjustments' | 'transit';
 
@@ -89,7 +90,13 @@ export function InventoryModal({ isOpen, onClose, isAdmin = false }: InventoryMo
         <div className="flex-1 overflow-y-auto">
           {CurrentTabComponent && (
             <div className="p-6">
-              <CurrentTabComponent key={refreshKey} isAdmin={isAdmin} />
+              <Suspense fallback={
+                <div className="flex items-center justify-center py-12">
+                  <Loader size={24} className="text-gray-400 animate-spin" />
+                </div>
+              }>
+                <CurrentTabComponent key={refreshKey} isAdmin={isAdmin} />
+              </Suspense>
             </div>
           )}
         </div>
